@@ -1,7 +1,7 @@
 /**
  * Root component with React Router configuration.
- * 11 protected routes + 1 public route.
- * /ideas is kept as a legacy alias for /writing for backward compatibility.
+ * 12 protected routes (9 V3 sidebar tabs + 3 legacy /tracks /profile /review)
+ * + 1 public login route + 1 legacy /ideas alias + 1 catch-all 404 route.
  */
 import React, { Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
@@ -26,6 +26,7 @@ const PublishAdvisorPage = React.lazy(() => import('@/pages/PublishAdvisor/Publi
 const AnalyticsPage = React.lazy(() => import('@/pages/Analytics/AnalyticsPage'));
 const AssetsPage = React.lazy(() => import('@/pages/Assets/AssetsPage'));
 const AccountsPage = React.lazy(() => import('@/pages/Accounts/AccountsPage'));
+const NotFoundPage = React.lazy(() => import('@/pages/NotFound/NotFoundPage'));
 
 /** Wraps children in Suspense with a loading fallback */
 const LazyRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => (
@@ -67,7 +68,7 @@ const App: React.FC = () => {
               }
             />
 
-            {/* Protected routes — 11 V3 tabs */}
+            {/* Protected routes — 9 V3 sidebar tabs */}
             <Route
               path="/"
               element={
@@ -98,10 +99,16 @@ const App: React.FC = () => {
                 </LazyRoute>
               }
             />
-            {/* Legacy alias — /ideas redirects to /writing */}
+            {/* Legacy alias — /ideas redirects to /writing (kept under ProtectedRoute for consistent auth contract) */}
             <Route
               path="/ideas"
-              element={<Navigate to="/writing" replace />}
+              element={
+                <LazyRoute>
+                  <ProtectedRoute>
+                    <Navigate to="/writing" replace />
+                  </ProtectedRoute>
+                </LazyRoute>
+              }
             />
             <Route
               path="/titles"
@@ -194,8 +201,17 @@ const App: React.FC = () => {
               }
             />
 
-            {/* Fallback */}
-            <Route path="*" element={<Navigate to="/" replace />} />
+            {/* 404 fallback */}
+            <Route
+              path="*"
+              element={
+                <LazyRoute>
+                  <ProtectedRoute>
+                    <NotFoundPage />
+                  </ProtectedRoute>
+                </LazyRoute>
+              }
+            />
           </Routes>
         </BrowserRouter>
       </ErrorBoundary>
