@@ -62,6 +62,9 @@ const LoginPage: React.FC = () => {
     setSocialPending(provider);
     // eslint-disable-next-line no-console
     console.warn(`[LoginPage] ${provider} OAuth not implemented in backend`);
+    // Reset pending state after a short delay so the buttons don't stay
+    // disabled forever when the backend OAuth flow is a no-op stub.
+    window.setTimeout(() => setSocialPending(null), 1500);
   };
 
   return (
@@ -181,7 +184,7 @@ const LoginPage: React.FC = () => {
           )}
 
           {/* Form */}
-          <form onSubmit={handleSubmit} noValidate>
+          <form onSubmit={handleSubmit}>
             <div style={{ marginBottom: 18 }}>
               <label
                 htmlFor="login-email"
@@ -618,7 +621,6 @@ const LoginPage: React.FC = () => {
             fontSize: 15,
             color: 'rgba(255,255,255,0.75)',
             lineHeight: 1.6,
-            marginBottom: 28,
             position: 'relative',
             margin: '0 0 28px 0',
           }}
