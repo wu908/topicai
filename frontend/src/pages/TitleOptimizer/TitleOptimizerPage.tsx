@@ -94,10 +94,7 @@ const ScoreBar: React.FC<ScoreBarProps> = ({ label, value, helpText }) => {
 
 const TitleOptimizerPage: React.FC = () => {
   const [title, setTitle] = useState('');
-  // summary state is fully wired (input bound to setSummary in Phase 4 follow-up
-  // via the content_summary field passed to the API). Keep as a real tuple
-  // so the setter is recognized as used and TS does not flag the destructure.
-  const [summary, setSummary] = useState('');
+  const [summary] = useState('');
   const { checkAndConsume, rollback } = useRateLimit();
   const { data: result, isLoading, execute } = useApi<TitleOptimization>(optimizeTitle);
 

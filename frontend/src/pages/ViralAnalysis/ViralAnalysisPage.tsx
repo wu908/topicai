@@ -62,7 +62,7 @@ const ViralAnalysisPage: React.FC = () => {
       subtitle="拆解爆款内容结构，提炼可迁移的选题和表达模板"
     >
       {/* Input section */}
-      <Card sx={{ mb: 4, border: '1px solid', borderColor: 'grey.300' }}>
+      <Card sx={{ mb: 4, border: '1px solid', borderColor: 'var(--v3-border)' }}>
         <CardContent sx={{ p: 3 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
             <Typography variant="subtitle2" sx={{ fontWeight: 500 }}>
@@ -114,7 +114,7 @@ const ViralAnalysisPage: React.FC = () => {
                       maxHeight: 300,
                       borderRadius: 2,
                       border: '1px solid',
-                      borderColor: 'grey.300',
+                      borderColor: 'var(--v3-border)',
                     }}
                   />
                   <Button
@@ -141,11 +141,11 @@ const ViralAnalysisPage: React.FC = () => {
                       p: 4,
                       textAlign: 'center',
                       cursor: 'pointer',
-                      '&:hover': { borderColor: 'primary.main', bgcolor: 'primary.light' },
+                      '&:hover': { borderColor: 'primary.main', bgcolor: 'var(--v3-accent-soft)' },
                     }}
                   >
-                    <Image sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
-                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                    <Image sx={{ fontSize: 40, color: 'var(--v3-text-ter)', mb: 1 }} />
+                    <Typography variant="body2" sx={{ color: 'var(--v3-text-sec)' }}>
                       点击或拖拽上传图片（支持截图、封面图等）
                     </Typography>
                   </Box>
@@ -193,7 +193,7 @@ const ViralAnalysisPage: React.FC = () => {
           </Box>
 
           {/* Viral score */}
-          <Card sx={{ mb: 3, border: '1px solid', borderColor: 'grey.300' }}>
+          <Card sx={{ mb: 3, border: '1px solid', borderColor: 'var(--v3-border)' }}>
             <CardContent sx={{ p: 3 }}>
               <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
                 爆款指数
@@ -208,7 +208,7 @@ const ViralAnalysisPage: React.FC = () => {
                 >
                   {(analysis.viral_score * 100).toFixed(0)}
                 </Typography>
-                <Typography variant="body2" sx={{ color: 'text.secondary' }}>分</Typography>
+                <Typography variant="body2" sx={{ color: 'var(--v3-text-sec)' }}>分</Typography>
               </Box>
               <LinearProgress
                 variant="determinate"
@@ -232,7 +232,7 @@ const ViralAnalysisPage: React.FC = () => {
 
           {/* Attribution conclusions */}
           {analysis.attributions && analysis.attributions.length > 0 && (
-            <Card sx={{ mb: 3, border: '1px solid', borderColor: 'grey.300' }}>
+            <Card sx={{ mb: 3, border: '1px solid', borderColor: 'var(--v3-border)' }}>
               <CardContent sx={{ p: 3 }}>
                 <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
                   归因分析
@@ -250,7 +250,7 @@ const ViralAnalysisPage: React.FC = () => {
                         {attr.conclusion}
                       </Typography>
                     </Box>
-                    <Typography variant="body2" sx={{ color: 'text.secondary', pl: 1 }}>
+                    <Typography variant="body2" sx={{ color: 'var(--v3-text-sec)', pl: 1 }}>
                       {attr.evidence}
                     </Typography>
                     {i < analysis.attributions.length - 1 && <Divider sx={{ mt: 2 }} />}
@@ -262,12 +262,12 @@ const ViralAnalysisPage: React.FC = () => {
 
           {/* Transferable template */}
           {analysis.transferable_template && (
-            <Card sx={{ mb: 3, border: '1px solid', borderColor: 'grey.300' }}>
+            <Card sx={{ mb: 3, border: '1px solid', borderColor: 'var(--v3-border)' }}>
               <CardContent sx={{ p: 3 }}>
                 <Typography variant="h6" sx={{ fontWeight: 600, mb: 1 }}>
                   可迁移模板
                 </Typography>
-                <Typography variant="body1" sx={{ color: 'text.secondary', lineHeight: 1.65, whiteSpace: 'pre-wrap' }}>
+                <Typography variant="body1" sx={{ color: 'var(--v3-text-sec)', lineHeight: 1.65, whiteSpace: 'pre-wrap' }}>
                   {analysis.transferable_template}
                 </Typography>
               </CardContent>
@@ -278,11 +278,11 @@ const ViralAnalysisPage: React.FC = () => {
           {analysis.risk_warnings && analysis.risk_warnings.length > 0 && (
             <Card sx={{ border: '1px solid', borderColor: 'warning.main' }}>
               <CardContent sx={{ p: 3 }}>
-                <Typography variant="h6" sx={{ fontWeight: 600, mb: 1, color: 'warning.main' }}>
+                <Typography variant="h6" sx={{ fontWeight: 600, mb: 1, color: 'var(--v3-amber)' }}>
                   风险提示
                 </Typography>
                 {analysis.risk_warnings.map((warning: string, i: number) => (
-                  <Typography key={i} variant="body2" sx={{ color: 'text.secondary', mb: 0.5 }}>
+                  <Typography key={i} variant="body2" sx={{ color: 'var(--v3-text-sec)', mb: 0.5 }}>
                     • {warning}
                   </Typography>
                 ))}

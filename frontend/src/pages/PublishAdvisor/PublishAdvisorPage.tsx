@@ -51,7 +51,7 @@ const PublishAdvisorPage: React.FC = () => {
       subtitle="AI推荐最佳发布时间窗口，提升内容曝光率"
     >
       {/* Input */}
-      <Card sx={{ mb: 4, border: '1px solid', borderColor: 'grey.300' }}>
+      <Card sx={{ mb: 4, border: '1px solid', borderColor: 'var(--v3-border)' }}>
         <CardContent sx={{ p: 3 }}>
           <Grid container spacing={2} sx={{ mb: 2 }}>
             <Grid item xs={12} md={5}>
@@ -137,16 +137,16 @@ const PublishAdvisorPage: React.FC = () => {
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                   <Box>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                      <AccessTime sx={{ fontSize: 18, color: 'primary.main' }} />
+                      <AccessTime sx={{ fontSize: 18, color: 'var(--v3-text)' }} />
                       <Typography variant="h6" sx={{ fontWeight: 600 }}>
                         {slot.time_range}
                       </Typography>
                       {i === 0 && <Chip label="最佳" size="small" color="primary" />}
                     </Box>
-                    <Typography variant="body2" sx={{ color: 'text.secondary', mb: 1 }}>
+                    <Typography variant="body2" sx={{ color: 'var(--v3-text-sec)', mb: 1 }}>
                       {slot.reason}
                     </Typography>
-                    <Typography variant="caption" sx={{ color: 'text.disabled' }}>
+                    <Typography variant="caption" sx={{ color: 'var(--v3-text-ter)' }}>
                       数据来源：{slot.benchmark_source}
                     </Typography>
                   </Box>
