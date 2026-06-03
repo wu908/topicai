@@ -94,7 +94,7 @@ const ScoreBar: React.FC<ScoreBarProps> = ({ label, value, helpText }) => {
 
 const TitleOptimizerPage: React.FC = () => {
   const [title, setTitle] = useState('');
-  const [summary] = useState('');
+  const summary = '';
   const { checkAndConsume, rollback } = useRateLimit();
   const { data: result, isLoading, execute } = useApi<TitleOptimization>(optimizeTitle);
 

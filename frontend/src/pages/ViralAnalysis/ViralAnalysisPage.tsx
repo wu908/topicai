@@ -276,7 +276,7 @@ const ViralAnalysisPage: React.FC = () => {
 
           {/* Risk warnings */}
           {analysis.risk_warnings && analysis.risk_warnings.length > 0 && (
-            <Card sx={{ border: '1px solid', borderColor: 'warning.main' }}>
+            <Card sx={{ border: '1px solid', borderColor: 'var(--v3-amber)' }}>
               <CardContent sx={{ p: 3 }}>
                 <Typography variant="h6" sx={{ fontWeight: 600, mb: 1, color: 'var(--v3-amber)' }}>
                   风险提示

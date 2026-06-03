@@ -129,8 +129,8 @@ const PublishAdvisorPage: React.FC = () => {
               sx={{
                 mb: 2,
                 border: '1px solid',
-                borderColor: i === 0 ? 'primary.muted' : 'grey.300',
-                bgcolor: i === 0 ? 'primary.light' : 'background.paper',
+                borderColor: i === 0 ? 'var(--v3-text)' : 'var(--v3-border)',
+                bgcolor: i === 0 ? 'var(--v3-accent-soft)' : 'var(--v3-surface)',
               }}
             >
               <CardContent sx={{ p: 3 }}>
