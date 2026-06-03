@@ -1,6 +1,7 @@
 /**
  * Root component with React Router configuration.
- * All 10 pages are routed here using React.lazy() for code splitting.
+ * 11 protected routes + 1 public route.
+ * /ideas is kept as a legacy alias for /writing for backward compatibility.
  */
 import React, { Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
@@ -11,17 +12,20 @@ import ErrorBoundary from '@/components/common/ErrorBoundary';
 import LoadingFallback from '@/components/common/LoadingFallback';
 import { useAuthStore } from '@/store/authStore';
 
-// Lazy-loaded pages
+// Lazy loaded pages
 const LoginPage = React.lazy(() => import('@/pages/Login/LoginPage'));
 const HomePage = React.lazy(() => import('@/pages/Home/HomePage'));
 const TopicRecommendPage = React.lazy(() => import('@/pages/TopicRecommend/TopicRecommendPage'));
 const ViralAnalysisPage = React.lazy(() => import('@/pages/ViralAnalysis/ViralAnalysisPage'));
-const IdeaBoosterPage = React.lazy(() => import('@/pages/IdeaBooster/IdeaBoosterPage'));
+const WritingPage = React.lazy(() => import('@/pages/Writing/WritingPage'));
 const TitleOptimizerPage = React.lazy(() => import('@/pages/TitleOptimizer/TitleOptimizerPage'));
 const TrackDiagnosisPage = React.lazy(() => import('@/pages/TrackDiagnosis/TrackDiagnosisPage'));
 const CreatorProfilePage = React.lazy(() => import('@/pages/CreatorProfile/CreatorProfilePage'));
 const EffectReviewPage = React.lazy(() => import('@/pages/EffectReview/EffectReviewPage'));
 const PublishAdvisorPage = React.lazy(() => import('@/pages/PublishAdvisor/PublishAdvisorPage'));
+const AnalyticsPage = React.lazy(() => import('@/pages/Analytics/AnalyticsPage'));
+const AssetsPage = React.lazy(() => import('@/pages/Assets/AssetsPage'));
+const AccountsPage = React.lazy(() => import('@/pages/Accounts/AccountsPage'));
 
 /** Wraps children in Suspense with a loading fallback */
 const LazyRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => (
@@ -35,8 +39,6 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
   const fetchCurrentUser = useAuthStore((s) => s.fetchCurrentUser);
 
   React.useEffect(() => {
-    // Fetch user info if authenticated but user is not loaded yet
-    // (e.g. after page refresh, token exists in localStorage but user is null)
     if (isAuthenticated && !user) {
       fetchCurrentUser().catch(() => {});
     }
@@ -65,7 +67,7 @@ const App: React.FC = () => {
               }
             />
 
-            {/* Protected routes */}
+            {/* Protected routes — 11 V3 tabs */}
             <Route
               path="/"
               element={
@@ -87,6 +89,31 @@ const App: React.FC = () => {
               }
             />
             <Route
+              path="/writing"
+              element={
+                <LazyRoute>
+                  <ProtectedRoute>
+                    <WritingPage />
+                  </ProtectedRoute>
+                </LazyRoute>
+              }
+            />
+            {/* Legacy alias — /ideas redirects to /writing */}
+            <Route
+              path="/ideas"
+              element={<Navigate to="/writing" replace />}
+            />
+            <Route
+              path="/titles"
+              element={
+                <LazyRoute>
+                  <ProtectedRoute>
+                    <TitleOptimizerPage />
+                  </ProtectedRoute>
+                </LazyRoute>
+              }
+            />
+            <Route
               path="/viral"
               element={
                 <LazyRoute>
@@ -97,21 +124,41 @@ const App: React.FC = () => {
               }
             />
             <Route
-              path="/ideas"
+              path="/publish"
               element={
                 <LazyRoute>
                   <ProtectedRoute>
-                    <IdeaBoosterPage />
+                    <PublishAdvisorPage />
                   </ProtectedRoute>
                 </LazyRoute>
               }
             />
             <Route
-              path="/titles"
+              path="/analytics"
               element={
                 <LazyRoute>
                   <ProtectedRoute>
-                    <TitleOptimizerPage />
+                    <AnalyticsPage />
+                  </ProtectedRoute>
+                </LazyRoute>
+              }
+            />
+            <Route
+              path="/assets"
+              element={
+                <LazyRoute>
+                  <ProtectedRoute>
+                    <AssetsPage />
+                  </ProtectedRoute>
+                </LazyRoute>
+              }
+            />
+            <Route
+              path="/accounts"
+              element={
+                <LazyRoute>
+                  <ProtectedRoute>
+                    <AccountsPage />
                   </ProtectedRoute>
                 </LazyRoute>
               }
@@ -142,16 +189,6 @@ const App: React.FC = () => {
                 <LazyRoute>
                   <ProtectedRoute>
                     <EffectReviewPage />
-                  </ProtectedRoute>
-                </LazyRoute>
-              }
-            />
-            <Route
-              path="/publish"
-              element={
-                <LazyRoute>
-                  <ProtectedRoute>
-                    <PublishAdvisorPage />
                   </ProtectedRoute>
                 </LazyRoute>
               }

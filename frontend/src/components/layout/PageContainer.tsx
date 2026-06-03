@@ -1,8 +1,9 @@
 /**
- * Page container component with consistent page header.
+ * PageContainer — V3 design.
+ * Per-page title + subtitle + optional action row.
+ * No bottom border (V3 prototype uses clean spacing between header and content).
  */
 import React from 'react';
-import { Box, Typography } from '@mui/material';
 
 interface PageContainerProps {
   title: string;
@@ -18,53 +19,46 @@ const PageContainer: React.FC<PageContainerProps> = ({
   children,
 }) => {
   return (
-    <Box>
-      {/* Page header */}
-      <Box
-        sx={{
-          pt: 5,
-          pb: 4,
-          borderBottom: '1px solid',
-          borderColor: 'grey.200',
-          mb: 5,
+    <div>
+      <div
+        style={{
+          marginBottom: 24,
           display: 'flex',
           alignItems: 'flex-start',
           justifyContent: 'space-between',
+          gap: 16,
         }}
       >
-        <Box>
-          <Typography
-            variant="h2"
-            sx={{
-              fontSize: '1.9375rem',
+        <div>
+          <h1
+            style={{
+              fontSize: 22,
               fontWeight: 600,
-              lineHeight: 1.15,
-              letterSpacing: '-0.01em',
-              color: 'text.primary',
+              letterSpacing: '-0.3px',
+              color: 'var(--v3-text)',
+              margin: 0,
+              lineHeight: 1.2,
             }}
           >
             {title}
-          </Typography>
+          </h1>
           {subtitle && (
-            <Typography
-              variant="body1"
-              sx={{
-                mt: 1,
-                color: 'text.secondary',
-                fontWeight: 400,
+            <p
+              style={{
+                fontSize: 13,
+                color: 'var(--v3-text-sec)',
+                margin: '4px 0 0 0',
                 lineHeight: 1.5,
               }}
             >
               {subtitle}
-            </Typography>
+            </p>
           )}
-        </Box>
-        {action && <Box sx={{ flexShrink: 0, ml: 3 }}>{action}</Box>}
-      </Box>
-
-      {/* Page content */}
+        </div>
+        {action && <div style={{ flexShrink: 0 }}>{action}</div>}
+      </div>
       {children}
-    </Box>
+    </div>
   );
 };
 

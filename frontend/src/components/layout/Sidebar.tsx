@@ -1,219 +1,327 @@
 /**
- * Sidebar navigation component.
- * Collapsible sidebar with sectioned navigation items.
+ * Sidebar — V3 design (topicai-v3-login-meta.html).
+ * Fixed 200px width, 9-tab nav, user card at top, logout at bottom.
+ * No collapse behavior in V3 (single column design).
  */
 import React from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import {
-  Box,
-  Drawer,
-  List,
-  ListItem,
-  ListItemButton,
-  ListItemIcon,
-  ListItemText,
-  Typography,
-  Divider,
-  Avatar,
-  IconButton,
-} from '@mui/material';
-import {
-  Home as HomeIcon,
-  Lightbulb,
-  TrendingUp,
-  Psychology,
-  Title,
-  Analytics,
-  Schedule,
-  Person,
-  Assessment,
-  MenuOpen,
-} from '@mui/icons-material';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { Box } from '@mui/material';
 import { useAuthStore } from '@/store/authStore';
-import { useAppStore } from '@/store/appStore';
 
-const NAV_SECTIONS = [
+interface NavItem {
+  to: string;
+  label: string;
+  icon: React.ReactNode;
+}
+
+const NAV_ITEMS: NavItem[] = [
   {
-    label: '核心功能',
-    items: [
-      { path: '/', label: '首页', icon: <HomeIcon /> },
-      { path: '/topics', label: '选题推荐', icon: <Lightbulb /> },
-      { path: '/viral', label: '爆款拆解', icon: <TrendingUp /> },
-      { path: '/ideas', label: '想法推进', icon: <Psychology /> },
-    ],
+    to: '/',
+    label: '首页',
+    icon: (
+      <svg viewBox="0 0 24 24">
+        <rect x="3" y="3" width="7" height="7" rx="1" />
+        <rect x="14" y="3" width="7" height="7" rx="1" />
+        <rect x="3" y="14" width="7" height="7" rx="1" />
+        <rect x="14" y="14" width="7" height="7" rx="1" />
+      </svg>
+    ),
   },
   {
-    label: '辅助工具',
-    items: [
-      { path: '/titles', label: '标题优化', icon: <Title /> },
-      { path: '/tracks', label: '赛道诊断', icon: <Analytics /> },
-      { path: '/publish', label: '发布时间', icon: <Schedule /> },
-    ],
+    to: '/topics',
+    label: '选题推荐',
+    icon: (
+      <svg viewBox="0 0 24 24">
+        <path d="M12 2a7 7 0 0 1 7 7c0 2.4-1.2 4.5-3 5.7V17a1 1 0 0 1-1 1h-6a1 1 0 0 1-1-1v-2.3C6.2 13.5 5 11.4 5 9a7 7 0 0 1 7-7z" />
+        <line x1="9" y1="21" x2="15" y2="21" />
+      </svg>
+    ),
   },
   {
-    label: '个人中心',
-    items: [
-      { path: '/profile', label: '创作画像', icon: <Person /> },
-      { path: '/review', label: '效果复盘', icon: <Assessment /> },
-    ],
+    to: '/writing',
+    label: 'AI 写作',
+    icon: (
+      <svg viewBox="0 0 24 24">
+        <path d="M12 20h9" />
+        <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+      </svg>
+    ),
+  },
+  {
+    to: '/titles',
+    label: '标题优化',
+    icon: (
+      <svg viewBox="0 0 24 24">
+        <path d="M4 7V4h16v3" />
+        <path d="M9 20h6" />
+        <path d="M12 4v16" />
+      </svg>
+    ),
+  },
+  {
+    to: '/viral',
+    label: '爆款拆解',
+    icon: (
+      <svg viewBox="0 0 24 24">
+        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+      </svg>
+    ),
+  },
+  {
+    to: '/publish',
+    label: '发布时间',
+    icon: (
+      <svg viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="10" />
+        <polyline points="12 6 12 12 16 14" />
+      </svg>
+    ),
+  },
+  {
+    to: '/analytics',
+    label: '数据分析',
+    icon: (
+      <svg viewBox="0 0 24 24">
+        <line x1="18" y1="20" x2="18" y2="10" />
+        <line x1="12" y1="20" x2="12" y2="4" />
+        <line x1="6" y1="20" x2="6" y2="14" />
+      </svg>
+    ),
+  },
+  {
+    to: '/assets',
+    label: '素材管理',
+    icon: (
+      <svg viewBox="0 0 24 24">
+        <rect x="3" y="3" width="18" height="18" rx="2" />
+        <circle cx="8.5" cy="8.5" r="1.5" />
+        <polyline points="21 15 16 10 5 21" />
+      </svg>
+    ),
+  },
+  {
+    to: '/accounts',
+    label: '账号管理',
+    icon: (
+      <svg viewBox="0 0 24 24">
+        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+        <circle cx="12" cy="7" r="4" />
+      </svg>
+    ),
   },
 ];
 
+const navLinkBaseStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 10,
+  padding: '9px 12px',
+  borderRadius: 6,
+  fontSize: 13.5,
+  transition: 'all 0.15s',
+  textDecoration: 'none',
+};
+
+const navIconStyle: React.CSSProperties = {
+  width: 18,
+  height: 18,
+  flexShrink: 0,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+};
+
+const navIconSvgStyle: React.CSSProperties = {
+  width: 16,
+  height: 16,
+  stroke: 'currentColor',
+  fill: 'none',
+  strokeWidth: 1.6,
+  strokeLinecap: 'round',
+  strokeLinejoin: 'round',
+};
+
 const Sidebar: React.FC = () => {
-  const navigate = useNavigate();
   const location = useLocation();
+  const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
-  const sidebarOpen = useAppStore((s) => s.sidebarOpen);
-  const toggleSidebar = useAppStore((s) => s.toggleSidebar);
+  const logout = useAuthStore((s) => s.logout);
+
+  const isActive = (path: string): boolean => {
+    if (path === '/') return location.pathname === '/';
+    return location.pathname === path || location.pathname.startsWith(`${path}/`);
+  };
 
   return (
-    <Drawer
-      variant="permanent"
-      sx={{
-        width: sidebarOpen ? 240 : 64,
+    <aside
+      style={{
+        width: 'var(--v3-sidebar-width)',
         flexShrink: 0,
-        '& .MuiDrawer-paper': {
-          width: sidebarOpen ? 240 : 64,
-          transition: 'width 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
-          overflowX: 'hidden',
-          borderRight: '1px solid',
-          borderColor: 'divider',
-          bgcolor: '#F5F5F4',
-        },
+        background: 'var(--v3-bg)',
+        borderRight: '1px solid var(--v3-border)',
+        display: 'flex',
+        flexDirection: 'column',
       }}
     >
-      {/* Brand */}
-      <Box
-        sx={{
-          p: sidebarOpen ? 2.5 : 1.5,
-          borderBottom: '1px solid',
-          borderColor: 'grey.200',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
+      {/* Logo */}
+      <div
+        style={{
+          fontSize: 17,
+          fontWeight: 600,
+          color: 'var(--v3-text)',
+          padding: '24px 20px 10px',
+          letterSpacing: '-0.3px',
         }}
       >
-        {sidebarOpen && (
-          <Box>
-            <Typography
-              variant="h6"
-              sx={{
-                color: 'primary.main',
-                fontWeight: 600,
-                fontSize: '1.25rem',
-                letterSpacing: '-0.01em',
-              }}
-            >
-              TopicAI
-            </Typography>
-            <Typography
-              variant="caption"
-              sx={{ color: 'text.disabled', fontSize: '0.6875rem' }}
-            >
-              智能选题推荐Agent
-            </Typography>
-          </Box>
-        )}
-        <IconButton aria-label="折叠侧边栏" onClick={toggleSidebar} size="small" sx={{ color: 'text.secondary' }}>
-          <MenuOpen fontSize="small" sx={{ transform: sidebarOpen ? 'none' : 'rotate(180deg)' }} />
-        </IconButton>
-      </Box>
+        TopicAI
+      </div>
 
-      {/* Navigation */}
-      <Box sx={{ flex: 1, overflowY: 'auto', py: 1 }}>
-        {NAV_SECTIONS.map((section) => (
-          <Box key={section.label}>
-            {sidebarOpen && (
-              <Typography
-                variant="caption"
-                sx={{
-                  px: 2.5,
-                  py: 1.5,
-                  pb: 0.5,
-                  display: 'block',
-                  color: 'text.disabled',
-                  fontSize: '0.625rem',
-                  fontWeight: 500,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.02em',
-                }}
-              >
-                {section.label}
-              </Typography>
-            )}
-            <List disablePadding>
-              {section.items.map((item) => {
-                const isActive = location.pathname === item.path;
-                return (
-                  <ListItem key={item.path} disablePadding sx={{ px: 1.5, mb: 0.1 }}>
-                    <ListItemButton
-                      onClick={() => navigate(item.path)}
-                      sx={{
-                        borderRadius: 1,
-                        py: sidebarOpen ? 1.2 : 1.5,
-                        px: sidebarOpen ? 2 : 1.5,
-                        justifyContent: sidebarOpen ? 'flex-start' : 'center',
-                        bgcolor: isActive ? 'primary.light' : 'transparent',
-                        color: isActive ? 'primary.main' : 'text.secondary',
-                        '&:hover': {
-                          bgcolor: isActive ? 'primary.light' : 'grey.200',
-                          color: isActive ? 'primary.main' : 'text.primary',
-                        },
-                        transition: 'all 0.15s ease',
-                      }}
-                    >
-                      <ListItemIcon
-                        sx={{
-                          minWidth: sidebarOpen ? 36 : 0,
-                          color: 'inherit',
-                          '& .MuiSvgIcon-root': { fontSize: 18 },
-                        }}
-                      >
-                        {item.icon}
-                      </ListItemIcon>
-                      {sidebarOpen && (
-                        <ListItemText
-                          primary={item.label}
-                          primaryTypographyProps={{
-                            fontSize: '0.8125rem',
-                            fontWeight: isActive ? 500 : 400,
-                          }}
-                        />
-                      )}
-                    </ListItemButton>
-                  </ListItem>
-                );
-              })}
-            </List>
-          </Box>
-        ))}
-      </Box>
-
-      {/* Footer — User info */}
-      <Divider />
-      <Box sx={{ p: sidebarOpen ? 2 : 1, display: 'flex', alignItems: 'center', gap: 1.5 }}>
-        <Avatar
-          sx={{
+      {/* User card */}
+      <button
+        type="button"
+        onClick={() => navigate('/profile')}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          padding: '10px 12px',
+          margin: '0 8px 10px',
+          cursor: 'pointer',
+          borderRadius: 6,
+          transition: 'background 0.15s',
+          background: 'transparent',
+          border: 'none',
+          borderBottom: '1px solid var(--v3-border)',
+          textAlign: 'left',
+          width: 'calc(100% - 16px)',
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = 'var(--v3-overlay-2)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = 'transparent';
+        }}
+      >
+        <div
+          style={{
             width: 32,
             height: 32,
-            bgcolor: 'primary.light',
-            color: 'primary.main',
-            fontSize: '0.75rem',
-            fontWeight: 500,
+            borderRadius: '50%',
+            background: 'var(--v3-accent)',
+            color: '#fff',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: 13,
+            fontWeight: 600,
+            flexShrink: 0,
           }}
         >
-          {user?.username?.charAt(0)?.toUpperCase() || 'U'}
-        </Avatar>
-        {sidebarOpen && (
-          <Typography
-            variant="body2"
-            sx={{ color: 'text.secondary', fontSize: '0.8125rem', overflow: 'hidden' }}
+          {user?.username?.charAt(0) || '?'}
+        </div>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div
+            style={{
+              fontSize: 13,
+              fontWeight: 500,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
           >
             {user?.username || '未登录'}
-          </Typography>
-        )}
-      </Box>
-    </Drawer>
+          </div>
+          <div
+            style={{
+              fontSize: 11,
+              color: 'var(--v3-text-sec)',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+          >
+            {user?.email || ''}
+          </div>
+        </div>
+      </button>
+
+      {/* Nav */}
+      <nav
+        style={{
+          flex: 1,
+          overflowY: 'auto',
+          padding: '0 8px',
+        }}
+      >
+        {NAV_ITEMS.map((item) => {
+          const active = isActive(item.to);
+          return (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={item.to === '/'}
+              style={{
+                ...navLinkBaseStyle,
+                color: active ? 'var(--v3-text)' : 'var(--v3-text-sec)',
+                fontWeight: active ? 500 : 400,
+                background: active ? 'var(--v3-overlay-4)' : 'transparent',
+              }}
+              onMouseEnter={(e) => {
+                if (!active) {
+                  e.currentTarget.style.color = 'var(--v3-text)';
+                  e.currentTarget.style.background = 'var(--v3-overlay-2)';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!active) {
+                  e.currentTarget.style.color = 'var(--v3-text-sec)';
+                  e.currentTarget.style.background = 'transparent';
+                }
+              }}
+            >
+              <span style={navIconStyle}>
+                <span style={navIconSvgStyle}>{item.icon}</span>
+              </span>
+              {item.label}
+            </NavLink>
+          );
+        })}
+      </nav>
+
+      {/* Footer — version + logout */}
+      <div
+        style={{
+          padding: '14px 20px',
+          fontSize: 11,
+          color: 'var(--v3-text-ter)',
+          borderTop: '1px solid var(--v3-border)',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+        }}
+      >
+        <span>TopicAI V3</span>
+        <Box
+          component="button"
+          type="button"
+          onClick={() => {
+            logout();
+            navigate('/login');
+          }}
+          sx={{
+            background: 'transparent',
+            border: 'none',
+            padding: 0,
+            color: 'var(--v3-text-sec)',
+            fontSize: 11,
+            cursor: 'pointer',
+            '&:hover': { color: 'var(--v3-red)' },
+          }}
+        >
+          退出登录
+        </Box>
+      </div>
+    </aside>
   );
 };
 
