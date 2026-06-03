@@ -97,8 +97,12 @@ const HomePage: React.FC = () => {
     );
   }
 
-  // Onboarding steps: 1=done (account), 2=track, 3=preferences
-  const onboardingDone = !!(profile?.track && profile?.content_formats.length);
+  // Onboarding steps: 1=done (account), 2=track, 3=preferences.
+  // Use `?.` on both sides to short-circuit when profile is null (e.g.
+  // after a failed fetchProfile). Without the inner `?.`, the `.length`
+  // access throws on undefined and crashes the page exactly when the
+  // new error-handling path wants to show the alert.
+  const onboardingDone = !!(profile?.track && profile?.content_formats?.length);
 
   return (
     <PageContainer
@@ -133,7 +137,7 @@ const HomePage: React.FC = () => {
           <div style={{ display: 'flex', gap: 20, marginBottom: 18 }}>
             <Step done label="连接账号" />
             <Step label="选择赛道" active={!profile?.track} />
-            <Step label="内容偏好" active={!profile?.content_formats.length} />
+            <Step label="内容偏好" active={!profile?.content_formats?.length} />
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <button
