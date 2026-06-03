@@ -155,10 +155,10 @@ const apiClient = {
   
   async patch<T>(url: string, data?: unknown, _config?: unknown): Promise<{ data: T }> {
     const makeRequest = () =>
-      fetch(API_PREFIX + url, {
+      fetch(`${BASE_URL}${url}`, {
         method: 'PATCH',
         headers: getHeaders(),
-        body: data ? JSON.stringify(data) : undefined,
+        body: data !== undefined ? JSON.stringify(data) : undefined,
       });
 
     const response = await makeRequest();

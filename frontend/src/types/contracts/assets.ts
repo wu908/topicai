@@ -54,7 +54,8 @@ export interface AssetUsageRecord {
   asset_id: string;
   /** ID of the article that used this asset. */
   article_id: string;
-  article_title: string;
+  /** Human-readable article title, or null until the title pipeline is wired. */
+  article_title: string | null;
   used_at: string;
 }
 

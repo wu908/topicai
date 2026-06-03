@@ -119,3 +119,72 @@ async def test_set_tags(svc):
     assert len(a.tags) == 2
     assert 'product' in [t.name for t in a.tags]
     await _rm(svc, 'u1', r.asset_id)
+
+
+@pytest.mark.asyncio
+async def test_set_tags_wrong_owner(svc):
+    # P1: a caller who does not own the asset must not be able to mutate its tags,
+    # and the DELETE must not run before the ownership check fails.
+    r = await run_upload(svc, 'u1')
+    s = await svc.db.get_session()
+    try:
+        await s.execute(text("INSERT OR IGNORE INTO users (id, email, username, password_hash, ai_calls_today, ai_calls_reset_at, created_at) VALUES ('u2', 'u2@t.com', 'u2', 'hash', 0, '', '2026-06-03T00:00:00Z')"))
+        await s.execute(text("INSERT INTO asset_tags (id, owner_id, name, color, created_at) VALUES ('t1','u1','product','green','2026')"))
+        # u2's tag should be rejected even if the caller tries to attach it to u1's asset
+        await s.execute(text("INSERT INTO asset_tags (id, owner_id, name, color, created_at) VALUES ('t_x','u2','foreign','red','2026')"))
+        await s.execute(text("INSERT INTO asset_tag_links (asset_id, tag_id) VALUES (:aid, 't1')"), {"aid": r.asset_id})
+        await s.commit()
+    finally:
+        await s.close()
+    with pytest.raises(ValueError, match='not found'):
+        await svc.set_tags('u2', r.asset_id, ['t1'])
+    # original tag link must still be there — the failed request did not delete it
+    s2 = await svc.db.get_session()
+    try:
+        rows = (await s2.execute(text("SELECT tag_id FROM asset_tag_links WHERE asset_id = :aid"), {"aid": r.asset_id})).fetchall()
+        assert {row.tag_id for row in rows} == {'t1'}
+    finally:
+        await s2.close()
+    await _rm(svc, 'u1', r.asset_id)
+
+
+@pytest.mark.asyncio
+async def test_set_tags_rejects_foreign_tag_ids(svc):
+    # P1 (defense-in-depth): even when the asset is yours, you cannot attach
+    # a tag that belongs to another owner.
+    r = await run_upload(svc, 'u1')
+    s = await svc.db.get_session()
+    try:
+        await s.execute(text("INSERT OR IGNORE INTO users (id, email, username, password_hash, ai_calls_today, ai_calls_reset_at, created_at) VALUES ('u2', 'u2@t.com', 'u2', 'hash', 0, '', '2026-06-03T00:00:00Z')"))
+        await s.execute(text("INSERT INTO asset_tags (id, owner_id, name, color, created_at) VALUES ('t1','u1','product','green','2026')"))
+        await s.execute(text("INSERT INTO asset_tags (id, owner_id, name, color, created_at) VALUES ('t_x','u2','foreign','red','2026')"))
+        await s.commit()
+    finally:
+        await s.close()
+    with pytest.raises(ValueError, match='not found or not owned'):
+        await svc.set_tags('u1', r.asset_id, ['t1', 't_x'])
+    await _rm(svc, 'u1', r.asset_id)
+
+
+@pytest.mark.asyncio
+async def test_get_usage(svc):
+    # P1: get_usage requires owner_id; wrong owner gets no rows, right owner sees theirs.
+    r = await run_upload(svc, 'u1')
+    s = await svc.db.get_session()
+    try:
+        await s.execute(text(
+            "INSERT INTO asset_usages (id, asset_id, article_id, used_at) "
+            "VALUES ('us1', :aid, 'art1', '2026-06-01T00:00:00Z')"
+        ), {"aid": r.asset_id})
+        await s.commit()
+    finally:
+        await s.close()
+    rows = await svc.get_usage('u1', r.asset_id)
+    assert len(rows) == 1
+    assert rows[0]['asset_id'] == r.asset_id
+    assert rows[0]['article_id'] == 'art1'
+    assert rows[0]['article_title'] is None  # honest placeholder, not a leaked UUID
+    assert rows[0]['used_at'] == '2026-06-01T00:00:00Z'
+    foreign = await svc.get_usage('u2', r.asset_id)
+    assert foreign == []
+    await _rm(svc, 'u1', r.asset_id)

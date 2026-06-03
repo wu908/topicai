@@ -61,7 +61,7 @@ async def get_asset_usage(
     db: Database = Depends(get_db),
 ):
     svc = AssetService(db)
-    result = await svc.get_usage(asset_id)
+    result = await svc.get_usage(user["id"], asset_id)
     return ApiResponse(code=200, data=result, message="success")
 
 

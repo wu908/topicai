@@ -96,15 +96,49 @@ class AssetService:
         return AssetUploadResponse(upload_url=f"/api/v1/assets/{aid}/upload", asset_id=aid)
 
     async def set_tags(self, owner_id: str, asset_id: str, tag_ids: list[str]) -> Asset:
+        # Ownership and tag validity checks run before any mutation so a
+        # request with a foreign asset_id or tag_ids never partially commits.
         s = await self.db.get_session()
         try:
+            r = await s.execute(
+                text("SELECT * FROM assets WHERE id = :id AND owner_id = :oid"),
+                {"id": asset_id, "oid": owner_id},
+            )
+            row = r.fetchone()
+            if not row:
+                raise ValueError("Asset not found")
+
+            if tag_ids:
+                placeholders = ", ".join(f":t{i}" for i in range(len(tag_ids)))
+                params = {f"t{i}": tid for i, tid in enumerate(tag_ids)}
+                params["oid"] = owner_id
+                tag_rows = (await s.execute(
+                    text(f"SELECT id FROM asset_tags WHERE owner_id = :oid AND id IN ({placeholders})"),
+                    params,
+                )).fetchall()
+                found = {tr.id for tr in tag_rows}
+                invalid = set(tag_ids) - found
+                if invalid:
+                    raise ValueError(f"Tags not found or not owned: {sorted(invalid)}")
+
             await s.execute(text("DELETE FROM asset_tag_links WHERE asset_id = :aid"), {"aid": asset_id})
             for tid in tag_ids:
-                await s.execute(text("INSERT OR IGNORE INTO asset_tag_links (asset_id, tag_id) VALUES (:aid, :tid)"), {"aid": asset_id, "tid": tid})
+                await s.execute(
+                    text("INSERT OR IGNORE INTO asset_tag_links (asset_id, tag_id) VALUES (:aid, :tid)"),
+                    {"aid": asset_id, "tid": tid},
+                )
             await s.commit()
+
+            tags = await self._get_tags(owner_id, asset_id)
+            return Asset(
+                id=row.id, owner_id=row.owner_id, filename=row.filename,
+                mime_type=row.mime_type, type=row.type, size=row.size,
+                url=row.url, thumbnail_url=row.thumbnail_url, tags=tags,
+                used_count=row.used_count, created_at=row.created_at,
+                updated_at=row.updated_at,
+            )
         finally:
             await s.close()
-        return await self.get(owner_id, asset_id)
 
     async def delete(self, owner_id: str, asset_id: str) -> None:
         s = await self.db.get_session()
@@ -116,13 +150,26 @@ class AssetService:
         finally:
             await s.close()
 
-    async def get_usage(self, asset_id: str) -> list[dict]:
+    async def get_usage(self, owner_id: str, asset_id: str) -> list[dict]:
         s = await self.db.get_session()
         try:
-            rows = (await s.execute(text("SELECT * FROM asset_usages WHERE asset_id = :aid ORDER BY used_at DESC"), {"aid": asset_id})).fetchall()
+            rows = (await s.execute(
+                text(
+                    "SELECT asset_id, article_id, used_at FROM asset_usages "
+                    "WHERE asset_id = :aid "
+                    "AND EXISTS (SELECT 1 FROM assets WHERE id = :aid AND owner_id = :oid) "
+                    "ORDER BY used_at DESC"
+                ),
+                {"aid": asset_id, "oid": owner_id},
+            )).fetchall()
         finally:
             await s.close()
-        return [{"asset_id": r.asset_id, "article_id": r.article_id, "article_title": r.article_id, "used_at": r.used_at} for r in rows]
+        # article_title is None until the article-title pipeline lands; the
+        # frontend treats null as "unknown" rather than rendering a raw UUID.
+        return [
+            {"asset_id": r.asset_id, "article_id": r.article_id, "article_title": None, "used_at": r.used_at}
+            for r in rows
+        ]
 
     async def _get_tags(self, owner_id: str, asset_id: str) -> list[AssetTag]:
         s = await self.db.get_session()
