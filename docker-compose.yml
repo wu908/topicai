@@ -1,0 +1,72 @@
+version: "3.9"
+
+# ============================================================
+# TopicAI v4.0 "Air Pro" — Docker Compose
+# ============================================================
+# Usage:
+#   cp .env.example .env && edit .env
+#   docker compose up -d
+#
+# Backend: http://localhost:8000 | API docs: http://localhost:8000/docs
+# Frontend: http://localhost
+# ============================================================
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: topicai-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - topicai_data:/app/data
+      - topicai_backups:/app/backups
+      - topicai_chroma:/app/chroma_db
+      - topicai_logs:/app/logs
+    environment:
+      - DATABASE_URL=sqlite+aiosqlite:////app/data/topicai.db
+      - CHROMA_HOST=
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY:-}
+      - ZHIPU_API_KEY=${ZHIPU_API_KEY:-}
+      - TIANAPI_KEY=${TIANAPI_KEY:-}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-}
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+      - SENTRY_DSN=${SENTRY_DSN:-}
+      - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-}
+      - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-}
+      - POSTHOG_API_KEY=${POSTHOG_API_KEY:-}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - topicai_net
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: topicai-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - topicai_net
+
+volumes:
+  topicai_data:
+  topicai_backups:
+  topicai_chroma:
+  topicai_logs:
+
+networks:
+  topicai_net:
+    driver: bridge

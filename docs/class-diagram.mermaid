@@ -1,0 +1,203 @@
+classDiagram
+    class User {
+        +str id
+        +str email
+        +str username
+        +str password_hash
+        +int ai_calls_today
+        +datetime ai_calls_reset_at
+        +datetime created_at
+        +datetime last_login
+    }
+
+    class CreatorProfile {
+        +str id
+        +str user_id
+        +str track
+        +list~str~ content_formats
+        +str production_complexity
+        +str content_depth
+        +str hotspot_preference
+        +str recommendation_mode
+        +dict rubric_weights
+        +datetime created_at
+        +datetime updated_at
+    }
+
+    class TopicRecommendation {
+        +str id
+        +str user_id
+        +list~TopicItem~ topics
+        +str recommendation_mode
+        +str data_source_used
+        +datetime created_at
+    }
+
+    class TopicItem {
+        +str title
+        +str reason
+        +float estimated_heat
+        +str content_angle
+        +float track_match_score
+        +float format_match_score
+        +float data_quality_score
+        +float composite_score
+        +float confidence
+        +str data_source
+        +str caveat
+    }
+
+    class ViralAnalysis {
+        +str id
+        +str user_id
+        +str input_type
+        +str input_text
+        +float viral_score
+        +dict structural_analysis
+        +list~AttributionConclusion~ attributions
+        +str transferable_template
+        +str rewrite_suggestions
+        +list~str~ risk_warnings
+        +float confidence
+        +str data_source
+        +datetime created_at
+    }
+
+    class IdeaBoosterResult {
+        +str id
+        +str user_id
+        +str input_idea
+        +list~str~ key_assumptions
+        +str feasibility_assessment
+        +list~str~ title_candidates
+        +str content_outline
+        +str publish_schedule
+        +float confidence
+        +datetime created_at
+    }
+
+    class TitleOptimization {
+        +str id
+        +str user_id
+        +str original_title
+        +str content_summary
+        +list~OptimizedTitle~ optimized_titles
+        +datetime created_at
+    }
+
+    class TrackDiagnosis {
+        +str id
+        +str user_id
+        +str track_keyword
+        +float health_score
+        +float competitiveness_score
+        +str direction_advice
+        +list~SubTrack~ sub_tracks
+        +float confidence
+        +str data_source
+        +datetime created_at
+    }
+
+    class FeedbackRecord {
+        +str id
+        +str user_id
+        +str source_type
+        +str source_id
+        +str feedback_type
+        +str feedback_value
+        +str reason
+        +datetime created_at
+    }
+
+    class EffectReview {
+        +str id
+        +str user_id
+        +str topic_title
+        +dict prediction
+        +dict actual_result
+        +str attribution
+        +dict learnings
+        +datetime created_at
+    }
+
+    class DataSource {
+        <<abstract>>
+        +fetch_trending_topics(track: str)* list
+        +fetch_track_data(track_keyword: str)* dict
+        +fetch_hot_topics()* list
+        +is_available()* bool
+        +health_check()* dict
+    }
+
+    class TianAPISource {
+        +fetch_trending_topics(track: str) list
+        +fetch_track_data(track_keyword: str) dict
+        +fetch_hot_topics() list
+    }
+
+    class BilibiliSource {
+        +fetch_trending_topics(track: str) list
+        +fetch_track_data(track_keyword: str) dict
+        +fetch_hot_topics() list
+    }
+
+    class LLMDataSource {
+        +fetch_trending_topics(track: str) list
+        +fetch_track_data(track_keyword: str) dict
+    }
+
+    class PreloadedDataSource {
+        +fetch_trending_topics(track: str) list
+        +fetch_track_data(track_keyword: str) dict
+    }
+
+    class DataManager {
+        +list~DataSource~ sources
+        +DataSource active_source
+        +str active_level
+        +get_trending_topics(track: str) list
+        +get_track_data(track_keyword: str) dict
+        +switch_source() None
+        +health_check() dict
+    }
+
+    class ContentAnalyzer {
+        <<abstract>>
+        +analyze(content: Union~str,bytes~)* AnalysisResult
+    }
+
+    class TextAnalyzer {
+        +analyze(content: str) AnalysisResult
+    }
+
+    class ImageAnalyzer {
+        +analyze(content: bytes) AnalysisResult
+        +_call_vision_api(image: bytes) str
+    }
+
+    class LLMClient {
+        +str default_provider
+        +dict providers
+        +generate(prompt: str, kwargs: dict) str
+        +generate_structured(prompt: str, schema: type, kwargs: dict) BaseModel
+        +generate_stream(prompt: str, kwargs: dict) AsyncGenerator
+        +switch_provider(provider: str) None
+        +health_check() dict
+    }
+
+    User "1" --> "0..1" CreatorProfile : has
+    User "1" --> "*" TopicRecommendation : requests
+    User "1" --> "*" ViralAnalysis : submits
+    User "1" --> "*" IdeaBoosterResult : triggers
+    User "1" --> "*" TitleOptimization : requests
+    User "1" --> "*" TrackDiagnosis : creates
+    User "1" --> "*" FeedbackRecord : submits
+    User "1" --> "*" EffectReview : reviews
+    TopicRecommendation "1" *-- "5..10" TopicItem : contains
+    DataSource <|-- TianAPISource
+    DataSource <|-- BilibiliSource
+    DataSource <|-- LLMDataSource
+    DataSource <|-- PreloadedDataSource
+    DataManager o-- DataSource : manages
+    ContentAnalyzer <|-- TextAnalyzer
+    ContentAnalyzer <|-- ImageAnalyzer

@@ -1,0 +1,55 @@
+{
+  "last_updated": "2026-05-25",
+  "templates": [
+    {
+      "id": "template-001",
+      "name": "数字+悬念",
+      "title_structure": "{数字}个你不知道的{主题}",
+      "opening_pattern": "直接点出问题 → 引发好奇",
+      "rhythm_design": "快节奏(3-5句/分钟)",
+      "emotion_curve": "好奇→惊讶→满足",
+      "cta_style": "引导评论互动",
+      "best_for": ["知识科普", "工具推荐", "技巧分享"]
+    },
+    {
+      "id": "template-002",
+      "name": "痛点共鸣",
+      "title_structure": "别再{错误做法}了！{正确做法}只需{n}步",
+      "opening_pattern": "描述共同痛点 → 引发共鸣",
+      "rhythm_design": "中速(2-3句/分钟)",
+      "emotion_curve": "共鸣→期待→收获感",
+      "cta_style": "收藏+关注",
+      "best_for": ["教程类", "生活技巧", "经验分享"]
+    },
+    {
+      "id": "template-003",
+      "name": "对比反差",
+      "title_structure": "{主角A}vs{主角B}，差距竟然这么大",
+      "opening_pattern": "展示强烈对比 → 制造认知落差",
+      "rhythm_design": "快慢交替",
+      "emotion_curve": "惊讶→思考→认同",
+      "cta_style": "引导讨论/投票",
+      "best_for": ["测评类", "分析类", "排行榜"]
+    },
+    {
+      "id": "template-004",
+      "name": "故事叙事",
+      "title_structure": "花了{n}年/{n}钱，我终于{结果}",
+      "opening_pattern": "设置悬念开端 → 吸引阅读",
+      "rhythm_design": "慢→快→高潮→慢",
+      "emotion_curve": "好奇→共鸣→感动→收获",
+      "cta_style": "分享故事",
+      "best_for": ["个人经历", "创业故事", "成长记录"]
+    },
+    {
+      "id": "template-005",
+      "name": "实用清单",
+      "title_structure": "{场景}必备的{n}个{品类}",
+      "opening_pattern": "明确需求场景 → 承诺解决方案",
+      "rhythm_design": "快节奏(每项1-2句)",
+      "emotion_curve": "需求→满足→收藏欲",
+      "cta_style": "收藏+转发",
+      "best_for": ["好物推荐", "工具合集", "资源分享"]
+    }
+  ]
+}

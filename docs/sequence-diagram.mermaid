@@ -1,0 +1,32 @@
+sequenceDiagram
+    participant U as 用户(React)
+    participant API as /api/v1/topics/recommend
+    participant TS as TopicRecommendService
+    participant DM as DataManager
+    participant TC as TopicChain
+    participant LLM as LLMClient
+    participant DB as SQLite
+    participant Chr as ChromaDB
+
+    U->>API: POST /topics/recommend {mode: "hotspot_fusion"}
+    API->>API: JWT验证 + 速率限制检查(20/天)
+    API->>TS: recommend(user_id, mode)
+    TS->>DB: 查询CreatorProfile + rubric_weights
+    DB-->>TS: 返回画像数据
+    TS->>DM: get_trending_topics(track) + get_hot_topics()
+    DM->>DM: 降级链: TianAPI→B站→LLM模拟→预置
+    DM-->>TS: 返回趋势数据(data_source标注)
+    TS->>TC: 构建TopicChain(画像+数据上下文+Prompt版本)
+    TC->>LLM: DeepSeek V4 Flash(结构化输出)
+    LLM-->>TC: 返回10个候选选题(JSON)
+    TC-->>TS: Pydantic解析为TopicItem列表
+    TS->>TS: _filter_by_track() 赛道过滤
+    TS->>TS: _filter_by_format() 创作方式过滤
+    TS->>TS: _filter_by_data_quality() 数据质量过滤
+    TS->>TS: _rank_topics(rubric_weights) 综合排序
+    TS->>Chr: 爆款相似度检索(去重)
+    Chr-->>TS: 相似度分数
+    TS->>TS: _apply_feedback_weights(历史反馈)
+    TS->>DB: 保存推荐结果
+    TS-->>API: 返回TOP5选题 + AIQualityMeta
+    API-->>U: {code:200, data:{topics[], meta:{ai_quality}}}

@@ -1,0 +1,25 @@
+{
+  "last_updated": "2026-05-25",
+  "tracks": {
+    "科技": {"sub_tracks": ["AI工具", "编程教程", "数码测评", "软件推荐", "科技资讯"], "avg_views": 15000, "competition_level": 0.65, "growth_rate": 0.12},
+    "美食": {"sub_tracks": ["家常菜教程", "探店测评", "健康饮食", "烘焙甜品", "街头小吃"], "avg_views": 20000, "competition_level": 0.55, "growth_rate": 0.08},
+    "美妆": {"sub_tracks": ["护肤成分分析", "平价替代", "化妆技巧", "男士护肤", "美妆测评"], "avg_views": 18000, "competition_level": 0.72, "growth_rate": 0.10},
+    "时尚": {"sub_tracks": ["穿搭分享", "OOTD", "配饰推荐", "季节穿搭", "穿搭技巧"], "avg_views": 16000, "competition_level": 0.60, "growth_rate": 0.07},
+    "旅行": {"sub_tracks": ["旅游攻略", "酒店测评", "自驾游", "小众景点", "旅行vlog"], "avg_views": 12000, "competition_level": 0.48, "growth_rate": 0.15},
+    "育儿": {"sub_tracks": ["早教启蒙", "育儿妙招", "亲子活动", "辅食教程", "育儿好物"], "avg_views": 22000, "competition_level": 0.58, "growth_rate": 0.06},
+    "职场": {"sub_tracks": ["面试技巧", "职场沟通", "效率工具", "职业规划", "副业赚钱"], "avg_views": 17000, "competition_level": 0.60, "growth_rate": 0.11},
+    "教育": {"sub_tracks": ["学习方法", "考试技巧", "英语学习", "在线课程", "知识科普"], "avg_views": 14000, "competition_level": 0.52, "growth_rate": 0.09},
+    "健身": {"sub_tracks": ["减脂训练", "增肌教程", "瑜伽冥想", "运动饮食", "居家健身"], "avg_views": 19000, "competition_level": 0.62, "growth_rate": 0.13},
+    "家居": {"sub_tracks": ["装修灵感", "收纳技巧", "家具选购", "租房改造", "家居好物"], "avg_views": 16000, "competition_level": 0.50, "growth_rate": 0.10},
+    "宠物": {"sub_tracks": ["猫咪日常", "狗狗训练", "宠物用品", "异宠饲养", "宠物健康"], "avg_views": 21000, "competition_level": 0.55, "growth_rate": 0.14},
+    "影视": {"sub_tracks": ["剧集推荐", "电影解读", "动漫番剧", "综艺点评", "影视幕后"], "avg_views": 18000, "competition_level": 0.65, "growth_rate": 0.05},
+    "音乐": {"sub_tracks": ["歌曲推荐", "乐器教学", "音乐制作", "现场演出", "音乐故事"], "avg_views": 10000, "competition_level": 0.45, "growth_rate": 0.04},
+    "游戏": {"sub_tracks": ["手游攻略", "主机游戏", "独立游戏", "电竞资讯", "游戏测评"], "avg_views": 25000, "competition_level": 0.78, "growth_rate": 0.16},
+    "数码": {"sub_tracks": ["手机评测", "电脑装机", "智能穿戴", "摄影器材", "音频设备"], "avg_views": 13000, "competition_level": 0.68, "growth_rate": 0.08},
+    "汽车": {"sub_tracks": ["新车测评", "用车技巧", "新能源车", "自驾装备", "汽车改装"], "avg_views": 11000, "competition_level": 0.55, "growth_rate": 0.12},
+    "财经": {"sub_tracks": ["理财入门", "股票基金", "保险科普", "房产分析", "创业经验"], "avg_views": 15000, "competition_level": 0.70, "growth_rate": 0.09},
+    "法律": {"sub_tracks": ["劳动维权", "婚姻家庭", "合同纠纷", "消费维权", "普法知识"], "avg_views": 8000, "competition_level": 0.35, "growth_rate": 0.18},
+    "心理": {"sub_tracks": ["情绪管理", "亲密关系", "原生家庭", "自我成长", "心理健康"], "avg_views": 20000, "competition_level": 0.55, "growth_rate": 0.20},
+    "效率": {"sub_tracks": ["时间管理", "Notion教程", "工具推荐", "GTD方法", "知识管理"], "avg_views": 12000, "competition_level": 0.48, "growth_rate": 0.15}
+  }
+}

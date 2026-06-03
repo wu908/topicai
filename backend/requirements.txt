@@ -1,0 +1,52 @@
+# TopicAI v4.0 "Air Pro" — Python Dependencies
+# All versions pinned for reproducible builds
+
+# Web Framework
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.5
+pydantic-settings==2.7.1
+python-multipart==0.0.18
+
+# Database
+sqlalchemy==2.0.36
+aiosqlite==0.20.0
+chromadb==0.5.23
+
+# Embedding
+sentence-transformers==3.3.1
+
+# LLM / AI
+openai==1.58.1
+langchain==0.3.13
+langchain-openai==0.2.14
+zhipuai==2.1.5.20250726
+
+# HTTP Client
+httpx==0.28.1
+
+# Authentication
+PyJWT==2.9.0
+bcrypt==4.0.1
+email-validator==2.1.0
+passlib[bcrypt]==1.7.4
+
+# Scheduling
+apscheduler==3.11.0
+
+# Monitoring
+sentry-sdk==2.19.2
+langfuse==2.56.0
+posthog==3.7.4
+
+# Utilities
+python-dotenv==1.0.1
+aiofiles==24.1.0
+
+# Testing (dev)
+pytest==8.3.4
+pytest-asyncio==0.24.0
+pytest-cov==6.0.0
+pytest-mock==3.14.0
+ruff==0.8.6
+mypy==1.13.0

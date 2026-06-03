@@ -1,0 +1,24 @@
+{
+  "tracks": [
+    {"name": "科技", "category": "知识", "popularity": 8.5},
+    {"name": "美食", "category": "生活", "popularity": 9.0},
+    {"name": "美妆", "category": "时尚", "popularity": 8.8},
+    {"name": "时尚", "category": "时尚", "popularity": 7.5},
+    {"name": "旅行", "category": "生活", "popularity": 7.0},
+    {"name": "育儿", "category": "生活", "popularity": 8.2},
+    {"name": "职场", "category": "知识", "popularity": 8.0},
+    {"name": "教育", "category": "知识", "popularity": 7.8},
+    {"name": "健身", "category": "生活", "popularity": 8.5},
+    {"name": "家居", "category": "生活", "popularity": 7.2},
+    {"name": "宠物", "category": "生活", "popularity": 9.2},
+    {"name": "影视", "category": "娱乐", "popularity": 8.0},
+    {"name": "音乐", "category": "娱乐", "popularity": 6.5},
+    {"name": "游戏", "category": "娱乐", "popularity": 9.5},
+    {"name": "数码", "category": "科技", "popularity": 7.0},
+    {"name": "汽车", "category": "生活", "popularity": 6.8},
+    {"name": "财经", "category": "知识", "popularity": 7.5},
+    {"name": "法律", "category": "知识", "popularity": 5.5},
+    {"name": "心理", "category": "知识", "popularity": 8.5},
+    {"name": "效率", "category": "知识", "popularity": 7.2}
+  ]
+}
