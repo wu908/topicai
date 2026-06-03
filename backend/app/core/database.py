@@ -217,6 +217,89 @@ CREATE TABLE IF NOT EXISTS upgrade_signals (
     created_at TEXT NOT NULL,
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
+
+-- ── Phase 6/7 contract: assets ──────────────────────────────────
+CREATE TABLE IF NOT EXISTS assets (
+    id TEXT PRIMARY KEY,
+    owner_id TEXT NOT NULL,
+    filename TEXT NOT NULL,
+    mime_type TEXT NOT NULL,
+    type TEXT NOT NULL CHECK (type IN ('image','document','audio','video','template')),
+    size INTEGER NOT NULL,
+    url TEXT NOT NULL,
+    thumbnail_url TEXT,
+    used_count INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY (owner_id) REFERENCES users(id)
+);
+CREATE INDEX IF NOT EXISTS idx_assets_owner_id ON assets(owner_id);
+CREATE INDEX IF NOT EXISTS idx_assets_type ON assets(type);
+
+CREATE TABLE IF NOT EXISTS asset_tags (
+    id TEXT PRIMARY KEY,
+    owner_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    color TEXT,
+    created_at TEXT NOT NULL,
+    UNIQUE (owner_id, name),
+    FOREIGN KEY (owner_id) REFERENCES users(id)
+);
+CREATE INDEX IF NOT EXISTS idx_asset_tags_owner_id ON asset_tags(owner_id);
+
+CREATE TABLE IF NOT EXISTS asset_tag_links (
+    asset_id TEXT NOT NULL,
+    tag_id TEXT NOT NULL,
+    PRIMARY KEY (asset_id, tag_id),
+    FOREIGN KEY (asset_id) REFERENCES assets(id) ON DELETE CASCADE,
+    FOREIGN KEY (tag_id) REFERENCES asset_tags(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS asset_usages (
+    id TEXT PRIMARY KEY,
+    asset_id TEXT NOT NULL,
+    article_id TEXT NOT NULL,
+    used_at TEXT NOT NULL,
+    FOREIGN KEY (asset_id) REFERENCES assets(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_asset_usages_asset_id ON asset_usages(asset_id);
+
+-- ── Phase 6/7 contract: platform_accounts ───────────────────────
+CREATE TABLE IF NOT EXISTS platform_accounts (
+    id TEXT PRIMARY KEY,
+    owner_id TEXT NOT NULL,
+    platform TEXT NOT NULL CHECK (platform IN ('wechat_mp','wechat_video','xhs','bilibili','douyin','zhihu')),
+    display_name TEXT NOT NULL,
+    is_primary INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL CHECK (status IN ('connected','expired','disconnected')) DEFAULT 'disconnected',
+    token_expires_at TEXT,
+    last_sync_at TEXT,
+    stats_json TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE (owner_id, platform, display_name),
+    FOREIGN KEY (owner_id) REFERENCES users(id)
+);
+CREATE INDEX IF NOT EXISTS idx_platform_accounts_owner_id ON platform_accounts(owner_id);
+-- Per-user, per-platform primary uniqueness: only one is_primary=1 row.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_platform_accounts_primary
+    ON platform_accounts(owner_id, platform)
+    WHERE is_primary = 1;
+
+-- ── Phase 6/7 contract: team_members ───────────────────────────
+CREATE TABLE IF NOT EXISTS team_members (
+    id TEXT PRIMARY KEY,
+    owner_id TEXT NOT NULL,
+    email TEXT NOT NULL,
+    username TEXT NOT NULL,
+    initial TEXT NOT NULL,
+    role TEXT NOT NULL CHECK (role IN ('admin','editor','viewer')),
+    joined_at TEXT NOT NULL,
+    last_active_at TEXT,
+    UNIQUE (owner_id, email),
+    FOREIGN KEY (owner_id) REFERENCES users(id)
+);
+CREATE INDEX IF NOT EXISTS idx_team_members_owner_id ON team_members(owner_id);
 """
 
 # ==================== Database Manager ====================
