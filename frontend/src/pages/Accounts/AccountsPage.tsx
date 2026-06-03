@@ -13,6 +13,7 @@ import type {
   TeamMember,
   TeamRole,
 } from '@/types/contracts/accounts';
+import { listAccounts, listTeam } from '@/services/api/accounts';
 
 const PLATFORM_LABELS: Record<PlatformAccount['platform'], string> = {
   wechat_mp: '微信公众号',
@@ -39,85 +40,6 @@ const AVAILABLE_PLATFORMS: Array<PlatformAccount['platform']> = [
   'zhihu',
 ];
 
-// ─── Hard-coded mock data (replace with API calls when backend ready) ─
-const MOCK_ACCOUNTS: PlatformAccount[] = [
-  {
-    id: 'acc1',
-    owner_id: 'u1',
-    platform: 'wechat_mp',
-    display_name: '科技新知',
-    is_primary: true,
-    status: 'connected',
-    last_sync_at: '2026-06-03T10:00:00Z',
-    stats: { followers: 23_400, articles: 186, avg_read_count: 1_800 },
-    created_at: '2026-01-15T10:00:00Z',
-    updated_at: '2026-06-03T10:00:00Z',
-  },
-  {
-    id: 'acc2',
-    owner_id: 'u1',
-    platform: 'wechat_mp',
-    display_name: '产品笔记',
-    is_primary: false,
-    status: 'connected',
-    last_sync_at: '2026-06-02T10:00:00Z',
-    stats: { followers: 8_700, articles: 62, avg_read_count: 920 },
-    created_at: '2026-02-10T10:00:00Z',
-    updated_at: '2026-06-02T10:00:00Z',
-  },
-  {
-    id: 'acc3',
-    owner_id: 'u1',
-    platform: 'xhs',
-    display_name: '行业观察',
-    is_primary: false,
-    status: 'connected',
-    last_sync_at: '2026-06-01T10:00:00Z',
-    stats: { followers: 5_200, articles: 34, avg_read_count: 340 },
-    created_at: '2026-03-05T10:00:00Z',
-    updated_at: '2026-06-01T10:00:00Z',
-  },
-];
-
-const MOCK_TEAM: TeamMember[] = [
-  {
-    id: 'm1',
-    email: 'liming@topicai.com',
-    username: '李明',
-    initial: '李',
-    role: 'admin',
-    joined_at: '2026-01-15T10:00:00Z',
-    last_active_at: '2026-06-03T09:00:00Z',
-  },
-  {
-    id: 'm2',
-    email: 'wangxh@topicai.com',
-    username: '王小红',
-    initial: '王',
-    role: 'editor',
-    joined_at: '2026-02-01T10:00:00Z',
-    last_active_at: '2026-06-02T18:00:00Z',
-  },
-  {
-    id: 'm3',
-    email: 'zhangw@topicai.com',
-    username: '张文',
-    initial: '张',
-    role: 'editor',
-    joined_at: '2026-02-15T10:00:00Z',
-    last_active_at: '2026-05-30T12:00:00Z',
-  },
-  {
-    id: 'm4',
-    email: 'liuf@topicai.com',
-    username: '刘芳',
-    initial: '刘',
-    role: 'viewer',
-    joined_at: '2026-03-10T10:00:00Z',
-    last_active_at: '2026-05-15T10:00:00Z',
-  },
-];
-
 const ROLE_LABELS: Record<TeamRole, string> = {
   admin: '管理员',
   editor: '编辑',
@@ -141,15 +63,15 @@ const AccountsPage: React.FC = () => {
 
   useEffect(() => {
     let cancelled = false;
-    // Backend replacement:
-    //   const accs = await apiClient.get<PlatformAccount[]>('/accounts');
-    //   const members = await apiClient.get<TeamMember[]>('/team/members');
     const load = async (): Promise<void> => {
       try {
-        await new Promise((r) => setTimeout(r, 200));
+        const [accsRes, teamRes] = await Promise.all([
+          listAccounts(),
+          listTeam(),
+        ]);
         if (cancelled) return;
-        setAccounts(MOCK_ACCOUNTS);
-        setTeam(MOCK_TEAM);
+        setAccounts(accsRes.data || []);
+        setTeam(teamRes.data || []);
         setLoading(false);
       } catch (err: unknown) {
         if (!cancelled) {

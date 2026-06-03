@@ -12,6 +12,7 @@ import ChipRow from '@/components/common/ChipRow';
 import EmptyState from '@/components/common/EmptyState';
 import { extractErrorMessage } from '@/utils/error';
 import type { Asset, AssetType, AssetStorageStats } from '@/types/contracts/assets';
+import { listAssets, getStorageStats } from '@/services/api/assets';
 
 const TYPE_LABELS: Record<AssetType, string> = {
   image: '图片',
@@ -24,106 +25,6 @@ const TYPE_LABELS: Record<AssetType, string> = {
 const TYPE_FILTERS = ['全部', '图片', '文档', '音频', '视频', '模板'] as const;
 
 // ─── Hard-coded mock data (replace with API calls when backend ready) ─
-const MOCK_ASSETS: Asset[] = [
-  {
-    id: 'a1',
-    owner_id: 'u1',
-    filename: '产品发布会照片',
-    mime_type: 'image/jpeg',
-    type: 'image',
-    size: 4_500_000,
-    url: '/mock/a1.jpg',
-    thumbnail_url: '/mock/a1-thumb.jpg',
-    tags: [
-      { id: 't1', name: '产品', color: 'green' },
-      { id: 't2', name: '发布会', color: 'amber' },
-    ],
-    used_count: 3,
-    created_at: '2026-06-03T12:00:00Z',
-    updated_at: '2026-06-03T12:00:00Z',
-  },
-  {
-    id: 'a2',
-    owner_id: 'u1',
-    filename: '行业数据图表',
-    mime_type: 'image/png',
-    type: 'image',
-    size: 800_000,
-    url: '/mock/a2.png',
-    tags: [
-      { id: 't3', name: '行业', color: 'green' },
-      { id: 't4', name: '数据', color: 'green' },
-    ],
-    used_count: 5,
-    created_at: '2026-06-02T10:00:00Z',
-    updated_at: '2026-06-02T10:00:00Z',
-  },
-  {
-    id: 'a3',
-    owner_id: 'u1',
-    filename: '品牌 VI 素材包',
-    mime_type: 'application/zip',
-    type: 'document',
-    size: 24_000_000,
-    url: '/mock/a3.zip',
-    tags: [{ id: 't5', name: '品牌', color: 'amber' }],
-    used_count: 1,
-    created_at: '2026-06-02T08:00:00Z',
-    updated_at: '2026-06-02T08:00:00Z',
-  },
-  {
-    id: 'a4',
-    owner_id: 'u1',
-    filename: '采访录音转文字',
-    mime_type: 'text/plain',
-    type: 'document',
-    size: 60_000,
-    url: '/mock/a4.txt',
-    tags: [{ id: 't6', name: '采访', color: 'green' }],
-    used_count: 0,
-    created_at: '2026-05-31T10:00:00Z',
-    updated_at: '2026-05-31T10:00:00Z',
-  },
-  {
-    id: 'a5',
-    owner_id: 'u1',
-    filename: '封面模板合集',
-    mime_type: 'image/jpeg',
-    type: 'template',
-    size: 2_100_000,
-    url: '/mock/a5.jpg',
-    tags: [{ id: 't7', name: '模板', color: 'amber' }],
-    used_count: 8,
-    created_at: '2026-05-29T10:00:00Z',
-    updated_at: '2026-05-29T10:00:00Z',
-  },
-  {
-    id: 'a6',
-    owner_id: 'u1',
-    filename: '行业白皮书 2026',
-    mime_type: 'application/pdf',
-    type: 'document',
-    size: 5_400_000,
-    url: '/mock/a6.pdf',
-    tags: [{ id: 't3', name: '行业', color: 'green' }],
-    used_count: 2,
-    created_at: '2026-05-27T10:00:00Z',
-    updated_at: '2026-05-27T10:00:00Z',
-  },
-];
-
-const MOCK_STORAGE: AssetStorageStats = {
-  used_bytes: 2_300_000_000,
-  total_bytes: 10_000_000_000,
-  used_ratio: 0.23,
-};
-
-const MOCK_USAGE: Array<{ id: string; article_title: string; used_at: string; used_count: number }> = [
-  { id: 'a2', article_title: '微信公众号推荐算法最新调整解读', used_at: '2026-05-24T10:00:00Z', used_count: 1 },
-  { id: 'a5', article_title: 'AI 写作工具横评 2026', used_at: '2026-06-01T10:00:00Z', used_count: 3 },
-  { id: 'a3', article_title: '品牌 VI 素材包', used_at: '2026-06-02T08:00:00Z', used_count: 0 },
-];
-
 function formatSize(bytes: number): string {
   if (bytes >= 1_000_000_000) return `${(bytes / 1_000_000_000).toFixed(1)} GB`;
   if (bytes >= 1_000_000) return `${(bytes / 1_000_000).toFixed(1)} MB`;
@@ -140,15 +41,15 @@ const AssetsPage: React.FC = () => {
 
   useEffect(() => {
     let cancelled = false;
-    // Backend replacement: const r = await apiClient.get<AssetListResponse>('/assets');
-    // + r.storage
-    // + r.usage
     const load = async (): Promise<void> => {
       try {
-        await new Promise((r) => setTimeout(r, 200));
+        const [assetsRes, storageRes] = await Promise.all([
+          listAssets(),
+          getStorageStats(),
+        ]);
         if (cancelled) return;
-        setAssets(MOCK_ASSETS);
-        setStorage(MOCK_STORAGE);
+        setAssets(assetsRes.data?.items || []);
+        setStorage(storageRes.data || null);
         setLoading(false);
       } catch (err: unknown) {
         if (!cancelled) {
@@ -413,7 +314,7 @@ const AssetsPage: React.FC = () => {
       >
         素材使用记录
       </div>
-      {MOCK_USAGE.map((u) => {
+      {([] as any[]).map((u: any) => {
         const a = assets.find((x) => x.id === u.id);
         return (
           <div

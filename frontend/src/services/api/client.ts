@@ -152,6 +152,20 @@ const apiClient = {
     return { data: result };
   },
 
+  
+  async patch<T>(url: string, data?: unknown, _config?: unknown): Promise<{ data: T }> {
+    const makeRequest = () =>
+      fetch(API_PREFIX + url, {
+        method: 'PATCH',
+        headers: getHeaders(),
+        body: data ? JSON.stringify(data) : undefined,
+      });
+
+    const response = await makeRequest();
+    const result = await parseResponse<T>(response, makeRequest);
+    return { data: result };
+  },
+
   async delete<T>(url: string, _config?: unknown): Promise<{ data: T }> {
     const makeRequest = () =>
       fetch(`${BASE_URL}${url}`, {
