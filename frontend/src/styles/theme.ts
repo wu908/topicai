@@ -2,39 +2,55 @@ import { createTheme } from '@mui/material/styles';
 
 /**
  * MUI Theme — TopicAI v4.0 Air Pro
- * Reads all colors / shadows / radii from --v3-* CSS variables
- * defined in styles/tokens.css. Prototype is the single source of truth.
+ *
+ * IMPORTANT: MUI v5 `createPalette` synchronously calls lighten()/darken()
+ * via decomposeColor(), which does NOT support CSS var() strings. Passing
+ * `var(--v3-accent)` to palette.*.main would crash at module load.
+ *
+ * Strategy:
+ *  - palette.*.main: use static hex values (the *same* hex as the v3 tokens
+ *    so visual parity holds; tokens.css remains the source of truth for
+ *    any other CSS surface that needs theming).
+ *  - component styleOverrides: use `var(--v3-*)` references — these are
+ *    string fields, not color-object inputs, and survive unchanged.
  */
+const PALETTE = {
+  primary: '#2c2c2c',
+  primaryContrast: '#ffffff',
+  success: '#3d8b5d',
+  warning: '#c4952e',
+  error: '#c4453d',
+  info: '#5b7fa8',
+  bg: '#faf9f7',
+  surface: '#ffffff',
+  text: '#1a1a1a',
+  textSec: '#6b6b6b',
+  textTer: '#9b9b9b',
+  border: '#e8e5e1',
+} as const;
+
 const v3 = (name: string): string => `var(--v3-${name})`;
 
 const theme = createTheme({
   palette: {
     primary: {
-      main: v3('accent'),
-      contrastText: '#ffffff',
+      main: PALETTE.primary,
+      contrastText: PALETTE.primaryContrast,
     },
-    success: {
-      main: v3('green'),
-    },
-    warning: {
-      main: v3('amber'),
-    },
-    error: {
-      main: v3('red'),
-    },
-    info: {
-      main: v3('blue'),
-    },
+    success: { main: PALETTE.success },
+    warning: { main: PALETTE.warning },
+    error: { main: PALETTE.error },
+    info: { main: PALETTE.info },
     background: {
-      default: v3('bg'),
-      paper: v3('surface'),
+      default: PALETTE.bg,
+      paper: PALETTE.surface,
     },
     text: {
-      primary: v3('text'),
-      secondary: v3('text-sec'),
-      disabled: v3('text-ter'),
+      primary: PALETTE.text,
+      secondary: PALETTE.textSec,
+      disabled: PALETTE.textTer,
     },
-    divider: v3('border'),
+    divider: PALETTE.border,
   },
   typography: {
     fontFamily: [
@@ -53,7 +69,12 @@ const theme = createTheme({
     h6: { fontSize: '0.9375rem', fontWeight: 600, lineHeight: 1.5 },
     body1: { fontSize: '0.9375rem', fontWeight: 400, lineHeight: 1.5 },
     body2: { fontSize: '0.8125rem', fontWeight: 400, lineHeight: 1.5 },
-    caption: { fontSize: '0.6875rem', fontWeight: 400, lineHeight: 1.5, color: v3('text-ter') },
+    caption: {
+      fontSize: '0.6875rem',
+      fontWeight: 400,
+      lineHeight: 1.5,
+      color: v3('text-ter'),
+    },
     button: { textTransform: 'none', fontWeight: 500 },
   },
   shape: {
@@ -72,7 +93,7 @@ const theme = createTheme({
         },
         contained: {
           boxShadow: 'none',
-          '&:hover': { boxShadow: 'var(--v3-shadow-card)' },
+          '&:hover': { boxShadow: v3('shadow-card') },
         },
       },
     },
@@ -81,9 +102,9 @@ const theme = createTheme({
         root: {
           borderRadius: 12,
           border: `1px solid ${v3('border')}`,
-          boxShadow: 'var(--v3-shadow-card)',
+          boxShadow: v3('shadow-card'),
           transition: 'all 0.2s',
-          '&:hover': { boxShadow: 'var(--v3-shadow-card-hover)' },
+          '&:hover': { boxShadow: v3('shadow-card-hover') },
         },
       },
     },
@@ -103,7 +124,7 @@ const theme = createTheme({
       styleOverrides: {
         paper: {
           borderRadius: 12,
-          boxShadow: 'var(--v3-shadow-modal)',
+          boxShadow: v3('shadow-modal'),
         },
       },
     },
@@ -111,3 +132,4 @@ const theme = createTheme({
 });
 
 export default theme;
+export { PALETTE };
