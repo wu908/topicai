@@ -1,9 +1,12 @@
 /**
  * Accounts page — V3 design + Phase 7 backend contract wired.
  * Renders connected-platform cards + add-platform tiles + team member rows.
- * Data is hard-coded mock typed against @/types/contracts/accounts.
- * Replace mock arrays with API calls when backend implements
- * /accounts + /team/members.
+ * - listAccounts / listTeam: wired in Phase 8 (real API).
+ * - changeMemberRole / removeMember: wired in Phase 8 (real API, optimistic
+ *   with rollback on error).
+ * - createAccount / syncAccount / inviteMember: Phase 9 (require OAuth
+ *   flow and email-invite modal, out of Phase 8 scope). Buttons render
+ *   a disabled state until the Phase 9 forms land.
  */
 import React, { useEffect, useState } from 'react';
 import { useAuthStore } from '@/store/authStore';
@@ -13,7 +16,12 @@ import type {
   TeamMember,
   TeamRole,
 } from '@/types/contracts/accounts';
-import { listAccounts, listTeam } from '@/services/api/accounts';
+import {
+  listAccounts,
+  listTeam,
+  changeMemberRole,
+  removeMember,
+} from '@/services/api/accounts';
 
 const PLATFORM_LABELS: Record<PlatformAccount['platform'], string> = {
   wechat_mp: '微信公众号',
@@ -86,20 +94,50 @@ const AccountsPage: React.FC = () => {
     };
   }, []);
 
-  const handleRoleChange = (memberId: string, newRole: TeamRole): void => {
-    // Backend replacement: PATCH /api/v1/team/members/{id} { role: newRole }
+  const handleRoleChange = async (memberId: string, newRole: TeamRole): Promise<void> => {
+    // Optimistic update — flip the role locally, call the API, roll back on
+    // failure. The backend's "last admin cannot be demoted" rule returns
+    // 422, which we surface as an inline error rather than silently failing.
+    const previous = team.find((m) => m.id === memberId)?.role;
+    if (previous === newRole) return;
     setPendingRoleChange(memberId);
     setTeam((prev) =>
       prev.map((m) => (m.id === memberId ? { ...m, role: newRole } : m)),
     );
-    window.setTimeout(() => setPendingRoleChange(null), 800);
+    try {
+      await changeMemberRole(memberId, { role: newRole });
+    } catch (err: unknown) {
+      // Roll back to the previous role on any error.
+      if (previous) {
+        setTeam((prev) =>
+          prev.map((m) => (m.id === memberId ? { ...m, role: previous } : m)),
+        );
+      }
+      setError(extractErrorMessage(err, '角色更新失败'));
+    } finally {
+      setPendingRoleChange(null);
+    }
   };
 
-  const handleRemove = (memberId: string): void => {
-    // Backend replacement: DELETE /api/v1/team/members/{id}
+  const handleRemove = async (memberId: string): Promise<void> => {
+    // Optimistic remove — hide the row immediately, call the API, restore
+    // on failure. Backend returns 422 if the member is the last admin.
+    const removed = team.find((m) => m.id === memberId);
+    if (!removed) return;
     setPendingRemove(memberId);
     setTeam((prev) => prev.filter((m) => m.id !== memberId));
-    window.setTimeout(() => setPendingRemove(null), 800);
+    try {
+      await removeMember(memberId);
+    } catch (err: unknown) {
+      // Restore the removed member at its original position.
+      setTeam((prev) => {
+        if (prev.some((m) => m.id === memberId)) return prev;
+        return [...prev, removed].sort((a, b) => a.id.localeCompare(b.id));
+      });
+      setError(extractErrorMessage(err, '成员移除失败'));
+    } finally {
+      setPendingRemove(null);
+    }
   };
 
   return (
@@ -149,10 +187,19 @@ const AccountsPage: React.FC = () => {
         <button
           type="button"
           style={primaryBtn}
+          disabled
+          aria-disabled="true"
+          title="Phase 9: 添加账号需要 OAuth 授权流程"
         >
           + 添加账号
         </button>
-        <button type="button" style={secondaryBtn}>
+        <button
+          type="button"
+          style={secondaryBtn}
+          disabled
+          aria-disabled="true"
+          title="Phase 9: 同步数据需配合后端 OAuth 任务"
+        >
           同步数据
         </button>
       </div>
@@ -294,22 +341,18 @@ const AccountsPage: React.FC = () => {
             <button
               key={p}
               type="button"
-              onClick={() => undefined}
+              disabled
+              aria-disabled="true"
+              title="Phase 9: 平台连接需要 OAuth 授权流程"
               style={{
                 background: 'var(--v3-surface)',
                 border: '1px solid var(--v3-border)',
                 borderRadius: 8,
                 padding: '12px 8px',
                 textAlign: 'center',
-                cursor: 'pointer',
+                cursor: 'not-allowed',
+                opacity: 0.6,
                 fontFamily: 'inherit',
-                transition: 'border-color 0.15s',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = 'var(--v3-text)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = 'var(--v3-border)';
               }}
             >
               <div
@@ -420,10 +463,14 @@ const AccountsPage: React.FC = () => {
         ))}
         <button
           type="button"
-          onClick={() => undefined}
+          disabled
+          aria-disabled="true"
+          title="Phase 9: 邀请成员需要邮件邀请 modal"
           style={{
             ...primaryBtn,
             marginTop: 12,
+            cursor: 'not-allowed',
+            opacity: 0.6,
           }}
         >
           + 邀请成员

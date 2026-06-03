@@ -92,10 +92,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ isLoading: true });
     try {
       const response = await authApi.getCurrentUser();
-      // Backend returns { code: 200, data: { user: {...} } }
-      // response.data = { user: { id, email, username, ... } }
-      const user = (response.data as Record<string, unknown>)?.user as User;
-      set({ user: user ?? null, isAuthenticated: true, isLoading: false });
+      // Backend returns { code: 200, data: { user: {...} } } per auth.ts:36
+      const user = response.data?.user ?? null;
+      set({ user, isAuthenticated: true, isLoading: false });
     } catch {
       set({ isLoading: false });
     }

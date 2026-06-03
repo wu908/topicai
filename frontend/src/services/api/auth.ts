@@ -33,7 +33,7 @@ export async function refreshToken(data: RefreshTokenRequest): Promise<ApiRespon
 }
 
 /** Get current authenticated user */
-export async function getCurrentUser(): Promise<ApiResponse<User>> {
-  const response = await apiClient.get<ApiResponse<User>>('/auth/me');
+export async function getCurrentUser(): Promise<ApiResponse<{ user: User }>> {
+  const response = await apiClient.get<ApiResponse<{ user: User }>>('/auth/me');
   return response.data;
 }
