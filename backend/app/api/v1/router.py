@@ -15,6 +15,9 @@ from app.api.v1.reviews import router as reviews_router
 from app.api.v1.titles import router as titles_router
 from app.api.v1.topics import router as topics_router
 from app.api.v1.tracks import router as tracks_router
+from app.api.v1.accounts import router as accounts_router
+from app.api.v1.assets import router as assets_router
+from app.api.v1.team import router as team_router
 from app.api.v1.viral import router as viral_router
 
 api_v1_router = APIRouter()
@@ -51,3 +54,12 @@ api_v1_router.include_router(publish_router, tags=["Publish"])
 
 # Reviews endpoints (predict, attribute)
 api_v1_router.include_router(reviews_router, tags=["Reviews"])
+
+# Assets endpoints (list, get, storage, upload, tags, delete)
+api_v1_router.include_router(assets_router, tags=["Assets"])
+
+# Accounts endpoints (list, create, set-primary, disconnect, sync)
+api_v1_router.include_router(accounts_router, tags=["Accounts"])
+
+# Team endpoints (list, invite, change-role, remove)
+api_v1_router.include_router(team_router, tags=["Team"])
