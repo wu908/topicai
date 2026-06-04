@@ -122,10 +122,17 @@ class AssetService:
                     raise ValueError(f"Tags not found or not owned: {sorted(invalid)}")
 
             await s.execute(text("DELETE FROM asset_tag_links WHERE asset_id = :aid"), {"aid": asset_id})
-            for tid in tag_ids:
+            if tag_ids:
+                # Batch insert in a single statement to avoid N+1 round-trips
+                # for tag-heavy libraries. INSERT OR IGNORE skips duplicates
+                # that survived the DELETE (e.g. concurrent insert from
+                # another session).
+                placeholders = ", ".join(f"(:aid, :t{i})" for i in range(len(tag_ids)))
+                params: dict = {"aid": asset_id}
+                params.update({f"t{i}": tid for i, tid in enumerate(tag_ids)})
                 await s.execute(
-                    text("INSERT OR IGNORE INTO asset_tag_links (asset_id, tag_id) VALUES (:aid, :tid)"),
-                    {"aid": asset_id, "tid": tid},
+                    text(f"INSERT OR IGNORE INTO asset_tag_links (asset_id, tag_id) VALUES {placeholders}"),
+                    params,
                 )
             await s.commit()
 

@@ -162,7 +162,7 @@ const AssetsPage: React.FC = () => {
       </div>
 
       <ChipRow
-        options={TYPE_FILTERS as unknown as readonly string[]}
+        options={TYPE_FILTERS}
         active={activeFilter}
         onChange={setActiveFilter}
         ariaLabel="素材类型筛选"
@@ -314,43 +314,6 @@ const AssetsPage: React.FC = () => {
       >
         素材使用记录
       </div>
-      {([] as any[]).map((u: any) => {
-        const a = assets.find((x) => x.id === u.id);
-        return (
-          <div
-            key={u.id}
-            style={{
-              padding: '12px 0',
-              borderBottom: '1px solid var(--v3-border-light)',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-            }}
-          >
-            <div>
-              <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--v3-text)' }}>
-                {a?.filename ?? u.id}
-              </div>
-              <div style={{ fontSize: 12, color: 'var(--v3-text-sec)', marginTop: 2 }}>
-                {u.used_count > 0
-                  ? `已用于：「${u.article_title}」`
-                  : '未被任何文章引用'}
-              </div>
-            </div>
-            <span
-              style={{
-                fontSize: 11,
-                padding: '1px 6px',
-                background: u.used_count > 0 ? 'var(--v3-green-bg)' : 'var(--v3-tag-bg)',
-                color: u.used_count > 0 ? 'var(--v3-green)' : 'var(--v3-text-ter)',
-                borderRadius: 3,
-              }}
-            >
-              {u.used_count > 0 ? '已引用' : '未使用'}
-            </span>
-          </div>
-        );
-      })}
     </PageContainer>
   );
 };

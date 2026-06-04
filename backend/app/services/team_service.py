@@ -37,9 +37,16 @@ class TeamService:
                 "VALUES (:id, :oid, :email, :un, :init, :role, :now)"
             ), {"id": mid, "oid": owner_id, "email": email, "un": username, "init": initial, "role": role, "now": now})
             await s.commit()
+            # Re-fetch to pick up DB-side defaults (e.g. last_active_at
+            # server-side default) instead of constructing the response
+            # entirely in memory.
+            row = (await s.execute(
+                text("SELECT * FROM team_members WHERE id = :id"),
+                {"id": mid},
+            )).fetchone()
         finally:
             await s.close()
-        return TeamMember(id=mid, email=email, username=username, initial=initial, role=role, joined_at=now)
+        return _row_to_member(row)
 
     async def change_role(self, owner_id: str, member_id: str, new_role: TeamRole) -> TeamMember:
         s = await self.db.get_session()

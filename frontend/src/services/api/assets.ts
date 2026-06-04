@@ -6,6 +6,7 @@ import apiClient from './client';
 import type { ApiResponse } from '@/types/api';
 import type {
   Asset,
+  AssetListQuery,
   AssetListResponse,
   AssetStorageStats,
   AssetUsageRecord,
