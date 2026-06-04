@@ -24,6 +24,7 @@ import {
   removeMember,
   createAccount,
   syncAccount,
+  inviteMember,
 } from '@/services/api/accounts';
 
 const PLATFORM_LABELS: Record<PlatformAccount['platform'], string> = {
@@ -72,13 +73,28 @@ interface AddAccountModalProps {
   open: boolean;
   onClose: () => void;
   onCreated: (account: PlatformAccount) => void;
+  prefillPlatform?: Platform;
 }
 
-function AddAccountModal({ open, onClose, onCreated }: AddAccountModalProps): React.ReactElement {
-  const [platform, setPlatform] = useState<Platform>('wechat_mp');
+function AddAccountModal({ open, onClose, onCreated, prefillPlatform }: AddAccountModalProps): React.ReactElement {
+  const [platform, setPlatform] = useState<Platform>(prefillPlatform ?? 'wechat_mp');
+  // When a different platform tile triggers the modal, reset to that platform.
+  useEffect(() => {
+    if (prefillPlatform) setPlatform(prefillPlatform);
+  }, [prefillPlatform, open]);
+
+  // AddAccountModal body...
   const [displayName, setDisplayName] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+
+  // Reset form whenever modal opens.
+  useEffect(() => {
+    if (open) {
+      setDisplayName('');
+      setLocalError(null);
+    }
+  }, [open]);
 
   const handleSubmit = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault();
@@ -153,6 +169,96 @@ function AddAccountModal({ open, onClose, onCreated }: AddAccountModalProps): Re
   );
 }
 
+// Phase 9b: invite member modal. Sends an email + role to the backend
+// /team/members endpoint. Real email delivery is a future task; for now
+// the backend records the invite in its own DB and returns the new member.
+interface InviteMemberModalProps {
+  open: boolean;
+  onClose: () => void;
+  onInvited: (member: TeamMember) => void;
+}
+
+function InviteMemberModal({ open, onClose, onInvited }: InviteMemberModalProps): React.ReactElement {
+  const [email, setEmail] = useState('');
+  const [role, setRole] = useState<TeamRole>('editor');
+  const [submitting, setSubmitting] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      setEmail('');
+      setRole('editor');
+      setLocalError(null);
+    }
+  }, [open]);
+
+  const handleSubmit = async (e: React.FormEvent): Promise<void> => {
+    e.preventDefault();
+    if (!email.trim()) {
+      setLocalError('请输入邮箱');
+      return;
+    }
+    setSubmitting(true);
+    setLocalError(null);
+    try {
+      // Cast: backend TeamInviteRequest is currently {email, role} on the
+      // frontend, but the service signature accepts username too. Pass an
+      // empty username and let the backend auto-derive from email if needed.
+      const res = await inviteMember({ email: email.trim(), role } as Parameters<typeof inviteMember>[0]);
+      if (res.data) onInvited(res.data);
+      onClose();
+    } catch (err: unknown) {
+      setLocalError(extractErrorMessage(err, '邀请失败'));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="邀请团队成员"
+      footer={
+        <>
+          <button type="button" onClick={onClose} style={secondaryBtn}>取消</button>
+          <button type="submit" form="invite-form" disabled={submitting} style={primaryBtn}>
+            {submitting ? '发送中...' : '发送邀请'}
+          </button>
+        </>
+      }
+    >
+      <form id="invite-form" onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13 }}>
+          邮箱
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="member@example.com"
+            style={{ height: 36, padding: '0 10px', border: '1px solid var(--v3-border)', borderRadius: 6, background: 'var(--v3-surface)' }}
+          />
+        </label>
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13 }}>
+          角色
+          <select
+            value={role}
+            onChange={(e) => setRole(e.target.value as TeamRole)}
+            style={{ height: 36, padding: '0 10px', border: '1px solid var(--v3-border)', borderRadius: 6, background: 'var(--v3-surface)' }}
+          >
+            {(['admin', 'editor', 'viewer'] as TeamRole[]).map((r) => (
+              <option key={r} value={r}>{ROLE_LABELS[r]}</option>
+            ))}
+          </select>
+        </label>
+        {localError && (
+          <div role="alert" style={{ fontSize: 12, color: 'var(--v3-red)' }}>{localError}</div>
+        )}
+      </form>
+    </Modal>
+  );
+}
+
 const AccountsPage: React.FC = () => {
   const user = useAuthStore((s) => s.user);
   const [accounts, setAccounts] = useState<PlatformAccount[]>([]);
@@ -162,7 +268,9 @@ const AccountsPage: React.FC = () => {
   const [pendingRoleChange, setPendingRoleChange] = useState<string | null>(null);
   const [pendingRemove, setPendingRemove] = useState<string | null>(null);
   const [showAddAccount, setShowAddAccount] = useState(false);
+  const [prefillPlatform, setPrefillPlatform] = useState<Platform>('wechat_mp');
   const [pendingSync, setPendingSync] = useState(false);
+  const [showInvite, setShowInvite] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -447,17 +555,17 @@ const AccountsPage: React.FC = () => {
             <button
               key={p}
               type="button"
-              disabled
-              aria-disabled="true"
-              title="Phase 9: 平台连接需要 OAuth 授权流程"
+              onClick={() => {
+                setPrefillPlatform(p);
+                setShowAddAccount(true);
+              }}
               style={{
                 background: 'var(--v3-surface)',
                 border: '1px solid var(--v3-border)',
                 borderRadius: 8,
                 padding: '12px 8px',
                 textAlign: 'center',
-                cursor: 'not-allowed',
-                opacity: 0.6,
+                cursor: 'pointer',
                 fontFamily: 'inherit',
               }}
             >
@@ -569,14 +677,10 @@ const AccountsPage: React.FC = () => {
         ))}
         <button
           type="button"
-          disabled
-          aria-disabled="true"
-          title="Phase 9: 邀请成员需要邮件邀请 modal"
+          onClick={() => setShowInvite(true)}
           style={{
             ...primaryBtn,
             marginTop: 12,
-            cursor: 'not-allowed',
-            opacity: 0.6,
           }}
         >
           + 邀请成员
@@ -607,6 +711,13 @@ const AccountsPage: React.FC = () => {
         open={showAddAccount}
         onClose={() => setShowAddAccount(false)}
         onCreated={(acc) => setAccounts((prev) => [acc, ...prev])}
+        prefillPlatform={prefillPlatform}
+      />
+
+      <InviteMemberModal
+        open={showInvite}
+        onClose={() => setShowInvite(false)}
+        onInvited={(m) => setTeam((prev) => [...prev, m])}
       />
     </div>
   );
