@@ -3,7 +3,7 @@
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends
 
 from app.api.v1.deps import get_current_user, get_db
 from app.core.database import Database
@@ -18,7 +18,6 @@ router = APIRouter(tags=["Assets"])
 
 @router.get("/assets")
 async def list_assets(
-    request: Request,
     type: str | None = None,
     tag_id: str | None = None,
     q: str | None = None,
