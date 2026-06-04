@@ -107,7 +107,7 @@ async def test_change_role_other_owner_no_mutation(client, client_as_u2):
         f"/api/v1/team/members/{mid}",
         json={"role": "admin"},
     )
-    assert r.status_code >= 400
+    assert r.status_code == 404
     # u1's member still has original role.
     list_r = await client.get("/api/v1/team/members")
     assert list_r.json()["data"][0]["role"] == "editor"
@@ -122,7 +122,7 @@ async def test_remove_member_other_owner_no_mutation(client, client_as_u2):
     mid = create_r.json()["data"]["id"]
 
     r = await client_as_u2.delete(f"/api/v1/team/members/{mid}")
-    assert r.status_code >= 400
+    assert r.status_code == 404
     # u1 still has the member.
     list_r = await client.get("/api/v1/team/members")
     assert len(list_r.json()["data"]) == 1

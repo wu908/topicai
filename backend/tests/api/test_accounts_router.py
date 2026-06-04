@@ -139,7 +139,7 @@ async def test_get_account_other_owner_rejected(client, client_as_u2):
 
     r = await client_as_u2.get(f"/api/v1/accounts/{aid}")
     # Router currently 500s on ValueError; assert non-2xx.
-    assert r.status_code >= 400
+    assert r.status_code == 404
 
 
 @pytest.mark.asyncio
@@ -151,7 +151,7 @@ async def test_delete_account_other_owner_no_mutation(client, client_as_u2):
     aid = create_r.json()["data"]["id"]
 
     r = await client_as_u2.delete(f"/api/v1/accounts/{aid}")
-    assert r.status_code >= 400
+    assert r.status_code == 404
     # u1 still has the account (no mutation occurred).
     r2 = await client.get(f"/api/v1/accounts/{aid}")
     assert r2.status_code == 200
@@ -166,7 +166,7 @@ async def test_set_primary_other_owner_no_mutation(client, client_as_u2):
     aid = create_r.json()["data"]["id"]
 
     r = await client_as_u2.patch(f"/api/v1/accounts/{aid}")
-    assert r.status_code >= 400
+    assert r.status_code == 404
 
 
 @pytest.mark.asyncio
@@ -178,4 +178,4 @@ async def test_sync_other_owner_no_mutation(client, client_as_u2):
     aid = create_r.json()["data"]["id"]
 
     r = await client_as_u2.post(f"/api/v1/accounts/{aid}/sync")
-    assert r.status_code >= 400
+    assert r.status_code == 404

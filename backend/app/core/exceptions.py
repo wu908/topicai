@@ -284,6 +284,38 @@ def setup_exception_handlers(app: FastAPI) -> None:
             },
         )
 
+    @app.exception_handler(ValueError)
+    async def value_error_handler(request: Request, exc: ValueError):
+        """Service-layer ValueError → HTTP boundary.
+
+        Services raise ValueError with messages like:
+          - "Account not found", "Member not found", "Asset not found"
+          - "Cannot demote the last admin", "Cannot remove the last admin"
+          - "Tags not found or not owned: [...]"
+          - "already exists" (duplicate email)
+
+        Translate to 404 for "not found", 422 for business-rule violations
+        and duplicates, 400 for malformed input. The message is surfaced
+        verbatim so the frontend can display it.
+        """
+        msg = str(exc)
+        msg_l = msg.lower()
+        if "not found" in msg_l:
+            status_code = 404
+        elif "last admin" in msg_l or "already exists" in msg_l or "not owned" in msg_l:
+            status_code = 422
+        else:
+            status_code = 400
+        return JSONResponse(
+            status_code=status_code,
+            content={
+                "code": status_code,
+                "data": None,
+                "message": msg,
+                "meta": {"timestamp": utc_now()},
+            },
+        )
+
     @app.exception_handler(Exception)
     async def unhandled_exception_handler(request: Request, exc: Exception):
         """Catch-all for unhandled exceptions.
