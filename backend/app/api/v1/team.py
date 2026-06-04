@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from app.api.v1.deps import get_current_user, get_db
@@ -43,7 +44,13 @@ async def invite_member(
 ):
     svc = TeamService(db)
     result = await svc.invite(user["id"], body.email, body.username, body.role)
-    return ApiResponse(code=201, data=result.model_dump(), message="Member invited")
+    # REST convention: 201 created responses should advertise the
+    # canonical location of the new resource.
+    return JSONResponse(
+        status_code=201,
+        content=ApiResponse(code=201, data=result.model_dump(), message="Member invited").model_dump(),
+        headers={"Location": f"/api/v1/team/members/{result.id}"},
+    )
 
 
 @router.patch("/team/members/{member_id}")
