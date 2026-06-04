@@ -4,23 +4,26 @@
  * - listAccounts / listTeam: wired in Phase 8 (real API).
  * - changeMemberRole / removeMember: wired in Phase 8 (real API, optimistic
  *   with rollback on error).
- * - createAccount / syncAccount / inviteMember: Phase 9 (require OAuth
- *   flow and email-invite modal, out of Phase 8 scope). Buttons render
- *   a disabled state until the Phase 9 forms land.
+ * - createAccount / syncAccount: Phase 9a wired (modals + onClick).
+ * - 4 platform tiles + inviteMember: still Phase 9+ placeholders.
  */
 import React, { useEffect, useState } from 'react';
 import { useAuthStore } from '@/store/authStore';
 import { extractErrorMessage } from '@/utils/error';
+import Modal from '@/components/common/Modal';
 import type {
   PlatformAccount,
   TeamMember,
   TeamRole,
+  Platform,
 } from '@/types/contracts/accounts';
 import {
   listAccounts,
   listTeam,
   changeMemberRole,
   removeMember,
+  createAccount,
+  syncAccount,
 } from '@/services/api/accounts';
 
 const PLATFORM_LABELS: Record<PlatformAccount['platform'], string> = {
@@ -60,6 +63,96 @@ function formatNumber(n: number): string {
   return n.toLocaleString();
 }
 
+// Phase 9a: simple OAuth-style add-account modal.
+// In production this would redirect to the platform's OAuth flow; here
+// we accept platform + display_name and POST to /accounts, which the
+// backend creates in 'disconnected' status (real OAuth handshake is
+// a future task).
+interface AddAccountModalProps {
+  open: boolean;
+  onClose: () => void;
+  onCreated: (account: PlatformAccount) => void;
+}
+
+function AddAccountModal({ open, onClose, onCreated }: AddAccountModalProps): React.ReactElement {
+  const [platform, setPlatform] = useState<Platform>('wechat_mp');
+  const [displayName, setDisplayName] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent): Promise<void> => {
+    e.preventDefault();
+    if (!displayName.trim()) {
+      setLocalError('请输入账号显示名');
+      return;
+    }
+    setSubmitting(true);
+    setLocalError(null);
+    try {
+      const res = await createAccount({ platform, display_name: displayName.trim() });
+      if (res.data) onCreated(res.data);
+      onClose();
+    } catch (err: unknown) {
+      setLocalError(extractErrorMessage(err, '创建账号失败'));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="添加平台账号"
+      footer={
+        <>
+          <button type="button" onClick={onClose} style={secondaryBtn}>
+            取消
+          </button>
+          <button
+            type="submit"
+            form="add-account-form"
+            disabled={submitting}
+            style={primaryBtn}
+          >
+            {submitting ? '创建中...' : '创建账号'}
+          </button>
+        </>
+      }
+    >
+      <form id="add-account-form" onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13 }}>
+          平台
+          <select
+            value={platform}
+            onChange={(e) => setPlatform(e.target.value as Platform)}
+            style={{ height: 36, padding: '0 10px', border: '1px solid var(--v3-border)', borderRadius: 6, background: 'var(--v3-surface)' }}
+          >
+            <option value="wechat_mp">微信公众号</option>
+            <option value="wechat_video">视频号</option>
+            <option value="xhs">小红书</option>
+            <option value="bilibili">B 站</option>
+            <option value="douyin">抖音</option>
+            <option value="zhihu">知乎</option>
+          </select>
+        </label>
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13 }}>
+          账号显示名
+          <input
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+            placeholder="例如：我的公众号"
+            style={{ height: 36, padding: '0 10px', border: '1px solid var(--v3-border)', borderRadius: 6, background: 'var(--v3-surface)' }}
+          />
+        </label>
+        {localError && (
+          <div role="alert" style={{ fontSize: 12, color: 'var(--v3-red)' }}>{localError}</div>
+        )}
+      </form>
+    </Modal>
+  );
+}
+
 const AccountsPage: React.FC = () => {
   const user = useAuthStore((s) => s.user);
   const [accounts, setAccounts] = useState<PlatformAccount[]>([]);
@@ -68,6 +161,8 @@ const AccountsPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [pendingRoleChange, setPendingRoleChange] = useState<string | null>(null);
   const [pendingRemove, setPendingRemove] = useState<string | null>(null);
+  const [showAddAccount, setShowAddAccount] = useState(false);
+  const [pendingSync, setPendingSync] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -187,20 +282,31 @@ const AccountsPage: React.FC = () => {
         <button
           type="button"
           style={primaryBtn}
-          disabled
-          aria-disabled="true"
-          title="Phase 9: 添加账号需要 OAuth 授权流程"
+          onClick={() => setShowAddAccount(true)}
         >
           + 添加账号
         </button>
         <button
           type="button"
           style={secondaryBtn}
-          disabled
-          aria-disabled="true"
-          title="Phase 9: 同步数据需配合后端 OAuth 任务"
+          disabled={pendingSync || accounts.length === 0}
+          onClick={async () => {
+            if (accounts.length === 0) return;
+            setPendingSync(true);
+            try {
+              const target = accounts.find((a) => a.status === 'connected') ?? accounts[0];
+              await syncAccount(target.id);
+              // Refresh to get fresh last_sync_at.
+              const res = await listAccounts();
+              setAccounts(res.data || []);
+            } catch (err: unknown) {
+              setError(extractErrorMessage(err, '同步失败'));
+            } finally {
+              setPendingSync(false);
+            }
+          }}
         >
-          同步数据
+          {pendingSync ? '同步中...' : '同步数据'}
         </button>
       </div>
 
@@ -496,6 +602,12 @@ const AccountsPage: React.FC = () => {
         <div style={{ flex: 1 }} />
         <div style={{ fontSize: 12 }}>当前账号：{user?.username ?? '—'}</div>
       </div>
+
+      <AddAccountModal
+        open={showAddAccount}
+        onClose={() => setShowAddAccount(false)}
+        onCreated={(acc) => setAccounts((prev) => [acc, ...prev])}
+      />
     </div>
   );
 };
