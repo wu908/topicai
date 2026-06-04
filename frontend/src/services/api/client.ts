@@ -110,73 +110,34 @@ function buildQueryString(params?: Record<string, unknown> | null): string {
   return qs ? `?${qs}` : '';
 }
 
+/** Single generic HTTP request helper used by all 5 apiClient methods. */
+async function request<T>(
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
+  url: string,
+  body?: unknown,
+  params?: Record<string, unknown>,
+): Promise<{ data: T }> {
+  const fullUrl = `${BASE_URL}${url}${buildQueryString(params)}`;
+  const makeRequest = (): Promise<Response> =>
+    fetch(fullUrl, {
+      method,
+      headers: getHeaders(),
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
+
+  const response = await makeRequest();
+  const data = await parseResponse<T>(response, makeRequest);
+  return { data };
+}
+
 /** Fetch-based HTTP client with same interface as axios */
 const apiClient = {
-  async get<T>(url: string, config?: { params?: Record<string, unknown> }): Promise<{ data: T }> {
-    const makeRequest = () => {
-      const fullUrl = `${BASE_URL}${url}${buildQueryString(config?.params)}`;
-      return fetch(fullUrl, {
-        method: 'GET',
-        headers: getHeaders(),
-      });
-    };
-
-    const response = await makeRequest();
-    const data = await parseResponse<T>(response, makeRequest);
-    return { data };
-  },
-
-  async post<T>(url: string, data?: unknown, _config?: unknown): Promise<{ data: T }> {
-    const makeRequest = () =>
-      fetch(`${BASE_URL}${url}`, {
-        method: 'POST',
-        headers: getHeaders(),
-        body: data !== undefined ? JSON.stringify(data) : undefined,
-      });
-
-    const response = await makeRequest();
-    const result = await parseResponse<T>(response, makeRequest);
-    return { data: result };
-  },
-
-  async put<T>(url: string, data?: unknown, _config?: unknown): Promise<{ data: T }> {
-    const makeRequest = () =>
-      fetch(`${BASE_URL}${url}`, {
-        method: 'PUT',
-        headers: getHeaders(),
-        body: data !== undefined ? JSON.stringify(data) : undefined,
-      });
-
-    const response = await makeRequest();
-    const result = await parseResponse<T>(response, makeRequest);
-    return { data: result };
-  },
-
-  
-  async patch<T>(url: string, data?: unknown, _config?: unknown): Promise<{ data: T }> {
-    const makeRequest = () =>
-      fetch(`${BASE_URL}${url}`, {
-        method: 'PATCH',
-        headers: getHeaders(),
-        body: data !== undefined ? JSON.stringify(data) : undefined,
-      });
-
-    const response = await makeRequest();
-    const result = await parseResponse<T>(response, makeRequest);
-    return { data: result };
-  },
-
-  async delete<T>(url: string, _config?: unknown): Promise<{ data: T }> {
-    const makeRequest = () =>
-      fetch(`${BASE_URL}${url}`, {
-        method: 'DELETE',
-        headers: getHeaders(),
-      });
-
-    const response = await makeRequest();
-    const result = await parseResponse<T>(response, makeRequest);
-    return { data: result };
-  },
+  get: <T>(url: string, config?: { params?: Record<string, unknown> }) =>
+    request<T>('GET', url, undefined, config?.params),
+  post: <T>(url: string, data?: unknown) => request<T>('POST', url, data),
+  put: <T>(url: string, data?: unknown) => request<T>('PUT', url, data),
+  patch: <T>(url: string, data?: unknown) => request<T>('PATCH', url, data),
+  delete: <T>(url: string) => request<T>('DELETE', url),
 };
 
 export default apiClient;
