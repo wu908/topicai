@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from app.api.v1.deps import get_current_user, get_db
@@ -49,7 +50,15 @@ async def create_account(
 ):
     svc = AccountService(db)
     result = await svc.create(user["id"], body.platform, body.display_name)
-    return ApiResponse(code=201, data=result.model_dump(), message="Account created")
+    # REST convention: 201 created responses should advertise the
+    # canonical location of the new resource.
+    return JSONResponse(
+        status_code=201,
+        content=ApiResponse(
+            code=201, data=result.model_dump(), message="Account created"
+        ).model_dump(),
+        headers={"Location": f"/api/v1/accounts/{result.id}"},
+    )
 
 
 @router.patch("/accounts/{account_id}")
