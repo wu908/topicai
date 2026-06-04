@@ -73,7 +73,9 @@ class AccountService:
         now = datetime.now(UTC).isoformat()
         s = await self.db.get_session()
         try:
-            await s.execute(text("UPDATE platform_accounts SET last_sync_at = :now, updated_at = :now WHERE id = :id AND owner_id = :oid"), {"now": now, "id": account_id, "oid": owner_id})
+            r = await s.execute(text("UPDATE platform_accounts SET last_sync_at = :now, updated_at = :now WHERE id = :id AND owner_id = :oid"), {"now": now, "id": account_id, "oid": owner_id})
+            if r.rowcount == 0:
+                raise ValueError("Account not found")
             await s.commit()
         finally:
             await s.close()

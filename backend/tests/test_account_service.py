@@ -68,7 +68,38 @@ async def test_disconnect(svc):
 
 
 @pytest.mark.asyncio
+async def test_disconnect_wrong_owner(svc):
+    """Non-owner must not be able to disconnect an account they don't own."""
+    r = await svc.create('u1', 'wechat_mp', 'X')
+    with pytest.raises(ValueError, match='not found'):
+        await svc.disconnect('u2', r.id)
+    # Original owner's account must remain untouched.
+    a = await svc.get('u1', r.id)
+    assert a.status == 'disconnected'  # default from create()
+
+
+@pytest.mark.asyncio
 async def test_trigger_sync(svc):
     r = await svc.create('u1', 'wechat_mp', 'X')
     ts = await svc.trigger_sync('u1', r.id)
     assert ts is not None
+
+
+@pytest.mark.asyncio
+async def test_trigger_sync_wrong_owner(svc):
+    """Non-owner must not be able to trigger sync — must raise, not silently
+    return a timestamp without updating any row."""
+    r = await svc.create('u1', 'wechat_mp', 'X')
+    with pytest.raises(ValueError, match='not found'):
+        await svc.trigger_sync('u2', r.id)
+    # Original account must remain untouched.
+    a = await svc.get('u1', r.id)
+    assert a.last_sync_at is None
+
+
+@pytest.mark.asyncio
+async def test_set_primary_wrong_owner(svc):
+    """Non-owner must not be able to mark an account as primary."""
+    r = await svc.create('u1', 'wechat_mp', 'X')
+    with pytest.raises(ValueError, match='not found'):
+        await svc.set_primary('u2', r.id)

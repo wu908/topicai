@@ -51,6 +51,17 @@ async def test_change_role(svc):
 
 
 @pytest.mark.asyncio
+async def test_change_role_wrong_owner(svc):
+    """Non-owner must not be able to change a member's role."""
+    r = await svc.invite('u1', 'a@b.com', 'A', 'editor')
+    with pytest.raises(ValueError, match='not found'):
+        await svc.change_role('u2', r.id, 'admin')
+    # Original role must be unchanged.
+    members = await svc.list('u1')
+    assert members[0].role == 'editor'
+
+
+@pytest.mark.asyncio
 async def test_cannot_demote_last_admin(svc):
     admin = await svc.invite('u1', 'a@b.com', 'Admin', 'admin')
     with pytest.raises(ValueError, match='last admin'):
@@ -70,6 +81,18 @@ async def test_remove_member(svc):
     await svc.remove('u1', r.id)
     members = await svc.list('u1')
     assert len(members) == 0
+
+
+@pytest.mark.asyncio
+async def test_remove_wrong_owner(svc):
+    """Non-owner must not be able to remove a member from another owner."""
+    r = await svc.invite('u1', 'a@b.com', 'A', 'editor')
+    with pytest.raises(ValueError, match='not found'):
+        await svc.remove('u2', r.id)
+    # Member must still exist for the original owner.
+    members = await svc.list('u1')
+    assert len(members) == 1
+    assert members[0].id == r.id
 
 
 @pytest.mark.asyncio
