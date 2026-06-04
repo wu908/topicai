@@ -41,15 +41,17 @@ test.describe('assets / accounts / publish pages render after login', () => {
     await expect(page.getByRole('group', { name: '素材类型筛选' })).toBeVisible();
   });
 
-  test('accounts page: Phase 9 placeholders disabled but present', async ({ page }) => {
+  test('accounts page: all 5 Phase 9 buttons are now live (enabled)', async ({ page }) => {
     await login(page);
     await page.goto('/accounts');
     await expect(page.getByRole('heading', { name: '账号管理' })).toBeVisible({
       timeout: 10_000,
     });
-    await expect(page.getByRole('button', { name: '+ 添加账号' })).toBeDisabled();
-    await expect(page.getByRole('button', { name: '同步数据' })).toBeDisabled();
-    await expect(page.getByRole('button', { name: '+ 邀请成员' })).toBeDisabled();
+    // All 5 buttons are now real (no longer disabled) — see phase9-modals.spec.ts
+    // for full end-to-end tests of their behavior.
+    await expect(page.getByRole('button', { name: '+ 添加账号' })).toBeEnabled();
+    await expect(page.getByRole('button', { name: '同步数据' })).toBeEnabled();
+    await expect(page.getByRole('button', { name: '+ 邀请成员' })).toBeEnabled();
   });
 
   test('publish page: title + platform selector render', async ({ page }) => {

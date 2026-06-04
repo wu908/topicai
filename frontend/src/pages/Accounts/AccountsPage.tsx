@@ -180,6 +180,7 @@ interface InviteMemberModalProps {
 
 function InviteMemberModal({ open, onClose, onInvited }: InviteMemberModalProps): React.ReactElement {
   const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [role, setRole] = useState<TeamRole>('editor');
   const [submitting, setSubmitting] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
@@ -187,6 +188,7 @@ function InviteMemberModal({ open, onClose, onInvited }: InviteMemberModalProps)
   useEffect(() => {
     if (open) {
       setEmail('');
+      setUsername('');
       setRole('editor');
       setLocalError(null);
     }
@@ -194,17 +196,18 @@ function InviteMemberModal({ open, onClose, onInvited }: InviteMemberModalProps)
 
   const handleSubmit = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault();
-    if (!email.trim()) {
-      setLocalError('请输入邮箱');
+    if (!email.trim() || !username.trim()) {
+      setLocalError('请输入邮箱和用户名');
       return;
     }
     setSubmitting(true);
     setLocalError(null);
     try {
-      // Cast: backend TeamInviteRequest is currently {email, role} on the
-      // frontend, but the service signature accepts username too. Pass an
-      // empty username and let the backend auto-derive from email if needed.
-      const res = await inviteMember({ email: email.trim(), role } as Parameters<typeof inviteMember>[0]);
+      const res = await inviteMember({
+        email: email.trim(),
+        username: username.trim(),
+        role,
+      });
       if (res.data) onInvited(res.data);
       onClose();
     } catch (err: unknown) {
@@ -236,6 +239,15 @@ function InviteMemberModal({ open, onClose, onInvited }: InviteMemberModalProps)
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="member@example.com"
+            style={{ height: 36, padding: '0 10px', border: '1px solid var(--v3-border)', borderRadius: 6, background: 'var(--v3-surface)' }}
+          />
+        </label>
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13 }}>
+          用户名
+          <input
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder="显示名称"
             style={{ height: 36, padding: '0 10px', border: '1px solid var(--v3-border)', borderRadius: 6, background: 'var(--v3-surface)' }}
           />
         </label>
@@ -397,9 +409,12 @@ const AccountsPage: React.FC = () => {
         <button
           type="button"
           style={secondaryBtn}
-          disabled={pendingSync || accounts.length === 0}
+          disabled={pendingSync}
           onClick={async () => {
-            if (accounts.length === 0) return;
+            if (accounts.length === 0) {
+              setError('请先添加账号');
+              return;
+            }
             setPendingSync(true);
             try {
               const target = accounts.find((a) => a.status === 'connected') ?? accounts[0];

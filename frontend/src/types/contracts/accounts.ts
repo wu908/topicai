@@ -61,6 +61,7 @@ export interface TeamMember {
 
 export interface TeamInviteRequest {
   email: string;
+  username: string;
   role: TeamRole;
 }
 
