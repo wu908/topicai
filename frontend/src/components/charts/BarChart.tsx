@@ -2,7 +2,7 @@
  * BarChart — V3 vertical bar chart (CSS-only, no chart library).
  * Used in AnalyticsPage for 7-day reading trend.
  */
-import React from 'react';
+import React, { useState } from 'react';
 
 export interface BarDataPoint {
   label: string;
@@ -15,6 +15,7 @@ interface BarChartProps {
 }
 
 const BarChart = ({ data, onBarClick }: BarChartProps): React.ReactElement => {
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const max = Math.max(...data.map((d) => d.value), 1);
   return (
     <div
@@ -27,7 +28,7 @@ const BarChart = ({ data, onBarClick }: BarChartProps): React.ReactElement => {
         padding: '0 10px',
       }}
     >
-      {data.map((d) => {
+      {data.map((d, i) => {
         const pct = Math.round((d.value / max) * 100);
         const heightPx = Math.max(4, pct * 1.1);
         return (
@@ -54,7 +55,7 @@ const BarChart = ({ data, onBarClick }: BarChartProps): React.ReactElement => {
                 fontSize: 11,
                 color: 'var(--v3-text-sec)',
                 fontWeight: 500,
-                opacity: 0,
+                opacity: hoveredIndex === i ? 1 : 0,
                 transition: 'opacity 0.15s',
               }}
               className="v3-bar-value"
@@ -66,26 +67,12 @@ const BarChart = ({ data, onBarClick }: BarChartProps): React.ReactElement => {
                 width: '100%',
                 maxWidth: 36,
                 height: `${heightPx}px`,
-                background: 'var(--v3-border)',
+                background: hoveredIndex === i ? 'var(--v3-text)' : 'var(--v3-border)',
                 borderRadius: '4px 4px 0 0',
                 transition: 'background 0.2s',
               }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'var(--v3-text)';
-                const parent = e.currentTarget.parentElement;
-                if (parent) {
-                  const valueLabel = parent.querySelector<HTMLElement>('.v3-bar-value');
-                  if (valueLabel) valueLabel.style.opacity = '1';
-                }
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'var(--v3-border)';
-                const parent = e.currentTarget.parentElement;
-                if (parent) {
-                  const valueLabel = parent.querySelector<HTMLElement>('.v3-bar-value');
-                  if (valueLabel) valueLabel.style.opacity = '0';
-                }
-              }}
+              onMouseEnter={() => setHoveredIndex(i)}
+              onMouseLeave={() => setHoveredIndex(null)}
             />
             <div
               style={{
