@@ -2,7 +2,7 @@
 
 > AI 智能选题推荐 Agent — 面向内容创作者的全流程 AI 助手
 
-[![Python 3.12](https://img.shields.io/badge/Python-3.12-blue)](https://python.org) [![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-green)](https://fastapi.tiangolo.com) [![React 19](https://img.shields.io/badge/React-19-blue)](https://react.dev) [![Tests](https://img.shields.io/badge/Tests-206%20passed-brightgreen)](#)
+[![Python 3.12](https://img.shields.io/badge/Python-3.12-blue)](https://python.org) [![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-green)](https://fastapi.tiangolo.com) [![React 19](https://img.shields.io/badge/React-19-blue)](https://react.dev) [![Tests](https://img.shields.io/badge/Tests-327%20passed-brightgreen)](#)
 
 ---
 
@@ -85,17 +85,17 @@ docker compose up -d
 ```
 backend/
 ├── app/
-│   ├── api/v1/            # 19 个 REST API 端点
-│   ├── chains/             # LangChain 处理链（11 个模块）
+│   ├── api/v1/            # 21 个 REST API 端点
+│   ├── chains/             # LangChain 处理链
 │   ├── content_analyzers/  # 文本/图像内容分析器
 │   ├── core/               # LLM 客户端、JWT 认证、数据库
 │   ├── data_sources/       # TianAPI + B站 + LLM 模拟 + 预置基准
 │   ├── middleware/         # 认证中间件、速率限制、监控
 │   ├── models/             # Pydantic 数据模型
-│   ├── prompts/            # 版本化 Prompt 文件（v1，可扩展）
-│   ├── services/           # 业务逻辑层（11 个服务）
-│   └── tasks/              # 定时任务（备份、清理、健康检查）
-├── tests/                  # 206 条 pytest 测试用例
+│   ├── prompts/            # 版本化 Prompt 文件
+│   ├── services/           # 业务逻辑层（17 个服务）
+│   └── tasks/              # 定时任务
+├── tests/                  # 274 条 pytest 测试用例
 ├── main.py                 # FastAPI 工厂函数入口
 └── requirements.txt
 ```
@@ -113,6 +113,7 @@ frontend/src/
 ├── services/api/           # Axios + JWT 自动刷新（11 个 API 模块）
 ├── store/                  # Zustand 状态管理（auth/profile/app）
 ├── hooks/                  # useAuth/useApi/useRateLimit/useFeedback
+└── e2e/                    # Playwright E2E 测试（8 条）
 └── types/                  # TypeScript 类型定义
 ```
 
@@ -147,7 +148,7 @@ frontend/src/
 ## 开发测试
 
 ```bash
-# 运行后端测试（206 条）
+# 运行后端测试（274 条）
 cd backend
 source .venv/Scripts/activate
 pytest tests/ -v
