@@ -11,7 +11,7 @@ interface ScoreBarProps {
   max?: number;
 }
 
-const ScoreBar: React.FC<ScoreBarProps> = ({ label, value, helpText, max = 10 }) => {
+const ScoreBar = ({ label, value, helpText, max = 10 }: ScoreBarProps): React.ReactElement => {
   const [showHelp, setShowHelp] = useState(false);
   const percent = Math.min(100, (value / max) * 100);
   return (

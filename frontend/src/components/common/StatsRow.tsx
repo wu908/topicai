@@ -15,7 +15,7 @@ interface StatsRowProps {
   columns?: number;
 }
 
-const StatsRow: React.FC<StatsRowProps> = ({ items, columns = 4 }) => {
+const StatsRow = ({ items, columns = 4 }: StatsRowProps): React.ReactElement => {
   return (
     <div
       style={{

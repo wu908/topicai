@@ -14,7 +14,7 @@ interface BarChartProps {
   onBarClick?: (point: BarDataPoint) => void;
 }
 
-const BarChart: React.FC<BarChartProps> = ({ data, onBarClick }) => {
+const BarChart = ({ data, onBarClick }: BarChartProps): React.ReactElement => {
   const max = Math.max(...data.map((d) => d.value), 1);
   return (
     <div

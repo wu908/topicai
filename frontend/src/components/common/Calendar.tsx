@@ -14,13 +14,13 @@ interface CalendarProps {
 
 const WEEK_LABELS = ['一', '二', '三', '四', '五', '六', '日'];
 
-const Calendar: React.FC<CalendarProps> = ({
+const Calendar = ({
   year,
   month,
   today,
   scheduled,
   onDayClick,
-}) => {
+}: CalendarProps): React.ReactElement => {
   const firstWeekday = new Date(year, month, 1).getDay(); // 0=Sun
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   // Convert Sun=0 to Mon=0

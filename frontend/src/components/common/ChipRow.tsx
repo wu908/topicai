@@ -11,7 +11,7 @@ interface ChipRowProps {
   ariaLabel?: string;
 }
 
-const ChipRow: React.FC<ChipRowProps> = ({ options, active, onChange, ariaLabel }) => {
+const ChipRow = ({ options, active, onChange, ariaLabel }: ChipRowProps): React.ReactElement => {
   return (
     <div
       role="group"
