@@ -58,6 +58,7 @@ backend/openapi_dump*.json
 backend/data/topicai.db*
 backend/app/data/
 frontend/test-results/
+frontend/coverage/
 
 # AI / Tool caches
 *.cache
