@@ -63,8 +63,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
             # settings.database_url looks like 'sqlite+aiosqlite:///./data/topicai.db'
             # Strip the SQLAlchemy driver prefix so the stdlib sqlite3
-            # module can open it directly.
-            raw_db_path = settings.database_url.split("///", 1)[-1]
+            # module can open it directly. For in-memory URLs
+            # (e.g. 'sqlite+aiosqlite:///:memory:') the split finds no
+            # '///' — fall back to ':memory:' which sqlite3 understands.
+            if "///" in settings.database_url:
+                raw_db_path = settings.database_url.split("///", 1)[-1]
+            else:
+                raw_db_path = ":memory:"
             applied = run_migrations(raw_db_path)
             if applied:
                 logger.info("Applied %d pending migration(s)", len(applied))

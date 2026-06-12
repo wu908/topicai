@@ -153,8 +153,3 @@ def status(
 
 
 __all__ = ["AppliedMigration", "apply", "status"]
-
-
-def _ensure_iterable(x: Iterable[AppliedMigration]) -> list[AppliedMigration]:
-    """Helper kept for tests that pass generators."""
-    return list(x)
