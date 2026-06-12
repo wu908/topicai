@@ -57,6 +57,20 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await db.init_db()
         logger.info("Database initialized (SQLite WAL mode)")
 
+        # Apply pending SQL migrations (Spec-007 T004)
+        try:
+            from app.data.migrations.runner import apply as run_migrations
+
+            # settings.database_url looks like 'sqlite+aiosqlite:///./data/topicai.db'
+            # Strip the SQLAlchemy driver prefix so the stdlib sqlite3
+            # module can open it directly.
+            raw_db_path = settings.database_url.split("///", 1)[-1]
+            applied = run_migrations(raw_db_path)
+            if applied:
+                logger.info("Applied %d pending migration(s)", len(applied))
+        except Exception as e:
+            logger.warning(f"Migration runner skipped: {e}")
+
         # Initialize ChromaDB (lazy - don't fail startup if unavailable)
         try:
             from app.core.chroma import get_chroma_client

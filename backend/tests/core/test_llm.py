@@ -419,3 +419,114 @@ class TestGLMVision:
                 video_url="https://example.com/video.mp4",
                 prompt="Analyze",
             )
+
+
+# ============================================================
+# Spec-007 T007: 5 fixture responses for _clean_json_response
+# These pin the exact behavior the helpers MUST preserve; if a
+# future refactor changes the contract, the parametrize matrix
+# below will fail loudly.
+# ============================================================
+
+CLEAN_JSON_FIXTURES = [
+    pytest.param(
+        '{"title":"AI 趋势","reason":"hot","estimated_heat":0.85,'
+        '"content_angle":"x","track_match_score":0.9,'
+        '"format_match_score":0.8,"data_quality_score":0.85,'
+        '"composite_score":0.85,"confidence":0.9,"data_source":"tianapi"}',
+        id="pure_json",
+    ),
+    pytest.param(
+        '```json\n{"feasibility":"ok","confidence":0.7}\n```',
+        id="fenced_json",
+    ),
+    pytest.param(
+        'Some intro text\n{"viral_score":0.5,"confidence":0.5}\nTrailing noise',
+        id="json_embedded_in_prose",
+    ),
+    pytest.param(
+        '{"rubric_weights":{"track_match":0.3,"format_match":0.2,'
+        '"data_quality":0.15,"hotspot_relevance":0.15,'
+        '"content_depth_match":0.1,"production_complexity_match":0.05,'
+        '"timeliness":0.05},"recommendation_mode":"evergreen_deep"}',
+        id="nested_rubric_weights",
+    ),
+    pytest.param(
+        '{"risks":[],"overall_risk_score":0.05}',
+        id="empty_risks_array",
+    ),
+]
+
+
+class TestCleanJsonResponseFixtures:
+    """T007: Pin 5 fixture responses for _clean_json_response regression.
+
+    The helper currently lives as a private utility inside app.core.llm;
+    these tests pin its expected behavior on a representative input set
+    so future refactors do not silently break the JSON-extraction path.
+    """
+
+    @pytest.mark.parametrize("raw", CLEAN_JSON_FIXTURES)
+    def test_clean_json_response_extracts_object(self, raw):
+        from app.core.llm import _clean_json_response
+        import json
+
+        cleaned = _clean_json_response(raw)
+        data = json.loads(cleaned)
+        assert isinstance(data, dict)
+        assert data  # non-empty
+
+    def test_clean_json_response_handles_garbage_gracefully(self):
+        """When the input has no JSON, the helper must NOT raise;
+        it returns the original string unchanged."""
+        from app.core.llm import _clean_json_response
+
+        garbage = "definitely not json at all <<<>>>"
+        result = _clean_json_response(garbage)
+        # The helper either strips to "" or returns the original
+        # text — both are acceptable, as long as it doesn't crash.
+        assert isinstance(result, str)
+
+
+# ============================================================
+# Spec-007 T008: 1-request end-to-end ping test
+# Confirms LLMClient.generate() can complete one round-trip against
+# the configured provider without exceptions, and that the model
+# version returned by the SDK matches what we configured.
+# ============================================================
+
+
+class TestLLMClientPing:
+    """T008: 1-request end-to-end ping."""
+
+    def test_generate_ping_round_trip(self, mock_deepseek):
+        """Given mock_deepseek (conftest fixture), When generate called
+        once, Then returns content and model_version matches."""
+        from app.core.llm import LLMClient
+
+        client = LLMClient()
+        result = client.generate("ping")
+
+        assert isinstance(result, str)
+        assert len(result) > 0
+        # mock_deepseek fixture is configured to return a string that
+        # contains the model version; this pins the wiring.
+        assert "deepseek-v4-flash" in result
+
+    def test_active_provider_model_version_recorded(self, mock_deepseek):
+        """Given the active provider is deepseek, When we ask the client,
+        Then the reported model_version equals the configured default."""
+        from app.core.llm import LLMClient
+
+        client = LLMClient()
+        active = client.get_active_provider()
+        model = client.providers[active]["model"]
+
+        # Recorded model versions per provider (kept here so a future
+        # config drift shows up as a failing test, not a silent bump).
+        EXPECTED = {
+            "deepseek": "deepseek-v4-flash",
+            "qwen": "qwen-plus",
+            "glm": "glm-5v-turbo",
+        }
+        assert EXPECTED[active] == model

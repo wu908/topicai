@@ -1,0 +1,90 @@
+"""TDD tests for the migration runner (Spec-007 T003).
+
+These tests predate the implementation in ``app/data/migrations/runner.py``;
+they MUST be runnable against an in-memory SQLite database.
+"""
+
+from __future__ import annotations
+
+import sqlite3
+from pathlib import Path
+
+
+def _tmp_migrations_dir(tmp_path: Path) -> Path:
+    """Create two trivial migration files in a temp dir."""
+    (tmp_path / "001_init.sql").write_text(
+        "CREATE TABLE widget(id INTEGER PRIMARY KEY, name TEXT);"
+    )
+    (tmp_path / "002_add_idx.sql").write_text(
+        "CREATE INDEX idx_widget_name ON widget(name);"
+    )
+    return tmp_path
+
+
+class TestMigrationRunner:
+    def test_apply_runs_pending_migrations(self, tmp_path):
+        from app.data.migrations.runner import apply
+
+        migrations_dir = _tmp_migrations_dir(tmp_path)
+        db = tmp_path / "app.db"
+        applied = apply(db, migrations_dir)
+
+        assert [m.version for m in applied] == ["001_init", "002_add_idx"]
+
+        with sqlite3.connect(db) as conn:
+            tables = {
+                row[0]
+                for row in conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table'"
+                )
+            }
+        assert "schema_migrations" in tables
+        assert "widget" in tables
+
+    def test_apply_is_idempotent(self, tmp_path):
+        from app.data.migrations.runner import apply
+
+        migrations_dir = _tmp_migrations_dir(tmp_path)
+        db = tmp_path / "app.db"
+        first = apply(db, migrations_dir)
+        second = apply(db, migrations_dir)
+
+        assert len(first) == 2
+        assert second == []  # no new migrations on second run
+
+    def test_apply_records_checksum(self, tmp_path):
+        from app.data.migrations.runner import apply
+
+        migrations_dir = _tmp_migrations_dir(tmp_path)
+        db = tmp_path / "app.db"
+        apply(db, migrations_dir)
+
+        with sqlite3.connect(db) as conn:
+            row = conn.execute(
+                "SELECT version, checksum FROM schema_migrations ORDER BY version"
+            ).fetchall()
+        assert [r[0] for r in row] == ["001_init", "002_add_idx"]
+        for _version, checksum in row:
+            assert len(checksum) == 64  # SHA-256 hex
+
+    def test_status_returns_pending_and_applied(self, tmp_path):
+        from app.data.migrations.runner import apply, status
+
+        migrations_dir = _tmp_migrations_dir(tmp_path)
+        db = tmp_path / "app.db"
+        pending, applied = status(db, migrations_dir)
+        assert pending == ["001_init", "002_add_idx"]
+        assert applied == []
+
+        apply(db, migrations_dir)
+
+        pending, applied = status(db, migrations_dir)
+        assert pending == []
+        assert applied == ["001_init", "002_add_idx"]
+
+    def test_empty_migrations_dir(self, tmp_path):
+        from app.data.migrations.runner import apply
+
+        empty_dir = tmp_path / "empty"
+        empty_dir.mkdir()
+        assert apply(tmp_path / "app.db", empty_dir) == []

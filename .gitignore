@@ -56,7 +56,11 @@ openapi3.json
 openapi_dump*.json
 backend/openapi_dump*.json
 backend/data/topicai.db*
-backend/app/data/
+backend/app/data/*.db
+backend/app/data/*.db-shm
+backend/app/data/*.db-wal
+backend/app/data/chroma/
+# Keep migrations/ and seed/ tracked (Spec-007)
 frontend/test-results/
 frontend/coverage/
 
