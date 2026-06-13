@@ -60,7 +60,7 @@ const LoginPage: React.FC = () => {
 
   const handleSocialLogin = (provider: 'wechat' | 'phone'): void => {
     setSocialPending(provider);
-    // eslint-disable-next-line no-console
+     
     console.warn(`[LoginPage] ${provider} OAuth not implemented in backend`);
     // Reset pending state after a short delay so the buttons don't stay
     // disabled forever when the backend OAuth flow is a no-op stub.
@@ -416,7 +416,7 @@ const LoginPage: React.FC = () => {
                 onClick={(e) => {
                   e.preventDefault();
                   // No password recovery endpoint implemented yet.
-                  // eslint-disable-next-line no-console
+                   
                   console.warn('[LoginPage] password recovery not implemented');
                 }}
                 style={{

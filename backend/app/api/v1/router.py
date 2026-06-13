@@ -5,6 +5,8 @@ Aggregates all v1 sub-routers and registers them under /api/v1.
 
 from fastapi import APIRouter
 
+from app.api.v1.accounts import router as accounts_router
+from app.api.v1.assets import router as assets_router
 from app.api.v1.auth import router as auth_router
 from app.api.v1.feedback import router as feedback_router
 from app.api.v1.health import router as health_router
@@ -12,12 +14,10 @@ from app.api.v1.ideas import router as ideas_router
 from app.api.v1.profiles import router as profiles_router
 from app.api.v1.publish import router as publish_router
 from app.api.v1.reviews import router as reviews_router
+from app.api.v1.team import router as team_router
 from app.api.v1.titles import router as titles_router
 from app.api.v1.topics import router as topics_router
 from app.api.v1.tracks import router as tracks_router
-from app.api.v1.accounts import router as accounts_router
-from app.api.v1.assets import router as assets_router
-from app.api.v1.team import router as team_router
 from app.api.v1.viral import router as viral_router
 
 api_v1_router = APIRouter()

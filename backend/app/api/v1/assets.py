@@ -8,7 +8,9 @@ from fastapi import APIRouter, Depends
 from app.api.v1.deps import get_current_user, get_db
 from app.core.database import Database
 from app.models.assets import (
-    AssetListQuery, AssetUploadRequest, AssetTagUpdateRequest,
+    AssetListQuery,
+    AssetTagUpdateRequest,
+    AssetUploadRequest,
 )
 from app.models.common import ApiResponse
 from app.services.asset_service import AssetService

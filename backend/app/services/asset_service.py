@@ -8,8 +8,13 @@ from sqlalchemy import text
 
 from app.core.database import Database
 from app.models.assets import (
-    Asset, AssetTag, AssetType, AssetListResponse, AssetListQuery,
-    AssetStorageStats, AssetUploadResponse, AssetUploadRequest,
+    Asset,
+    AssetListQuery,
+    AssetListResponse,
+    AssetStorageStats,
+    AssetTag,
+    AssetUploadRequest,
+    AssetUploadResponse,
 )
 
 

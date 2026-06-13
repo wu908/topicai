@@ -1,13 +1,14 @@
 """Account service — platform account CRUD."""
 from __future__ import annotations
 
-import json, uuid
+import json
+import uuid
 from datetime import UTC, datetime
 
 from sqlalchemy import text
 
 from app.core.database import Database
-from app.models.accounts import PlatformAccount, Platform, AccountStatus, AccountStats
+from app.models.accounts import AccountStats, Platform, PlatformAccount
 
 
 class AccountService:

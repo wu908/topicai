@@ -1,6 +1,6 @@
 """Unit tests for LocalObjectStorage."""
-import tempfile, os
 import pytest
+
 from app.core.storage import LocalObjectStorage
 
 

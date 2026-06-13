@@ -88,7 +88,7 @@ export interface RefreshTokenResponse {
 
 // ─── Profile API ────────────────────────────────
 
-export interface OnboardingRequest extends OnboardingData {}
+export type OnboardingRequest = OnboardingData;
 
 export interface UpdateProfileRequest {
   track?: string;

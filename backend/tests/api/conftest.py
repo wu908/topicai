@@ -7,7 +7,6 @@ Provides an isolated FastAPI app per test with:
 """
 from __future__ import annotations
 
-import pytest
 import pytest_asyncio
 from sqlalchemy import text
 
@@ -39,8 +38,8 @@ async def app(test_db):
     get_db dependencies so the app talks to our :memory: database with a
     fake authenticated user.
     """
-    from main import create_app
     from app.api.v1.deps import get_current_user, get_db
+    from main import create_app
 
     app = create_app()
     app.dependency_overrides[get_db] = lambda: test_db
@@ -60,8 +59,8 @@ async def app(test_db):
 @pytest_asyncio.fixture
 async def app_as_u2(test_db):
     """Same as `app` but authenticated as user 'u2' — for cross-user tests."""
-    from main import create_app
     from app.api.v1.deps import get_current_user, get_db
+    from main import create_app
 
     app = create_app()
     app.dependency_overrides[get_db] = lambda: test_db
@@ -110,8 +109,9 @@ async def client_no_auth(test_db):
     """HTTPX AsyncClient with NO auth override — exercises the real
     get_current_user which will 401 when request.state.user_id is missing."""
     from httpx import ASGITransport, AsyncClient
-    from main import create_app
+
     from app.api.v1.deps import get_db
+    from main import create_app
 
     app = create_app()
     app.dependency_overrides[get_db] = lambda: test_db

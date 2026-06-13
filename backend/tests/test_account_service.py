@@ -9,7 +9,8 @@ def svc(test_db):
     return AccountService(test_db)
 
 
-import pytest_asyncio
+import pytest_asyncio  # noqa: E402  (after @pytest.fixture)
+
 
 @pytest_asyncio.fixture(autouse=True)
 async def _insert_test_user(test_db):

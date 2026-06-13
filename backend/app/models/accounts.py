@@ -5,9 +5,9 @@ frontend/src/types/contracts/accounts.ts exactly.
 """
 from __future__ import annotations
 
-from typing import Literal, Optional
-from pydantic import BaseModel, Field
+from typing import Literal
 
+from pydantic import BaseModel
 
 Platform = Literal[
     "wechat_mp",
@@ -35,9 +35,9 @@ class PlatformAccount(BaseModel):
     display_name: str
     is_primary: bool = False
     status: AccountStatus = "disconnected"
-    token_expires_at: Optional[str] = None
-    last_sync_at: Optional[str] = None
-    stats: Optional[AccountStats] = None
+    token_expires_at: str | None = None
+    last_sync_at: str | None = None
+    stats: AccountStats | None = None
     created_at: str
     updated_at: str
 
@@ -49,7 +49,7 @@ class TeamMember(BaseModel):
     initial: str
     role: TeamRole
     joined_at: str
-    last_active_at: Optional[str] = None
+    last_active_at: str | None = None
 
 
 class TeamInviteRequest(BaseModel):

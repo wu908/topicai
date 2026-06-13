@@ -468,8 +468,9 @@ class TestCleanJsonResponseFixtures:
 
     @pytest.mark.parametrize("raw", CLEAN_JSON_FIXTURES)
     def test_clean_json_response_extracts_object(self, raw):
-        from app.core.llm import _clean_json_response
         import json
+
+        from app.core.llm import _clean_json_response
 
         cleaned = _clean_json_response(raw)
         data = json.loads(cleaned)

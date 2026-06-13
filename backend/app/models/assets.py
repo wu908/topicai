@@ -6,9 +6,9 @@ spec round-trips with the TypeScript types.
 """
 from __future__ import annotations
 
-from typing import Literal, Optional
-from pydantic import BaseModel, Field
+from typing import Literal
 
+from pydantic import BaseModel, Field
 
 AssetType = Literal["image", "document", "audio", "video", "template"]
 
@@ -16,7 +16,7 @@ AssetType = Literal["image", "document", "audio", "video", "template"]
 class AssetTag(BaseModel):
     id: str
     name: str
-    color: Optional[str] = None  # var(--v3-*) token name (e.g. green, amber)
+    color: str | None = None  # var(--v3-*) token name (e.g. green, amber)
 
 
 class Asset(BaseModel):
@@ -27,7 +27,7 @@ class Asset(BaseModel):
     type: AssetType
     size: int = Field(..., description="Size in bytes")
     url: str
-    thumbnail_url: Optional[str] = None
+    thumbnail_url: str | None = None
     tags: list[AssetTag] = Field(default_factory=list)
     used_count: int = 0
     created_at: str  # ISO 8601
@@ -48,9 +48,9 @@ class AssetUsageRecord(BaseModel):
 
 
 class AssetListQuery(BaseModel):
-    type: Optional[AssetType] = None
-    tag_id: Optional[str] = None
-    q: Optional[str] = None
+    type: AssetType | None = None
+    tag_id: str | None = None
+    q: str | None = None
     page: int = 1
     page_size: int = 20
 
@@ -66,7 +66,7 @@ class AssetUploadRequest(BaseModel):
     filename: str
     mime_type: str
     type: AssetType
-    tags: Optional[list[str]] = None
+    tags: list[str] | None = None
 
 
 class AssetUploadResponse(BaseModel):

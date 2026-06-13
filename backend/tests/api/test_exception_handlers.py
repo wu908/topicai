@@ -11,9 +11,10 @@ import pytest
 @pytest.mark.asyncio
 async def test_value_error_not_found_returns_404(client):
     """A service raising ValueError('X not found') must surface as 404."""
-    from app.core.exceptions import setup_exception_handlers
     from fastapi import FastAPI
-    from app.api.v1.deps import get_db, get_current_user
+
+    from app.api.v1.deps import get_current_user, get_db
+    from app.core.exceptions import setup_exception_handlers
 
     app = FastAPI()
     setup_exception_handlers(app)
@@ -40,9 +41,10 @@ async def test_value_error_not_found_returns_404(client):
 
 @pytest.mark.asyncio
 async def test_value_error_last_admin_returns_422(client):
-    from app.core.exceptions import setup_exception_handlers
     from fastapi import FastAPI
-    from app.api.v1.deps import get_db, get_current_user
+
+    from app.api.v1.deps import get_current_user, get_db
+    from app.core.exceptions import setup_exception_handlers
 
     app = FastAPI()
     setup_exception_handlers(app)
@@ -66,9 +68,10 @@ async def test_value_error_last_admin_returns_422(client):
 
 @pytest.mark.asyncio
 async def test_value_error_already_exists_returns_422(client):
-    from app.core.exceptions import setup_exception_handlers
     from fastapi import FastAPI
-    from app.api.v1.deps import get_db, get_current_user
+
+    from app.api.v1.deps import get_current_user, get_db
+    from app.core.exceptions import setup_exception_handlers
 
     app = FastAPI()
     setup_exception_handlers(app)
@@ -92,9 +95,10 @@ async def test_value_error_already_exists_returns_422(client):
 
 @pytest.mark.asyncio
 async def test_value_error_other_returns_400(client):
-    from app.core.exceptions import setup_exception_handlers
     from fastapi import FastAPI
-    from app.api.v1.deps import get_db, get_current_user
+
+    from app.api.v1.deps import get_current_user, get_db
+    from app.core.exceptions import setup_exception_handlers
 
     app = FastAPI()
     setup_exception_handlers(app)

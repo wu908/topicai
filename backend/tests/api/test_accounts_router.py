@@ -8,7 +8,6 @@ expectation should flip to 404.
 """
 import pytest
 
-
 # ========== Happy path (user u1) ==========
 
 @pytest.mark.asyncio

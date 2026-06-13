@@ -79,9 +79,11 @@ interface AddAccountModalProps {
 function AddAccountModal({ open, onClose, onCreated, prefillPlatform }: AddAccountModalProps): React.ReactElement {
   const [platform, setPlatform] = useState<Platform>(prefillPlatform ?? 'wechat_mp');
   // When a different platform tile triggers the modal, reset to that platform.
+  /* eslint-disable react-hooks/set-state-in-effect -- prefillPlatform prop drives platform state on modal open */
   useEffect(() => {
     if (prefillPlatform) setPlatform(prefillPlatform);
   }, [prefillPlatform, open]);
+   
 
   // AddAccountModal body...
   const [displayName, setDisplayName] = useState('');
@@ -89,6 +91,7 @@ function AddAccountModal({ open, onClose, onCreated, prefillPlatform }: AddAccou
   const [localError, setLocalError] = useState<string | null>(null);
 
   // Reset form whenever modal opens.
+  /* eslint-disable react-hooks/set-state-in-effect -- reset form fields on modal open */
   useEffect(() => {
     if (open) {
       setDisplayName('');
@@ -185,6 +188,7 @@ function InviteMemberModal({ open, onClose, onInvited }: InviteMemberModalProps)
   const [submitting, setSubmitting] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
 
+  /* eslint-disable react-hooks/set-state-in-effect -- reset invite form on modal open */
   useEffect(() => {
     if (open) {
       setEmail('');

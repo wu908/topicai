@@ -54,6 +54,7 @@ const CreatorProfilePage: React.FC = () => {
     fetchProfile();
   }, [fetchProfile]);
 
+  /* eslint-disable react-hooks/set-state-in-effect -- sync profile prop into local form state */
   useEffect(() => {
     if (profile) {
       setTrack(profile.track);

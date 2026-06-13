@@ -4,7 +4,6 @@ Covers all 4 endpoints + 401 (no auth) + ownership (cross-user) rejection.
 """
 import pytest
 
-
 # ========== Happy path (user u1) ==========
 
 @pytest.mark.asyncio
