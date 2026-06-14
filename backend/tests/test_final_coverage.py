@@ -102,7 +102,11 @@ class TestTrackDiagnosisService:
         assert "健康度" in out["direction_advice"]
         assert "竞争度" in out["direction_advice"]
         assert out["track_keyword"] == "科技"
-        assert out["confidence"] == 0.75
+        # Spec-007 US1: with no LLM mock, the real LLM call fails and the
+        # template_fallback path runs, which carries confidence <= 0.5
+        # (Constitution Principle VI: hybrid AI discipline).
+        assert out["confidence"] <= 0.5
+        assert out["data_source"] == "template_fallback"
 
 
 class TestPromptRegistry:
