@@ -115,6 +115,7 @@ describe('useAuthStore (extras)', () => {
     localStorage.clear();
     useAuthStore.setState({ user: null, isAuthenticated: false, isLoading: false, error: null });
     vi.mocked(authApi.login).mockReset();
+    vi.mocked(authApi.register).mockReset();
     vi.mocked(authApi.refreshToken).mockReset();
   });
 
@@ -132,6 +133,57 @@ describe('useAuthStore (extras)', () => {
     vi.mocked(authApi.login).mockRejectedValue(new Error('401'));
     await expect(useAuthStore.getState().login('a@b.com', 'badpass1')).rejects.toThrow();
     expect(useAuthStore.getState().error).toBeTruthy();
+  });
+
+  it('register success stores tokens, normalizes user, and authenticates', async () => {
+    vi.mocked(authApi.register).mockResolvedValue({
+      data: {
+        access_token: 'AT2',
+        refresh_token: 'RT2',
+        user: {
+          id: 'u2',
+          email: 'new@b.com',
+          username: 'NewUser',
+          // RegisterResponse does NOT carry ai_calls_* / last_login — the
+          // store fills in safe defaults.
+        },
+      },
+    } as never);
+    await useAuthStore.getState().register('new@b.com', 'NewUser', 'pass1234');
+    expect(localStorage.getItem('access_token')).toBe('AT2');
+    expect(localStorage.getItem('refresh_token')).toBe('RT2');
+    const u = useAuthStore.getState().user;
+    expect(u).not.toBeNull();
+    expect(u?.id).toBe('u2');
+    expect(u?.email).toBe('new@b.com');
+    expect(u?.username).toBe('NewUser');
+    expect(u?.ai_calls_today).toBe(0);
+    expect(u?.ai_calls_reset_at).toBe('');
+    expect(u?.last_login).toBeNull();
+    expect(useAuthStore.getState().isAuthenticated).toBe(true);
+    expect(useAuthStore.getState().isLoading).toBe(false);
+  });
+
+  it('register failure rethrows and sets error', async () => {
+    vi.mocked(authApi.register).mockRejectedValue(new Error('email taken'));
+    await expect(
+      useAuthStore.getState().register('dup@b.com', 'Dup', 'pass1234'),
+    ).rejects.toThrow();
+    expect(useAuthStore.getState().error).toBeTruthy();
+    expect(useAuthStore.getState().isLoading).toBe(false);
+    expect(localStorage.getItem('access_token')).toBeNull();
+  });
+
+  it('refreshToken with stored token writes new access_token', async () => {
+    localStorage.setItem('refresh_token', 'OLD_RT');
+    useAuthStore.setState({ isAuthenticated: true });
+    vi.mocked(authApi.refreshToken).mockResolvedValue({
+      data: { access_token: 'NEW_AT' },
+    } as never);
+    await useAuthStore.getState().refreshToken();
+    expect(authApi.refreshToken).toHaveBeenCalledWith({ refresh_token: 'OLD_RT' });
+    expect(localStorage.getItem('access_token')).toBe('NEW_AT');
+    expect(useAuthStore.getState().isAuthenticated).toBe(true);
   });
 
   it('logout clears localStorage and state', () => {
@@ -154,6 +206,13 @@ describe('useAuthStore (extras)', () => {
     vi.mocked(authApi.refreshToken).mockRejectedValue(new Error('expired'));
     await useAuthStore.getState().refreshToken();
     expect(useAuthStore.getState().isAuthenticated).toBe(false);
+  });
+
+  it('clearError resets a previously-set error', () => {
+    useAuthStore.setState({ error: 'old error' });
+    expect(useAuthStore.getState().error).toBe('old error');
+    useAuthStore.getState().clearError();
+    expect(useAuthStore.getState().error).toBeNull();
   });
 });
 
@@ -182,21 +241,104 @@ describe('useProfileStore', () => {
     expect(useProfileStore.getState().profile?.track).toBe('科技数码');
   });
 
+  it('fetchProfile unwraps envelope but skips when envelope has top-level track (already flat)', async () => {
+    // When response.data is already a flat CreatorProfile (has 'track' at
+    // the top level), the defensive unwrap should leave it alone.
+    const flat = {
+      id: 'p-1',
+      user_id: 'u-1',
+      track: '职场成长',
+      content_formats: [],
+      production_complexity: 'medium' as const,
+      content_depth: 'moderate' as const,
+      hotspot_preference: 'selective' as const,
+      recommendation_mode: 'hotspot_fusion' as const,
+      rubric_weights: {},
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    };
+    vi.mocked(profileApi.getMyProfile).mockResolvedValue({ data: flat } as never);
+    await useProfileStore.getState().fetchProfile();
+    expect(useProfileStore.getState().profile?.track).toBe('职场成长');
+    expect(useProfileStore.getState().profile?.user_id).toBe('u-1');
+  });
+
   it('fetchProfile on failure sets isOnboarded false', async () => {
     vi.mocked(profileApi.getMyProfile).mockRejectedValue(new Error('boom'));
     await useProfileStore.getState().fetchProfile();
     expect(useProfileStore.getState().isOnboarded).toBe(false);
   });
 
+  it('submitOnboarding success unwraps envelope and sets isOnboarded true', async () => {
+    vi.mocked(profileApi.submitOnboarding).mockResolvedValue({
+      data: { profile: { track: '美食烹饪', content_formats: [] } },
+    } as never);
+    await useProfileStore.getState().submitOnboarding({} as never);
+    expect(useProfileStore.getState().profile?.track).toBe('美食烹饪');
+    expect(useProfileStore.getState().isOnboarded).toBe(true);
+    expect(useProfileStore.getState().isLoading).toBe(false);
+  });
+
+  it('submitOnboarding success with flat profile response', async () => {
+    const flat = {
+      id: 'p-2',
+      user_id: 'u-1',
+      track: '生活方式',
+      content_formats: ['article' as const],
+      production_complexity: 'low' as const,
+      content_depth: 'casual' as const,
+      hotspot_preference: 'trending_only' as const,
+      recommendation_mode: 'evergreen_deep' as const,
+      rubric_weights: {},
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    };
+    vi.mocked(profileApi.submitOnboarding).mockResolvedValue({ data: flat } as never);
+    await useProfileStore.getState().submitOnboarding({} as never);
+    expect(useProfileStore.getState().profile?.track).toBe('生活方式');
+    expect(useProfileStore.getState().isOnboarded).toBe(true);
+  });
+
   it('submitOnboarding throws on error', async () => {
     vi.mocked(profileApi.submitOnboarding).mockRejectedValue(new Error('400'));
     await expect(useProfileStore.getState().submitOnboarding({} as never)).rejects.toThrow();
     expect(useProfileStore.getState().error).toBeTruthy();
+    expect(useProfileStore.getState().isLoading).toBe(false);
+  });
+
+  it('updateProfile success unwraps envelope and persists', async () => {
+    vi.mocked(profileApi.updateProfile).mockResolvedValue({
+      data: { profile: { track: '美妆护肤_更新', content_formats: [] } },
+    } as never);
+    await useProfileStore.getState().updateProfile({} as never);
+    expect(useProfileStore.getState().profile?.track).toBe('美妆护肤_更新');
+    expect(useProfileStore.getState().isLoading).toBe(false);
+  });
+
+  it('updateProfile success with flat profile response', async () => {
+    const flat = {
+      id: 'p-3',
+      user_id: 'u-1',
+      track: '科技数码_更新',
+      content_formats: [],
+      production_complexity: 'high' as const,
+      content_depth: 'deep' as const,
+      hotspot_preference: 'balanced' as const,
+      recommendation_mode: 'hotspot_fusion' as const,
+      rubric_weights: {},
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-02T00:00:00Z',
+    };
+    vi.mocked(profileApi.updateProfile).mockResolvedValue({ data: flat } as never);
+    await useProfileStore.getState().updateProfile({} as never);
+    expect(useProfileStore.getState().profile?.track).toBe('科技数码_更新');
   });
 
   it('updateProfile throws on error', async () => {
     vi.mocked(profileApi.updateProfile).mockRejectedValue(new Error('500'));
     await expect(useProfileStore.getState().updateProfile({} as never)).rejects.toThrow();
+    expect(useProfileStore.getState().error).toBeTruthy();
+    expect(useProfileStore.getState().isLoading).toBe(false);
   });
 
   it('clearError resets error', () => {
