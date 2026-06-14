@@ -21,7 +21,8 @@ export default defineConfig({
     // Progressive coverage gate (ADR-001).
     // Constitution Principle II still mandates 80% as final target,
     // but we accept phase-by-phase progress given current baseline.
-    // Current vitest baseline (2026-06-13): 25.22% lines.
+    // Current vitest baseline (2026-06-14): 40%+ lines after Phase 2 work
+    // (4 hook tests + 5 page tests added, 58 new tests).
     // Target trajectory: 25% -> 40% (Phase 2) -> 55% (Phase 3) -> 80% (pre-release).
     coverage: {
       provider: 'v8',
@@ -34,10 +35,10 @@ export default defineConfig({
         'src/vite-env.d.ts',
       ],
       thresholds: {
-        lines: 25,
-        functions: 20,
-        branches: 15,
-        statements: 20,
+        lines: 40,
+        functions: 35,
+        branches: 30,
+        statements: 35,
       },
     },
   },
