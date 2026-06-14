@@ -2,11 +2,41 @@
 
 Defines FeedbackRecord and FeedbackAnalysis schemas for
 效果反馈 (effect feedback) collection and analysis.
+
+Spec-007 T016: ``source_type`` enum expanded to match the seven ``SourceType``
+values declared in ``frontend/src/types/enums.ts`` (US3, FR-005):
+``topic | title | idea | viral | track | publish | effect_review``.
+The narrower ``topic|viral|title|idea`` set is retained as a forward-compat
+shim on the request side via ``SUBMITTABLE_SOURCE_TYPE_PATTERN`` so the
+existing ``POST /api/v1/feedback`` endpoint keeps working unchanged.
 """
 
 from typing import Any
 
 from pydantic import BaseModel, Field
+
+# Mirrors frontend/src/types/enums.ts -> SourceType. Keep in sync.
+SOURCE_TYPES: tuple[str, ...] = (
+    "topic",
+    "title",
+    "idea",
+    "viral",
+    "track",
+    "publish",
+    "effect_review",
+)
+SOURCE_TYPE_PATTERN = r"^(topic|title|idea|viral|track|publish|effect_review)$"
+
+# Subset accepted by the legacy POST /api/v1/feedback submit endpoint.
+# Persisted rows may use the wider enum; new submissions go through T056's
+# async endpoint which accepts the full set.
+SUBMITTABLE_SOURCE_TYPES: tuple[str, ...] = (
+    "topic",
+    "title",
+    "idea",
+    "viral",
+)
+SUBMITTABLE_SOURCE_TYPE_PATTERN = r"^(topic|title|idea|viral)$"
 
 
 class FeedbackRecord(BaseModel):
@@ -17,7 +47,7 @@ class FeedbackRecord(BaseModel):
     Attributes:
         id: Feedback record ID (UUID).
         user_id: User who submitted feedback.
-        source_type: Type of AI output ('topic', 'viral', 'title', 'idea').
+        source_type: Type of AI output (see SOURCE_TYPES for the full enum).
         source_id: ID of the AI output being rated.
         feedback_type: 'thumb_up', 'thumb_down', 'adopted', 'modified', 'ignored'.
         feedback_value: Optional free-text feedback.
@@ -29,8 +59,8 @@ class FeedbackRecord(BaseModel):
     user_id: str = Field(..., description="User ID")
     source_type: str = Field(
         ...,
-        pattern=r"^(topic|viral|title|idea)$",
-        description="Type of AI output",
+        pattern=SOURCE_TYPE_PATTERN,
+        description="Type of AI output (SourceType enum)",
     )
     source_id: str = Field(..., description="ID of the AI output")
     feedback_type: str = Field(
@@ -59,8 +89,8 @@ class FeedbackSubmitRequest(BaseModel):
 
     target_type: str = Field(
         ...,
-        pattern=r"^(topic|viral|title|idea)$",
-        description="Type of AI output",
+        pattern=SUBMITTABLE_SOURCE_TYPE_PATTERN,
+        description="Type of AI output (legacy 4-value set)",
     )
     target_id: str = Field(..., description="ID of the AI output")
     feedback_type: str = Field(

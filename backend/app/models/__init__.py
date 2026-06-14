@@ -6,11 +6,19 @@ Exports all Pydantic models for convenient imports.
 from app.models.common import AIQualityMeta, ApiResponse, PaginatedResponse
 from app.models.creator_profile import CreatorProfile, OnboardingRequest
 from app.models.effect_review import (
+    AttributionPayload,
+    DimensionalConclusion,
     EffectAttributeRequest,
     EffectPredictRequest,
     EffectReview,
+    LearningsPayload,
+    PredictionPayload,
 )
 from app.models.feedback import (
+    SOURCE_TYPE_PATTERN,
+    SOURCE_TYPES,
+    SUBMITTABLE_SOURCE_TYPE_PATTERN,
+    SUBMITTABLE_SOURCE_TYPES,
     FeedbackAnalysis,
     FeedbackRecord,
     FeedbackSubmitRequest,
@@ -84,4 +92,13 @@ __all__ = [
     "EffectReview",
     "EffectPredictRequest",
     "EffectAttributeRequest",
+    "PredictionPayload",
+    "DimensionalConclusion",
+    "AttributionPayload",
+    "LearningsPayload",
+    # Feedback enums (Spec-007 T016)
+    "SOURCE_TYPES",
+    "SOURCE_TYPE_PATTERN",
+    "SUBMITTABLE_SOURCE_TYPES",
+    "SUBMITTABLE_SOURCE_TYPE_PATTERN",
 ]
