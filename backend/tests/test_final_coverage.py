@@ -110,10 +110,17 @@ class TestTrackDiagnosisService:
 
 
 class TestPromptRegistry:
-    def test_list_modules_returns_set(self):
+    def test_list_modules_returns_sorted_list(self):
+        # Spec-007 fix: PromptRegistry.list_modules now returns a sorted
+        # list (not a set) so iteration order is deterministic. Set
+        # iteration order is hash-based, so `next(iter(set))` could pick
+        # any module — including ones whose v1/ has no system.md
+        # (e.g. effect_review, viral_analysis) — making 3 other tests
+        # in this class flaky.
         mods = PromptRegistry.list_modules()
-        assert isinstance(mods, set)
+        assert isinstance(mods, list)
         assert len(mods) > 0
+        assert mods == sorted(mods)
 
     def test_list_versions_for_real_module(self):
         mods = PromptRegistry.list_modules()

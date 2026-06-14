@@ -26,21 +26,25 @@ class PromptRegistry:
         return _PROMPTS_ROOT
 
     @classmethod
-    def list_modules(cls) -> set[str]:
+    def list_modules(cls) -> list[str]:
         """List all available prompt modules.
 
         Returns:
-            Set of module names.
+            Sorted list of module names. Sorted (not a set) so callers that
+            ``next(iter(modules))`` get a deterministic first entry — the
+            tests in tests/test_final_coverage.py rely on the first module
+            having a loadable ``system.md`` (e.g. ``content_risk``), which
+            is only guaranteed when iteration is deterministic.
         """
         root = cls._get_root()
-        modules = set()
+        modules: list[str] = []
         for item in root.iterdir():
             if item.is_dir() and not item.name.startswith("_") and not item.name.startswith("."):
                 # Check it has version subdirectories
                 versions = [d for d in item.iterdir() if d.is_dir() and d.name.startswith("v")]
                 if versions:
-                    modules.add(item.name)
-        return modules
+                    modules.append(item.name)
+        return sorted(modules)
 
     @classmethod
     def list_versions(cls, module: str) -> list[str]:
