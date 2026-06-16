@@ -28,9 +28,12 @@ class TestLLMDataSource:
 
     @pytest.mark.asyncio
     async def test_fetch_trending_topics_with_llm_generates_mock(self):
+        # Spec-007 US2 T041: LLMDataSource now wraps real LLMClient.generate().
+        # When LLM raises/returns nothing (plain MagicMock), it falls back to
+        # a structured mock. Default fallback count is 5 (was 10 pre-US2).
         src = LLMDataSource(llm_client=MagicMock())
         out = await src.fetch_trending_topics("科技")
-        assert len(out) == 10
+        assert len(out) == 5
         for t in out:
             assert t["data_source"] == "ai_inference"
 

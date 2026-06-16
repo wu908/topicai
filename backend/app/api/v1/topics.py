@@ -77,3 +77,31 @@ async def explain_recommendation(request: Request, topic_id: str):
         "message": "success",
         "meta": {"ai_quality": _ai_quality_meta()},
     }
+
+
+@router.get("/topics/history")
+async def topics_history(request: Request, limit: int = 20):
+    """Return recently recommended topics (Spec-007 US2 T046).
+
+    Spec-007 marks /topics/history as future-接入; this implementation
+    serves the cached output of the most recent /topics/recommend call
+    (DataManager.cache_recent_topics). When nothing has been cached
+    yet, returns an empty list with a meta marker.
+    """
+    from app.data_sources.data_manager import DataManager
+
+    dm = DataManager()
+    recent = dm.get_recent_topics(limit=limit)
+    return {
+        "code": 200,
+        "data": {
+            "topics": recent,
+            "count": len(recent),
+        },
+        "message": "success",
+        "meta": {
+            "data_source": "recent_cache",
+            "model_version": "history-v1",
+            "note": "近期推荐的topic缓存；待后续接入持久化",
+        },
+    }

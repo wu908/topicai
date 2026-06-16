@@ -162,7 +162,8 @@ class PreloadedDataSource(DataSource):
         """Get minimal embedded benchmark data.
 
         Returns:
-            Dict with 5 basic track benchmarks.
+            Dict with 8 basic track benchmarks (Spec-007 T042 expansion
+            from 5 to 8: + 财经, 游戏, 娱乐).
         """
         return {
             "last_updated": "2026-01-01T00:00:00Z",
@@ -220,6 +221,39 @@ class PreloadedDataSource(DataSource):
                             "title": "面试技巧分享",
                             "estimated_heat": 0.68,
                             "content_angle": "经验分享",
+                        }
+                    ],
+                },
+                "财经": {
+                    "health_score": 0.68,
+                    "competitiveness_score": 0.65,
+                    "topics": [
+                        {
+                            "title": "投资入门指南",
+                            "estimated_heat": 0.72,
+                            "content_angle": "小白理财",
+                        }
+                    ],
+                },
+                "游戏": {
+                    "health_score": 0.65,
+                    "competitiveness_score": 0.72,
+                    "topics": [
+                        {
+                            "title": "新游评测",
+                            "estimated_heat": 0.78,
+                            "content_angle": "深度试玩",
+                        }
+                    ],
+                },
+                "娱乐": {
+                    "health_score": 0.70,
+                    "competitiveness_score": 0.68,
+                    "topics": [
+                        {
+                            "title": "明星动态解读",
+                            "estimated_heat": 0.82,
+                            "content_angle": "娱乐八卦",
                         }
                     ],
                 },
