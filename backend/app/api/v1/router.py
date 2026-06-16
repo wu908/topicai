@@ -14,6 +14,7 @@ from app.api.v1.ideas import router as ideas_router
 from app.api.v1.profiles import router as profiles_router
 from app.api.v1.publish import router as publish_router
 from app.api.v1.reviews import router as reviews_router
+from app.api.v1.risk_router import router as risk_router
 from app.api.v1.team import router as team_router
 from app.api.v1.titles import router as titles_router
 from app.api.v1.topics import router as topics_router
@@ -54,6 +55,9 @@ api_v1_router.include_router(publish_router, tags=["Publish"])
 
 # Reviews endpoints (predict, attribute)
 api_v1_router.include_router(reviews_router, tags=["Reviews"])
+
+# Risk endpoints (check) — Spec-007 US7 T074
+api_v1_router.include_router(risk_router, tags=["Risk"])
 
 # Assets endpoints (list, get, storage, upload, tags, delete)
 api_v1_router.include_router(assets_router, tags=["Assets"])

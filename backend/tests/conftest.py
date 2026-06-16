@@ -47,11 +47,73 @@ def override_test_env(monkeypatch):
 
 @pytest_asyncio.fixture
 async def test_db():
-    """SQLite :memory: mode database, isolated per test."""
+    """SQLite :memory: mode database, isolated per test.
+
+    Initializes the bootstrap schema, then applies the Phase-2 additive
+    migrations (``002_user_feedback``, ``003_effect_reviews`` extended
+    columns, ``004_risk_keywords``) so test data matches production
+    reality for the Spec-007 US7 endpoints.
+    """
     from app.core.database import Database
+    from sqlalchemy import text
 
     db = Database("sqlite+aiosqlite:///:memory:")
     await db.init_db()
+
+    async with db.engine.begin() as conn:  # type: ignore[attr-defined]
+        # 002_user_feedback — Spec-007 T011 (US3 / US7 T057)
+        await conn.execute(text(
+            """
+            CREATE TABLE IF NOT EXISTS user_feedback (
+                id              CHAR(36) PRIMARY KEY,
+                user_id         CHAR(36) NOT NULL,
+                source_type     TEXT     NOT NULL,
+                source_id       CHAR(36) NOT NULL,
+                feedback_type   TEXT     NOT NULL,
+                feedback_value  TEXT,
+                reason          TEXT,
+                created_at      TEXT     NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+            """
+        ))
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS idx_user_feedback_user_id_created_at "
+            "ON user_feedback (user_id, created_at DESC)"
+        ))
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS idx_user_feedback_source "
+            "ON user_feedback (source_type, source_id)"
+        ))
+
+        # 003_effect_reviews — Spec-007 T012: extended columns not in
+        # the bootstrap SQL_SCHEMA. Idempotent: skip if already present.
+        for stmt in [
+            "ALTER TABLE effect_reviews ADD COLUMN content_outline TEXT",
+            "ALTER TABLE effect_reviews ADD COLUMN status TEXT NOT NULL DEFAULT 'awaiting_actuals'",
+            "ALTER TABLE effect_reviews ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''",
+        ]:
+            try:
+                await conn.execute(text(stmt))
+            except Exception:
+                # Column already exists (SQLite raises on duplicate).
+                pass
+
+        # 004_risk_keywords — Spec-007 T013 (US5 / US7 T074)
+        await conn.execute(text(
+            """
+            CREATE TABLE IF NOT EXISTS risk_keywords (
+                id          CHAR(36) PRIMARY KEY,
+                user_id     CHAR(36),
+                keyword     TEXT     NOT NULL,
+                severity    TEXT     NOT NULL,
+                category    TEXT     NOT NULL,
+                created_at  TEXT     NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+            """
+        ))
+
     yield db
     await db.close()
 

@@ -2,6 +2,10 @@
 
 Handles user feedback (👍👎) for topics, titles, and recommendations.
 Analyzes feedback patterns to adjust recommendation weights.
+
+Spec-007 US7 (T057): adds ``list_by_user`` for the
+``GET /api/v1/feedback/history`` endpoint. Reads the persisted
+``user_feedback`` rows ordered by ``created_at DESC``.
 """
 
 import logging
@@ -52,6 +56,63 @@ class FeedbackService:
             "reason": reason,
             "created_at": utc_now(),
         }
+
+    async def list_by_user(
+        self,
+        db: Any,
+        user_id: str,
+        limit: int = 50,
+        source_type: str | None = None,
+        since: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """List feedback records for the given user (Spec-007 T057).
+
+        Reads the persisted ``user_feedback`` rows and returns them
+        ordered by ``created_at DESC``. Pydantic validation happens at
+        the router boundary.
+
+        Args:
+            db: Shared ``Database`` instance from app state.
+            user_id: User whose feedback to return.
+            limit: Max records to return (1..200, default 50).
+            source_type: Optional ``SourceType`` filter.
+            since: Optional ISO-8601 lower bound on ``created_at``.
+
+        Returns:
+            List of FeedbackRecord-shaped dicts, newest first.
+        """
+        from sqlalchemy import text
+
+        limit = max(1, min(int(limit), 200))
+        query = (
+            "SELECT id, user_id, source_type, source_id, feedback_type, "
+            "feedback_value, reason, created_at "
+            "FROM user_feedback WHERE user_id = :uid"
+        )
+        params: dict[str, Any] = {"uid": user_id}
+        if source_type:
+            query += " AND source_type = :st"
+            params["st"] = source_type
+        if since:
+            query += " AND created_at >= :since"
+            params["since"] = since
+        query += " ORDER BY created_at DESC LIMIT :limit"
+        params["limit"] = limit
+
+        rows = await db.fetch_all(query, params)
+        return [
+            {
+                "id": r["id"],
+                "user_id": r["user_id"],
+                "source_type": r["source_type"],
+                "source_id": r["source_id"],
+                "feedback_type": r["feedback_type"],
+                "feedback_value": r.get("feedback_value"),
+                "reason": r.get("reason"),
+                "created_at": r["created_at"],
+            }
+            for r in rows
+        ]
 
     def analyze_feedback(
         self, user_id: str, records: list[dict[str, Any]]

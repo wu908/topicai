@@ -2,13 +2,22 @@
 
 Provides effect blind prediction and attribution analysis endpoints.
 Requires JWT authentication.
+
+Spec-007 US7 (T066): adds ``GET /api/v1/reviews/learnings`` and
+``GET /api/v1/reviews/list`` to surface persisted effect_reviews data.
 """
 
 import logging
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
-from app.models.effect_review import EffectAttributeRequest, EffectPredictRequest
+from app.api.v1.deps import get_current_user, get_db
+from app.models.effect_review import (
+    EffectAttributeRequest,
+    EffectPredictRequest,
+    EffectReview,
+    LearningsPayload,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -102,4 +111,82 @@ async def attribute_effect(request: Request, data: EffectAttributeRequest):
         "data": result,
         "message": "归因分析完成",
         "meta": {"ai_quality": _ai_meta(confidence=0.7)},
+    }
+
+
+@router.get("/reviews/learnings")
+async def reviews_learnings(
+    window_days: int = Query(30, ge=1, le=365, description="Rolling window size"),
+    user: dict = Depends(get_current_user),
+    db=Depends(get_db),
+):
+    """Aggregate the user's recent learnings (Spec-007 T066).
+
+    Scans the user's ``effect_reviews`` within ``window_days`` and
+    surfaces the top recurring strengths and weaknesses. Returns a
+    ``LearningsPayload`` shape, validated at the boundary.
+    """
+    from app.services.effect_review import EffectReviewService
+
+    svc = EffectReviewService()
+    payload = await svc.derive_learnings(
+        db, user_id=user["id"], window_days=window_days
+    )
+
+    # Pydantic validation at the boundary (Constitution VII).
+    parsed = LearningsPayload(**payload)
+
+    return {
+        "code": 200,
+        "data": parsed.model_dump(),
+        "message": "success",
+        "meta": {
+            "data_source": "effect_reviews_table",
+            "model_version": "learnings-v1",
+            "note": "Spec-007 T066: aggregated learnings over rolling window",
+        },
+    }
+
+
+@router.get("/reviews/list")
+async def reviews_list(
+    status: str | None = Query(
+        None,
+        pattern=r"^(awaiting_actuals|predicted|attributed)$",
+        description="Optional status filter",
+    ),
+    limit: int = Query(20, ge=1, le=100, description="Max records to return"),
+    user: dict = Depends(get_current_user),
+    db=Depends(get_db),
+):
+    """List effect reviews for the current user (Spec-007 T066).
+
+    Returns persisted reviews from the ``effect_reviews`` table,
+    newest first. The Pydantic ``EffectReview`` model validates each
+    row at the boundary.
+    """
+    from app.services.effect_review import EffectReviewService
+
+    svc = EffectReviewService()
+    rows = await svc.list_by_user(
+        db, user_id=user["id"], status=status, limit=limit
+    )
+
+    # Pydantic-validate every row.
+    items = [EffectReview(**r) for r in rows]
+
+    return {
+        "code": 200,
+        "data": {
+            "items": [item.model_dump() for item in items],
+            "total": len(items),
+            "limit": limit,
+            "status": status,
+        },
+        "message": "success",
+        "meta": {
+            "data_source": "effect_reviews_table",
+            "model_version": "list-v1",
+            "note": "Spec-007 T066: persisted review list endpoint",
+        },
     }

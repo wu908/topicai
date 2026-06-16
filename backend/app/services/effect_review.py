@@ -2,11 +2,16 @@
 
 Implements the cheat-on-content calibration loop:
 Blind prediction → T+N attribution → Profile evolution.
+
+Spec-007 US7 (T066): adds ``list_by_user`` and ``derive_learnings`` for
+the ``GET /api/v1/reviews/list`` and ``GET /api/v1/reviews/learnings``
+endpoints. Reads from the persisted ``effect_reviews`` table.
 """
 
 import hashlib
+import json
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from app.core.utils import utc_now
@@ -261,6 +266,134 @@ class EffectReviewService:
                 new_weights[key] = round(new_weights[key] / total, 4)
 
         return new_weights
+
+    # ---------- Spec-007 US7 (T066): persisted reads ----------
+
+    async def list_by_user(
+        self,
+        db: Any,
+        user_id: str,
+        status: str | None = None,
+        limit: int = 20,
+    ) -> list[dict[str, Any]]:
+        """List effect reviews for a user, newest first (Spec-007 T066).
+
+        Args:
+            db: Shared ``Database`` instance from app state.
+            user_id: User whose reviews to return.
+            status: Optional status filter
+                ('awaiting_actuals' | 'predicted' | 'attributed').
+            limit: Max records to return (1..100, default 20).
+
+        Returns:
+            List of ``EffectReview``-shaped dicts.
+        """
+        from sqlalchemy import text
+
+        limit = max(1, min(int(limit), 100))
+        query = (
+            "SELECT id, user_id, topic_title, prediction, actual_result, "
+            "attribution, learnings, status, created_at "
+            "FROM effect_reviews WHERE user_id = :uid"
+        )
+        params: dict[str, Any] = {"uid": user_id}
+        if status:
+            query += " AND status = :status"
+            params["status"] = status
+        query += " ORDER BY created_at DESC LIMIT :limit"
+        params["limit"] = limit
+
+        rows = await db.fetch_all(query, params)
+        return [_row_to_review(r) for r in rows]
+
+    async def derive_learnings(
+        self,
+        db: Any,
+        user_id: str,
+        window_days: int = 30,
+    ) -> dict[str, Any]:
+        """Aggregate learnings from attributed reviews (Spec-007 T066).
+
+        Scans the user's reviews within ``window_days`` (default 30) and
+        collects the recurring ``top_strengths`` / ``top_weaknesses``
+        observations. Returns a ``LearningsPayload`` shape.
+
+        Args:
+            db: Shared ``Database`` instance from app state.
+            user_id: User whose reviews to aggregate.
+            window_days: Rolling window size in days.
+
+        Returns:
+            ``LearningsPayload``-shaped dict.
+        """
+        cutoff = (
+            datetime.now(UTC) - timedelta(days=max(1, int(window_days)))
+        ).isoformat()
+        rows = await db.fetch_all(
+            "SELECT learnings FROM effect_reviews "
+            "WHERE user_id = :uid AND created_at >= :cutoff "
+            "AND learnings IS NOT NULL",
+            {"uid": user_id, "cutoff": cutoff},
+        )
+
+        strengths: dict[str, int] = {}
+        weaknesses: dict[str, int] = {}
+        for r in rows:
+            raw = r.get("learnings")
+            if not raw:
+                continue
+            try:
+                d = json.loads(raw)
+            except (TypeError, ValueError):
+                continue
+            if isinstance(d, dict):
+                for s in d.get("top_strengths", []) or []:
+                    strengths[s] = strengths.get(s, 0) + 1
+                for w in d.get("top_weaknesses", []) or []:
+                    weaknesses[w] = weaknesses.get(w, 0) + 1
+            elif isinstance(d, list):
+                # Legacy: learnings stored as a flat list of strings.
+                for item in d:
+                    if isinstance(item, str):
+                        weaknesses[item] = weaknesses.get(item, 0) + 1
+
+        top_strengths = [
+            s for s, _ in sorted(strengths.items(), key=lambda x: -x[1])[:3]
+        ]
+        top_weaknesses = [
+            w for w, _ in sorted(weaknesses.items(), key=lambda x: -x[1])[:3]
+        ]
+
+        return {
+            "top_strengths": top_strengths,
+            "top_weaknesses": top_weaknesses,
+            "sample_size": len(rows),
+            "window_days": int(window_days),
+        }
+
+
+def _row_to_review(r: Any) -> dict[str, Any]:
+    """Convert a raw DB row into an ``EffectReview``-shaped dict."""
+    def _maybe_load(v: Any) -> Any:
+        if v is None:
+            return None
+        if isinstance(v, (dict, list)):
+            return v
+        try:
+            return json.loads(v)
+        except (TypeError, ValueError):
+            return v
+
+    return {
+        "id": r["id"],
+        "user_id": r["user_id"],
+        "topic_title": r["topic_title"],
+        "prediction": _maybe_load(r.get("prediction")) or {},
+        "actual_result": _maybe_load(r.get("actual_result")),
+        "attribution": _maybe_load(r.get("attribution")),
+        "learnings": _maybe_load(r.get("learnings")),
+        "created_at": r["created_at"],
+    }
 
 
 def _timestamp_hash() -> str:
