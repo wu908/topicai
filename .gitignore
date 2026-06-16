@@ -74,3 +74,19 @@ topicai-v3-complete.html
 topicai-v3-fixed.html
 scheme-b-direction-2.html
 原型分析报告.md
+
+# Toolchain extensions (regenerable; do not commit)
+.agents/
+.claude/
+.specify/
+
+# Test runtime fixtures — LocalObjectStorage writes asset blobs
+# here during tests. The migrations/ and seed/ siblings stay tracked.
+backend/app/data/assets/
+
+# Spec-007 working drafts not part of main repo
+# (the parent spec/plan/tasks/research files in specs/007-v4-gap-closure/
+#  stay tracked; only the untracked sub-paths are silenced)
+specs/006-topicai-v4-roadmap/
+specs/007-v4-gap-closure/checklists/
+specs/007-v4-gap-closure/contracts/
