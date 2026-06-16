@@ -2,7 +2,7 @@
 
 > AI 智能选题推荐 Agent — 面向内容创作者的全流程 AI 助手
 
-[![Python 3.12](https://img.shields.io/badge/Python-3.12-blue)](https://python.org) [![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-green)](https://fastapi.tiangolo.com) [![React 19](https://img.shields.io/badge/React-19-blue)](https://react.dev) [![Tests](https://img.shields.io/badge/Tests-327%20passed-brightgreen)](#)
+[![Python 3.12](https://img.shields.io/badge/Python-3.12-blue)](https://python.org) [![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-green)](https://fastapi.tiangolo.com) [![React 19](https://img.shields.io/badge/React-19-blue)](https://react.dev) [![Tests](https://img.shields.io/badge/Tests-482%20passed-brightgreen)](#)
 
 ---
 
