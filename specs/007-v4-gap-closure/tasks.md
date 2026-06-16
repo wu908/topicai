@@ -47,12 +47,12 @@
 
 **CRITICAL**: No user story work can begin until this phase is complete.
 
-- [ ] T011 [P] Create `backend/app/data/migrations/002_user_feedback.sql` (`id`, `user_id`, `source_type`, `source_id`, `feedback_type`, `feedback_value`, `reason`, `created_at`; idx `(user_id, created_at DESC)`) (US3, FR-005)
-- [ ] T012 [P] Create `backend/app/data/migrations/003_effect_reviews.sql` (`id`, `user_id`, `topic_title`, `content_outline`, `prediction` JSON, `actual_result` JSON, `attribution` JSON, `learnings` JSON, `status`, `created_at`, `updated_at`) (US4, FR-007)
-- [ ] T013 [P] Create `backend/app/data/migrations/004_risk_keywords.sql` (`id`, `user_id` NULL for global, `keyword`, `severity`, `category`, `created_at`; unique on `(user_id, keyword)`) (US5, FR-008)
-- [ ] T014 [P] Create `backend/app/data/migrations/005_platform_tokens.sql` (foundation only; full OAuth adapter deferred) (prep for future)
-- [ ] T015 [P] Add Pydantic models in `backend/app/models/effect_review.py` for `PredictionPayload`, `DimensionalConclusion`, `AttributionPayload`, `LearningsPayload` (US4, FR-007)
-- [ ] T016 [P] Add `FeedbackRecord` Pydantic model in `backend/app/models/feedback.py` (US3, FR-005)
+- [x] T011 [P] Create `backend/app/data/migrations/002_user_feedback.sql` (`id`, `user_id`, `source_type`, `source_id`, `feedback_type`, `feedback_value`, `reason`, `created_at`; idx `(user_id, created_at DESC)`) (US3, FR-005)
+- [x] T012 [P] Create `backend/app/data/migrations/003_effect_reviews.sql` (`id`, `user_id`, `topic_title`, `content_outline`, `prediction` JSON, `actual_result` JSON, `attribution` JSON, `learnings` JSON, `status`, `created_at`, `updated_at`) (US4, FR-007)
+- [x] T013 [P] Create `backend/app/data/migrations/004_risk_keywords.sql` (`id`, `user_id` NULL for global, `keyword`, `severity`, `category`, `created_at`; unique on `(user_id, keyword)`) (US5, FR-008)
+- [x] T014 [P] Create `backend/app/data/migrations/005_platform_tokens.sql` (foundation only; full OAuth adapter deferred) (prep for future)
+- [x] T015 [P] Add Pydantic models in `backend/app/models/effect_review.py` for `PredictionPayload`, `DimensionalConclusion`, `AttributionPayload`, `LearningsPayload` (US4, FR-007)
+- [x] T016 [P] Add `FeedbackRecord` Pydantic model in `backend/app/models/feedback.py` (US3, FR-005)
 
 **Checkpoint**: Tables exist; Pydantic models importable; the migration runner can apply 001-005 in order.
 
@@ -66,26 +66,26 @@
 
 ### Tests for User Story 1 (write FIRST; ensure they FAIL before implementation)
 
-- [ ] T017 [P] [US1] Mock-pattern test in `backend/tests/services/test_idea_booster.py::test_llm_path_returns_structured` -- patch `LLMClient.generate` to return valid JSON; assert `data_source="llm_simulation"`, `model_version` set, `confidence >= 0.6`
-- [ ] T018 [P] [US1] Fallback test in `backend/tests/services/test_idea_booster.py::test_fallback_returns_schema_with_low_confidence` -- patch `LLMClient.generate` to raise; assert `data_source="template_fallback"`, `confidence <= 0.5`
-- [ ] T019 [P] [US1] Truncation test in `backend/tests/services/test_idea_booster.py::test_oversized_input_truncated_to_5000` -- pass 6000-char input; assert only 5000 chars hit the LLM
-- [ ] T020 [P] [US1] Malformed-JSON test in `backend/tests/services/test_idea_booster.py::test_malformed_json_recovers` -- patch `LLMClient.generate` to return malformed text; assert `_clean_json_response` recovers or fallback fires
-- [ ] T021 [P] [US1] Mock-pattern test in `backend/tests/services/test_title_optimizer.py::test_llm_path_returns_3_to_5_variations` -- assert 3-5 variations, each with `ctr_estimate`, `technique_used`, `technique_reason`
-- [ ] T022 [P] [US1] Fallback test in `backend/tests/services/test_title_optimizer.py::test_fallback_returns_schema_with_low_confidence`
-- [ ] T023 [P] [US1] Mock-pattern test in `backend/tests/services/test_track_diagnosis.py::test_llm_path_returns_structured` -- assert `health_score`, `competitiveness_score`, `sub_tracks` (3+), `direction_advice` populated
-- [ ] T024 [P] [US1] Fallback test in `backend/tests/services/test_track_diagnosis.py::test_fallback_returns_schema_with_low_confidence`
-- [ ] T025 [P] [US1] Mock-pattern test in `backend/tests/services/test_publish_advisor.py::test_llm_path_returns_structured` -- assert 3 `suggested_times` with `time_range`, `reason`, `benchmark_source`
-- [ ] T026 [P] [US1] Fallback test in `backend/tests/services/test_publish_advisor.py::test_fallback_returns_schema_with_low_confidence`
+- [x] T017 [P] [US1] Mock-pattern test in `backend/tests/services/test_idea_booster.py::test_llm_path_returns_structured` -- patch `LLMClient.generate` to return valid JSON; assert `data_source="llm_simulation"`, `model_version` set, `confidence >= 0.6`
+- [x] T018 [P] [US1] Fallback test in `backend/tests/services/test_idea_booster.py::test_fallback_returns_schema_with_low_confidence` -- patch `LLMClient.generate` to raise; assert `data_source="template_fallback"`, `confidence <= 0.5`
+- [x] T019 [P] [US1] Truncation test in `backend/tests/services/test_idea_booster.py::test_oversized_input_truncated_to_5000` -- pass 6000-char input; assert only 5000 chars hit the LLM
+- [x] T020 [P] [US1] Malformed-JSON test in `backend/tests/services/test_idea_booster.py::test_malformed_json_recovers` -- patch `LLMClient.generate` to return malformed text; assert `_clean_json_response` recovers or fallback fires
+- [x] T021 [P] [US1] Mock-pattern test in `backend/tests/services/test_title_optimizer.py::test_llm_path_returns_3_to_5_variations` -- assert 3-5 variations, each with `ctr_estimate`, `technique_used`, `technique_reason`
+- [x] T022 [P] [US1] Fallback test in `backend/tests/services/test_title_optimizer.py::test_fallback_returns_schema_with_low_confidence`
+- [x] T023 [P] [US1] Mock-pattern test in `backend/tests/services/test_track_diagnosis.py::test_llm_path_returns_structured` -- assert `health_score`, `competitiveness_score`, `sub_tracks` (3+), `direction_advice` populated
+- [x] T024 [P] [US1] Fallback test in `backend/tests/services/test_track_diagnosis.py::test_fallback_returns_schema_with_low_confidence`
+- [x] T025 [P] [US1] Mock-pattern test in `backend/tests/services/test_publish_advisor.py::test_llm_path_returns_structured` -- assert 3 `suggested_times` with `time_range`, `reason`, `benchmark_source`
+- [x] T026 [P] [US1] Fallback test in `backend/tests/services/test_publish_advisor.py::test_fallback_returns_schema_with_low_confidence`
 
 ### Implementation for User Story 1
 
-- [ ] T027 [US1] Add `_analyze_with_llm()` + `_template_xxx()` to `backend/app/services/idea_booster.py`; rewrite `boost()` to delegate; LLM path returns `data_source="llm_simulation"`, fallback returns `data_source="template_fallback"` (FR-001)
-- [ ] T028 [US1] Wire `LLMClient.generate()` + `_clean_json_response` into `idea_booster`; default to template when `confidence < 0.5` or LLM raises
-- [ ] T029 [US1] Apply the same `_analyze_with_llm()` + `_template_xxx()` pattern to `backend/app/services/title_optimizer.py` (FR-001)
-- [ ] T030 [US1] Apply the same pattern to `backend/app/services/track_diagnosis.py` (FR-001)
-- [ ] T031 [US1] Apply the same pattern to `backend/app/services/publish_advisor.py` (FR-001)
-- [ ] T032 [US1] Confirm the four endpoints return 200 with `confidence`, `data_source`, `model_version` populated (FR-013)
-- [ ] T033 [US1] Update the `AICreatedBadge` use in `frontend/src/pages/{IdeaBooster,TitleOptimizer,TrackDiagnosis,PublishAdvisor}/` to render `modelVersion` for the LLM path and `AIDegradedNotice` for the fallback path
+- [x] T027 [US1] Add `_analyze_with_llm()` + `_template_xxx()` to `backend/app/services/idea_booster.py`; rewrite `boost()` to delegate; LLM path returns `data_source="llm_simulation"`, fallback returns `data_source="template_fallback"` (FR-001)
+- [x] T028 [US1] Wire `LLMClient.generate()` + `_clean_json_response` into `idea_booster`; default to template when `confidence < 0.5` or LLM raises
+- [x] T029 [US1] Apply the same `_analyze_with_llm()` + `_template_xxx()` pattern to `backend/app/services/title_optimizer.py` (FR-001)
+- [x] T030 [US1] Apply the same pattern to `backend/app/services/track_diagnosis.py` (FR-001)
+- [x] T031 [US1] Apply the same pattern to `backend/app/services/publish_advisor.py` (FR-001)
+- [x] T032 [US1] Confirm the four endpoints return 200 with `confidence`, `data_source`, `model_version` populated (FR-013)
+- [x] T033 [US1] Update the `AICreatedBadge` use in `frontend/src/pages/{IdeaBooster,TitleOptimizer,TrackDiagnosis,PublishAdvisor}/` to render `modelVersion` for the LLM path and `AIDegradedNotice` for the fallback path
 
 **Checkpoint**: US1 fully functional and testable independently.
 
@@ -99,22 +99,22 @@
 
 ### Tests for User Story 2
 
-- [ ] T034 [P] [US2] Test in `backend/tests/services/test_topic_recommend.py::test_preloaded_safety_net_returns_5_topics` -- stub all tiers to fail; assert preloaded tier returns 5 topics, `data_source="preloaded"`, `confidence <= 0.5`
-- [ ] T035 [P] [US2] Test in `backend/tests/services/test_topic_recommend.py::test_tianapi_tier_returns_tianapi_data_source` -- stub `TianAPISource` to return mock; assert `data_source="tianapi"`, `confidence >= 0.6`
-- [ ] T036 [P] [US2] Test in `backend/tests/services/test_topic_recommend.py::test_all_live_tiers_fail_falls_through_to_preloaded`
-- [ ] T037 [P] [US2] Test in `backend/tests/services/test_topic_recommend.py::test_tier_shift_emits_warning_log` -- use `caplog`; assert `logger.warning("tier_shift", extra=...)` is emitted
-- [ ] T038 [P] [US2] Integration test in `backend/tests/integration/test_data_manager_cascade.py` stubbing each tier to fail in turn
+- [x] T034 [P] [US2] Test in `backend/tests/services/test_topic_recommend.py::test_preloaded_safety_net_returns_5_topics` -- stub all tiers to fail; assert preloaded tier returns 5 topics, `data_source="preloaded"`, `confidence <= 0.5`
+- [x] T035 [P] [US2] Test in `backend/tests/services/test_topic_recommend.py::test_tianapi_tier_returns_tianapi_data_source` -- stub `TianAPISource` to return mock; assert `data_source="tianapi"`, `confidence >= 0.6`
+- [x] T036 [P] [US2] Test in `backend/tests/services/test_topic_recommend.py::test_all_live_tiers_fail_falls_through_to_preloaded`
+- [x] T037 [P] [US2] Test in `backend/tests/services/test_topic_recommend.py::test_tier_shift_emits_warning_log` -- use `caplog`; assert `logger.warning("tier_shift", extra=...)` is emitted
+- [x] T038 [P] [US2] Integration test in `backend/tests/integration/test_data_manager_cascade.py` stubbing each tier to fail in turn
 
 ### Implementation for User Story 2
 
-- [ ] T039 [US2] Extend `TianAPISource` in `backend/app/data_sources/tianapi_source.py` -- real httpx call already exists, gated on `TIANAPI_KEY`; wire per-tier config from FR-004
-- [ ] T040 [P] [US2] Extend `BilibiliSource` in `backend/app/data_sources/bilibili_source.py` -- real httpx call already exists; wire per-tier config
-- [ ] T041 [P] [US2] REWRITE `LLMDataSource` in `backend/app/data_sources/llm_source.py` to actually call `LLMClient.generate` (replace the `_generate_mock_topics` shim at l103)
-- [ ] T042 [US2] Seed `PreloadedDataSource` in `backend/app/data_sources/preloaded_source.py` with 8 tracks (绉戞妧, 鏃惰?, 缇庨, 鑱屽満, 鏁欒偛, 璐㈢粡, 娓告垙, 濞变箰) -- currently 5; expand to 8 (FR-003)
-- [ ] T043 [US2] Refactor `TopicRecommendService.recommend()` in `backend/app/services/topic_recommend.py` to delegate to `DataManager.get_trending_topics()` and rank by `rubric_weights` (FR-003)
-- [ ] T044 [US2] Ensure the response carries `data_source`, `confidence`, and `model_version` (FR-013)
-- [ ] T045 [US2] Add `tier_shift` structured log in `DataManager._try_tier()` per FR-004
-- [ ] T046 [US2] Add `GET /api/v1/topics/history` endpoint in `backend/app/api/v1/topics.py` (US7, FR-011)
+- [x] T039 [US2] Extend `TianAPISource` in `backend/app/data_sources/tianapi_source.py` -- real httpx call already exists, gated on `TIANAPI_KEY`; wire per-tier config from FR-004
+- [x] T040 [P] [US2] Extend `BilibiliSource` in `backend/app/data_sources/bilibili_source.py` -- real httpx call already exists; wire per-tier config
+- [x] T041 [P] [US2] REWRITE `LLMDataSource` in `backend/app/data_sources/llm_source.py` to actually call `LLMClient.generate` (replace the `_generate_mock_topics` shim at l103)
+- [x] T042 [US2] Seed `PreloadedDataSource` in `backend/app/data_sources/preloaded_source.py` with 8 tracks (绉戞妧, 鏃惰?, 缇庨, 鑱屽満, 鏁欒偛, 璐㈢粡, 娓告垙, 濞变箰) -- currently 5; expand to 8 (FR-003)
+- [x] T043 [US2] Refactor `TopicRecommendService.recommend()` in `backend/app/services/topic_recommend.py` to delegate to `DataManager.get_trending_topics()` and rank by `rubric_weights` (FR-003)
+- [x] T044 [US2] Ensure the response carries `data_source`, `confidence`, and `model_version` (FR-013)
+- [x] T045 [US2] Add `tier_shift` structured log in `DataManager._try_tier()` per FR-004
+- [x] T046 [US2] Add `GET /api/v1/topics/history` endpoint in `backend/app/api/v1/topics.py` (US7, FR-011)
 
 **Checkpoint**: US2 fully functional and testable independently; US1+US2 together form the MVP slice.
 

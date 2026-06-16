@@ -97,9 +97,48 @@ multi-session investment and that progress is measured per-phase.
 - **C. (Chosen)** Progressive threshold with documented trajectory →
   preserves the 80% target, recognizes practical sequencing
 
+## Progress (added 2026-06-16, post-007 US1+US2)
+
+The progressive trajectory in the table above has been **substantially
+exceeded** in actual practice. As of this ADR update (commit `f903523`):
+
+| Metric | Original ADR target | Actual (verified) |
+|--------|---------------------|-------------------|
+| Frontend vitest lines | 25% (Phase 1) | **69.11%** (commit `9918d86`) |
+| Frontend vitest lines | 35-40% (Phase 2) | exceeded |
+| Frontend vitest lines | 45-50% (Phase 3) | exceeded |
+| Frontend vitest lines | 60-70% (Phase 4-7) | exceeded |
+| Backend pytest lines | 80% (Constitution) | **80.28%** (commit `f903523`) |
+
+### Key commits that drove coverage
+
+| Commit | Phase | Effect |
+|--------|-------|--------|
+| `5f1dea7` | Phase 2 (T011-T016) | New DB tables + Pydantic models |
+| `b7d46cc` | P1-E 25→50% | 4 hook tests + 5 page tests |
+| `ac1e4eb` | P1-E 50→55% | 4 API wrapper tests + 2 pages |
+| `e75ee92` | P1-E 55→60% | 3 medium-complexity pages |
+| `bd2ac9b` | P1-E 60→63% | 2 complex pages (TitleOptimizer, ViralAnalysis) |
+| `a7601f9` | P1-E 63→67% | AssetsPage (0→100%) + assets API |
+| `9918d86` | P1-E 67→69% | authStore + profileStore (0→100%) |
+| `572c41a` | US1 (T017-T033) | 4 AI coach services: LLM-first + template fallback |
+| `132a89a` | PromptRegistry fix | sorted-list returns (deterministic iteration) |
+| `f903523` | US2 (T034-T046) | DataManager cascade actually drives TopicRecommend |
+
+### Current state vs Constitution target
+
+| Tool | Current threshold | Status |
+|------|---------------------|--------|
+| pytest | 80% (`cov-fail-under=80`) | ✅ 80.28% green |
+| vitest | 65% / 55% / 55% / 55% | ✅ 69.11% green |
+
+**Gap to Constitution 80%**: ~11pp on vitest, mostly layout/UI components
+(Sidebar.tsx 289 lines 0%, AppLayout, Header). These are pure-UI render
+tests with low informational value, deferred to a future session.
+
 ## References
 
 - specs/007-v4-gap-closure/tasks.md (T001, T002)
 - frontend/vitest.config.ts
 - backend/pyproject.toml ([tool.coverage.run] fail_under = 80)
-- 6 commits in this session closing the static quality gates
+- 10 commits (5f1dea7..f903523) closing the static quality gates and US1/US2
