@@ -5,6 +5,22 @@ from datetime import UTC, datetime
 import pytest
 
 
+class _FakeDB:
+    """Minimal in-memory stand-in for the async Database.
+
+    Records every ``insert`` call so the legacy ``TestFeedbackService``
+    tests (TC11-01~02) can exercise the new async ``submit`` signature
+    without spinning up the real DB. Only ``insert`` is implemented —
+    that's all ``submit`` invokes on the happy path.
+    """
+
+    def __init__(self) -> None:
+        self.inserted: list[tuple[str, dict]] = []
+
+    async def insert(self, table: str, data: dict) -> None:
+        self.inserted.append((table, dict(data)))
+
+
 def utc_now() -> str:
     return datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
@@ -124,25 +140,33 @@ class TestEffectReviewService:
 class TestFeedbackService:
     """TC11-01~04: User feedback service tests."""
 
-    def test_submit_thumb_up(self):
+    @pytest.mark.asyncio
+    async def test_submit_thumb_up(self):
         """TC11-01: Given user likes a topic, When feedback submitted,
-        Then FeedbackRecord stored with correct type."""
+        Then FeedbackRecord stored with correct type.
+
+        Spec-007 US3 (T053): ``submit`` is now async and persists to
+        ``user_feedback`` via the injected ``Database``. The stored
+        shape uses ``source_type`` / ``source_id`` (FeedbackRecord
+        model) instead of the legacy ``target_type`` / ``target_id``.
+        """
         from app.services.feedback import FeedbackService
         svc = FeedbackService()
 
-        record = svc.submit("user-1", "topic", "topic-123", "thumb_up")
+        record = await svc.submit(_FakeDB(), "user-1", "topic", "topic-123", "thumb_up")
         assert record["feedback_type"] == "thumb_up"
-        assert record["target_type"] == "topic"
-        assert record["target_id"] == "topic-123"
+        assert record["source_type"] == "topic"
+        assert record["source_id"] == "topic-123"
 
-    def test_submit_thumb_down_with_reason(self):
+    @pytest.mark.asyncio
+    async def test_submit_thumb_down_with_reason(self):
         """TC11-02: Given user dislikes with reason, When feedback submitted,
         Then record includes reason."""
         from app.services.feedback import FeedbackService
         svc = FeedbackService()
 
-        record = svc.submit(
-            "user-1", "title", "title-456", "thumb_down",
+        record = await svc.submit(
+            _FakeDB(), "user-1", "title", "title-456", "thumb_down",
             reason="标题太夸张",
         )
         assert record["feedback_type"] == "thumb_down"

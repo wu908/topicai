@@ -1,9 +1,14 @@
 """Feedback API endpoints for TopicAI v4.0.
 
-Spec-007 US7 (T057): adds ``GET /api/v1/feedback/history`` for the
-personalization loop audit endpoint. Reads persisted records from
-``user_feedback`` ordered by ``created_at DESC`` with optional
-``source_type`` and ``since`` filters.
+Spec-007:
+- US7 (T057): adds ``GET /api/v1/feedback/history`` for the personalization
+  loop audit endpoint.
+- US3 (T053, T056): POST /api/v1/feedback now persists to ``user_feedback``
+  and triggers the cold-start + bounded-shift adaptation pipeline.
+  Returns 202 (Accepted) per the async persistence contract. The legacy
+  GET /api/v1/feedback/analysis endpoint no longer calls
+  ``analyze_feedback(user_id, [])`` (T056) and is now a deprecation shim
+  pointing clients at /feedback/history.
 """
 
 import logging
@@ -17,18 +22,27 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Feedback"])
 
 
-@router.post("/feedback", status_code=201)
-async def submit_feedback(request: Request, data: FeedbackSubmitRequest):
-    user_id = getattr(request.state, "user_id", "anonymous")
+@router.post("/feedback", status_code=202)
+async def submit_feedback(
+    request: Request,
+    data: FeedbackSubmitRequest,
+    user: dict = Depends(get_current_user),
+    db=Depends(get_db),
+):
+    user_id = user["id"]
 
     from app.services.feedback import FeedbackService
     svc = FeedbackService()
-    record = svc.submit(
-        user_id, data.target_type, data.target_id, data.feedback_type,
+    record = await svc.submit(
+        db,
+        user_id,
+        data.target_type,
+        data.target_id,
+        data.feedback_type,
         reason=data.reason or "",
     )
 
-    return {"code": 201, "data": record, "message": "反馈已提交", "meta": {}}
+    return {"code": 202, "data": record, "message": "反馈已提交", "meta": {}}
 
 
 @router.get("/feedback/analysis")
@@ -37,10 +51,20 @@ async def get_feedback_analysis(request: Request):
     if not user_id:
         raise HTTPException(status_code=401, detail="请先登录")
 
-    from app.services.feedback import FeedbackService
-    svc = FeedbackService()
-    analysis = svc.analyze_feedback(user_id, [])
-    return {"code": 200, "data": analysis, "message": "success", "meta": {}}
+    # Spec-007 T056: the legacy analyze_feedback(user_id, []) call is
+    # removed. The endpoint is now a deprecation shim pointing at the
+    # /api/v1/feedback/history audit endpoint, which reads the persisted
+    # user_feedback rows directly.
+    return {
+        "code": 200,
+        "data": {
+            "deprecated": True,
+            "replacement": "/api/v1/feedback/history",
+            "message": "分析接口已废弃；请通过 /feedback/history 查看历史记录",
+        },
+        "message": "success",
+        "meta": {},
+    }
 
 
 @router.get("/feedback/history")
