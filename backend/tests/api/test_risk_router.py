@@ -90,3 +90,42 @@ async def test_risk_check_sets_content_expiry(client):
     assert r.status_code == 200
     data = r.json()["data"]
     assert data["content_text_expires_at"] is not None
+
+
+# ========== US5 T073: endpoint returns ContentRiskReport ==========
+
+@pytest.mark.asyncio
+async def test_risk_check_endpoint_returns_report(client):
+    """T073: POST /api/v1/risk/check returns ContentRiskReport-shaped body
+    plus the AI transparency meta fields (Constitution III / VII).
+
+    The response ``data`` keys must match the ContentRiskReport Pydantic
+    model; ``meta.ai_quality`` must carry confidence / data_source /
+    model_version.
+    """
+    r = await client.post(
+        "/api/v1/risk/check",
+        json={"content": "今天来聊一个普通的话题。"},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["code"] == 200
+
+    # ContentRiskReport shape (subset of declared fields)
+    data = body["data"]
+    for key in (
+        "id", "user_id", "content_text",
+        "content_text_expires_at", "risks",
+        "overall_risk_score", "created_at",
+    ):
+        assert key in data, f"Missing ContentRiskReport field: {key}"
+    assert 0.0 <= float(data["overall_risk_score"]) <= 1.0
+    assert isinstance(data["risks"], list)
+
+    # AI transparency meta (Constitution III)
+    ai = body["meta"]["ai_quality"]
+    assert "confidence" in ai
+    assert "data_source" in ai
+    assert "model_version" in ai
+    assert ai["data_source"] in ("keyword_only", "llm_simulation")
+    assert 0.0 <= float(ai["confidence"]) <= 1.0

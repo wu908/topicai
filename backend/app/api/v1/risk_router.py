@@ -34,7 +34,7 @@ async def risk_check(
     from app.services.content_risk import ContentRiskService
 
     svc = ContentRiskService()
-    report = svc.check(user["id"], data.content)
+    report = await svc.check(user["id"], data.content)
 
     # Pydantic validation at the boundary. The service may include
     # extra keys (e.g. ``confidence``) — only the declared fields are

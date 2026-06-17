@@ -3,68 +3,120 @@
 Scans content for compliance risks including platform policy violations,
 copyright issues, and sensitive keywords.
 
-Spec-007 US7 (T074): adds the LLM enhancement path. Per the spec's
-"keyword-first / LLM on low-confidence" rule, the keyword scan is the
-primary signal; the LLM is only invoked when the keyword confidence is
-below a configurable threshold. Any LLM failure falls back to
-keyword-only output with ``data_source="keyword_only"``.
+Spec-007 US5 (T075): explicit 80/20 LLM+keyword blend per Constitution
+Principle XI (Hybrid AI Discipline).
+
+Algorithm (when LLM gate is open, i.e. keyword confidence < threshold):
+  1. keyword_scan -> (risks_kw, score_kw, conf_kw)            # 20% weight
+  2. try: llm_enhance -> (risks_llm, score_llm, conf_llm)     # 80% weight
+     except: log warning + fall back to 100% keyword path
+  3. final_score  = 0.2 * score_kw + 0.8 * score_llm
+     final_risks  = union(keyword_risks, llm_risks) deduped
+     final_confid = max(keyword_conf, 0.75) for LLM-succeeded path,
+                    min(keyword_conf, 0.5)  for keyword-only fallback
+  4. data_source  = "llm_simulation" if LLM succeeded else "keyword_only"
+
+Constitution III: every response carries confidence / data_source /
+model_version.
+Constitution VI: heuristic-first; LLM only when keyword confidence is
+low OR on the explicit 80/20 path. Any LLM failure must NOT propagate.
 """
 
 import json
 import logging
+import uuid
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from app.core.utils import utc_now
 
 logger = logging.getLogger(__name__)
 
-# Risk keyword patterns (simplified for MVP)
-_RISKY_KEYWORDS: dict[str, list[str]] = {
-    "high": ["赌博", "色情", "违法", "诈骗", "传销", "暴力"],
-    "medium": ["绝对", "保证", "100%", "包治", "根治", "点击领取"],
-    "low": ["最", "第一", "最好", "唯一", "全网"],
-}
 
-# Below this confidence we consult the LLM (US7 T074 spec).
+# Risk keyword catalog: (keyword, severity, category).
+# Higher-precision financial/medical terms added per spec-007 T069/T070.
+_RISKY_KEYWORDS: list[tuple[str, str, str]] = [
+    # Financial inducement (US5 T069)
+    ("保本", "high", "financial_inducement"),
+    ("无风险", "high", "financial_inducement"),
+    ("guaranteed no loss", "high", "financial_inducement"),
+    ("稳赚不赔", "high", "financial_inducement"),
+    ("高收益无风险", "high", "financial_inducement"),
+    # Medical overclaim (US5 T070)
+    ("100% 治愈", "high", "medical_overclaim"),
+    ("100% cure", "high", "medical_overclaim"),
+    ("包治百病", "high", "medical_overclaim"),
+    ("根治", "high", "medical_overclaim"),
+    ("彻底治愈", "high", "medical_overclaim"),
+    # Regulatory (kept from prior implementation)
+    ("赌博", "high", "gambling"),
+    ("色情", "high", "pornography"),
+    ("违法", "high", "illegal"),
+    ("诈骗", "high", "fraud"),
+    ("传销", "high", "fraud"),
+    ("暴力", "high", "violence"),
+    # Medium
+    ("绝对", "medium", "absolute_claim"),
+    ("保证", "medium", "absolute_claim"),
+    ("100%", "medium", "absolute_claim"),
+    ("点击领取", "medium", "clickbait"),
+    # Low
+    ("最", "low", "superlative"),
+    ("第一", "low", "superlative"),
+    ("最好", "low", "superlative"),
+    ("唯一", "low", "superlative"),
+    ("全网", "low", "superlative"),
+]
+
+# Confidence threshold below which the LLM path is consulted.
 _LLM_CONFIDENCE_THRESHOLD = 0.6
 _LLM_MODEL_VERSION = "deepseek-v4-flash"
+_KEYWORD_MODEL_VERSION = "keyword-v1"
+
+# 80/20 blend weights (US5 T075).
+_KEYWORD_BLEND_WEIGHT = 0.2
+_LLM_BLEND_WEIGHT = 0.8
+
+# Confidence caps (Constitution III/VI).
+_LLM_CONFIDENCE = 0.75         # reported when LLM path succeeds
+_KEYWORD_ONLY_CONFIDENCE_CAP = 0.5  # reported on keyword-only fallback
 
 
 class ContentRiskService:
     """Content compliance risk scanner.
 
-    Detects policy violations, copyright issues, and sensitive
-    keywords in content before publishing. The keyword scan is the
-    primary signal; the LLM is only invoked when keyword confidence
-    is below ``_LLM_CONFIDENCE_THRESHOLD``.
+    Heuristic keyword scan is the primary signal; the LLM is invoked when
+    the keyword confidence is below ``_LLM_CONFIDENCE_THRESHOLD`` and the
+    two are blended at 20% (keyword) + 80% (LLM) per Constitution XI.
     """
 
     def __init__(self):
         pass
 
+    # ---------------- keyword scan ----------------
+
     def _scan_risk(self, content: str) -> dict[str, Any]:
-        """Scan content for risk keywords.
+        """Scan content for risk keywords (deterministic).
 
-        Args:
-            content: Content text to scan.
-
-        Returns:
-            Dict with risks list, overall_risk_score, and confidence.
+        Returns a dict shaped like ``{risks, overall_risk_score, confidence}``.
         """
-        risks: list[dict[str, Any]] = []
         content_lower = content.lower()
+        # (severity, category) -> set of keywords (for dedupe + description)
+        bucket: dict[tuple[str, str], list[str]] = {}
+        for kw, severity, category in _RISKY_KEYWORDS:
+            if kw.lower() in content_lower:
+                bucket.setdefault((severity, category), []).append(kw)
 
-        for severity, keywords in _RISKY_KEYWORDS.items():
-            for kw in keywords:
-                if kw in content_lower:
-                    risks.append({
-                        "category": "敏感词",
-                        "description": f"内容包含{severity}风险关键词: {kw}",
-                        "severity": severity,
-                        "suggestion": f"建议替换或删除'{kw}'相关表述",
-                    })
+        risks: list[dict[str, Any]] = []
+        for (severity, category), kws in bucket.items():
+            display_kw = kws[0]
+            risks.append({
+                "category": category,
+                "description": f"内容包含{severity}风险关键词: {display_kw}",
+                "severity": severity,
+                "suggestion": f"建议替换或删除'{display_kw}'相关表述",
+            })
 
-        # Compute overall risk score
         if not risks:
             overall = 0.1
         else:
@@ -72,8 +124,6 @@ class ContentRiskService:
             scores = [severity_scores.get(r["severity"], 0.3) for r in risks]
             overall = min(sum(scores) / len(scores) + 0.1, 1.0)
 
-        # Confidence = 1 - risk score (higher risk ⇒ lower confidence in
-        # "no problems"). Used to decide whether the LLM path runs.
         confidence = round(1.0 - overall, 4)
 
         return {
@@ -82,20 +132,20 @@ class ContentRiskService:
             "confidence": confidence,
         }
 
-    # ---------- Spec-007 US7 (T074): LLM enhancement path ----------
+    # ---------------- LLM enhance (defensive) ----------------
 
     def _try_llm_enhance(self, content: str) -> dict[str, Any] | None:
         """Optionally refine the keyword scan with an LLM.
 
-        Mirrors the US1 service pattern (idea_booster._analyze_with_llm):
-        any failure — instantiation, API, JSON parse, schema mismatch —
+        Any failure — instantiation, API, JSON parse, schema mismatch —
         logs a warning and returns ``None`` so the caller falls back to
-        the keyword-only result.
+        the keyword-only result. The caller is responsible for the
+        80/20 blend.
         """
         try:
             from app.core.llm import LLMClient
         except Exception as e:
-            logger.warning(f"risk: LLMClient unavailable, using keyword-only: {e}")
+            logger.warning(f"risk: LLMClient unavailable: {e}")
             return None
 
         try:
@@ -110,7 +160,7 @@ class ContentRiskService:
             )
             raw = llm.generate(prompt=prompt, temperature=0.1)
         except Exception as e:
-            logger.warning(f"risk: LLM call failed, using keyword-only: {e}")
+            logger.warning(f"risk: LLM call failed: {e}")
             return None
 
         try:
@@ -127,10 +177,42 @@ class ContentRiskService:
         if not isinstance(data, dict) or "risks" not in data:
             logger.warning("risk: LLM response missing 'risks' field")
             return None
+        if not isinstance(data["risks"], list):
+            logger.warning("risk: LLM 'risks' is not a list")
+            return None
         return data
 
-    def check(self, user_id: str, content: str) -> dict[str, Any]:
-        """Check content for compliance risks.
+    # ---------------- 80/20 blend (US5 T075) ----------------
+
+    def _merge_risks(
+        self, keyword_risks: list[dict[str, Any]], llm_risks: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        """Union keyword + LLM risks, deduping by (severity, category)."""
+        severity_rank = {"high": 3, "medium": 2, "low": 1}
+        merged: dict[tuple[str, str], dict[str, Any]] = {}
+        for r in list(keyword_risks) + list(llm_risks):
+            if not isinstance(r, dict):
+                continue
+            sev = str(r.get("severity", "low"))
+            cat = str(r.get("category", ""))
+            key = (sev, cat)
+            if key not in merged:
+                merged[key] = {
+                    "category": cat,
+                    "description": str(r.get("description", "")),
+                    "severity": sev,
+                    "suggestion": str(r.get("suggestion", "")),
+                }
+        # Stable order: high first, then by category.
+        return sorted(
+            merged.values(),
+            key=lambda r: (-severity_rank.get(r["severity"], 0), r["category"]),
+        )
+
+    # ---------------- public API ----------------
+
+    async def check(self, user_id: str, content: str) -> dict[str, Any]:
+        """Run the 80/20 blend (US5 T075) and return a report dict.
 
         Args:
             user_id: User ID.
@@ -143,54 +225,53 @@ class ContentRiskService:
         scan = self._scan_risk(content)
         keyword_confidence = scan["confidence"]
 
-        # LLM path: only invoked when keyword confidence is low.
-        llm_data = (
-            self._try_llm_enhance(content)
-            if keyword_confidence < _LLM_CONFIDENCE_THRESHOLD
-            else None
-        )
+        # LLM gate: only when keyword confidence is below threshold.
+        llm_data: dict[str, Any] | None = None
+        if keyword_confidence < _LLM_CONFIDENCE_THRESHOLD:
+            llm_data = self._try_llm_enhance(content)
 
-        expires_at = None
-        # 90-day content TTL (Constitution XIII).
-        try:
-            from datetime import UTC, datetime, timedelta
+        # ---- blend (US5 T075) ----
+        if llm_data is not None:
+            llm_risks = [
+                r for r in llm_data.get("risks", [])
+                if isinstance(r, dict)
+                and r.get("severity") in ("low", "medium", "high")
+                and r.get("category")
+            ]
+            llm_score = float(
+                llm_data.get("overall_risk_score", scan["overall_risk_score"])
+            )
+            llm_score = max(0.0, min(1.0, llm_score))
 
-            expires_at = (
-                datetime.now(UTC) + timedelta(days=90)
-            ).isoformat().replace("+00:00", "Z")
-        except Exception:
-            pass
+            final_score = (
+                _KEYWORD_BLEND_WEIGHT * scan["overall_risk_score"]
+                + _LLM_BLEND_WEIGHT * llm_score
+            )
+            final_risks = self._merge_risks(scan["risks"], llm_risks)
+            final_confidence = max(_LLM_CONFIDENCE, keyword_confidence)
+            data_source = "llm_simulation"
+            model_version = _LLM_MODEL_VERSION
+        else:
+            final_score = scan["overall_risk_score"]
+            final_risks = scan["risks"]
+            final_confidence = min(keyword_confidence, _KEYWORD_ONLY_CONFIDENCE_CAP)
+            data_source = "keyword_only"
+            model_version = _KEYWORD_MODEL_VERSION
 
-        import uuid
-
-        report_id = f"cr-{user_id}-{uuid.uuid4().hex[:8]}"
-        created_at = utc_now()
-
-        if llm_data:
-            risks = llm_data.get("risks", []) or []
-            overall = float(llm_data.get("overall_risk_score", scan["overall_risk_score"]))
-            return {
-                "id": report_id,
-                "user_id": user_id,
-                "content_text": content[:5000],
-                "content_text_expires_at": expires_at,
-                "risks": risks,
-                "overall_risk_score": round(max(0.0, min(1.0, overall)), 4),
-                "confidence": 0.75,
-                "data_source": "llm_simulation",
-                "model_version": _LLM_MODEL_VERSION,
-                "created_at": created_at,
-            }
+        # 90-day content TTL (Constitution XIII)
+        expires_at = (
+            datetime.now(UTC) + timedelta(days=90)
+        ).isoformat().replace("+00:00", "Z")
 
         return {
-            "id": report_id,
+            "id": f"cr-{user_id}-{uuid.uuid4().hex[:8]}",
             "user_id": user_id,
             "content_text": content[:5000],
             "content_text_expires_at": expires_at,
-            "risks": scan["risks"],
-            "overall_risk_score": scan["overall_risk_score"],
-            "confidence": keyword_confidence,
-            "data_source": "keyword_only",
-            "model_version": "keyword-v1",
-            "created_at": created_at,
+            "risks": final_risks,
+            "overall_risk_score": round(max(0.0, min(1.0, final_score)), 4),
+            "confidence": round(final_confidence, 4),
+            "data_source": data_source,
+            "model_version": model_version,
+            "created_at": utc_now(),
         }
