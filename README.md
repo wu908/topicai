@@ -2,7 +2,7 @@
 
 > AI 智能选题推荐 Agent — 面向内容创作者的全流程 AI 助手
 
-[![Python 3.12](https://img.shields.io/badge/Python-3.12-blue)](https://python.org) [![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-green)](https://fastapi.tiangolo.com) [![React 19](https://img.shields.io/badge/React-19-blue)](https://react.dev) [![Tests](https://img.shields.io/badge/Tests-482%20passed-brightgreen)](#)
+[![Python 3.12](https://img.shields.io/badge/Python-3.12-blue)](https://python.org) [![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-green)](https://fastapi.tiangolo.com) [![React 19](https://img.shields.io/badge/React-19-blue)](https://react.dev) [![Tests](https://img.shields.io/badge/Tests-519%20passed-brightgreen)](#)
 
 ---
 
@@ -10,14 +10,17 @@
 
 | 功能模块 | 说明 |
 |--------|------|
-| **智能选题推荐** | 基于赛道 + 创作画像 + 热点数据的多维推荐 |
+| **智能选题推荐** | 基于赛道 + 创作画像 + 4-tier 数据源（天行 / B站 / LLM / 预置）级联回落 |
 | **爆款拆解** | LLM 分析爆款内容结构（支持文本/图片/视频） |
 | **想法推进** | 把粗糙想法扩展为完整内容创作方案 |
 | **标题优化** | 多维评分 + 爆款标题公式生成候选 |
 | **赛道诊断** | 评估赛道竞争度、机会窗、红利期预警 |
-| **创作画像** | 基于行为动态学习的个人创作风格画像 |
-| **效果复盘** | 发布后数据分析 + 盲预测归因 |
+| **创作画像** | Onboarding LLM 推导 rubric_weights + 反馈循环 30d 滚动窗口自适应 |
+| **效果复盘** | 发布前盲预测 + 实际数据归因 + learnings 30 天聚合 |
+| **内容风险** | Keyword + LLM 80/20 混合扫描（5 类 100 词种子），publish 阻塞 |
+| **反馈闭环** | 7d 冷启动守门 + 单维度 bounded shift ≤0.15 |
 | **发布时间** | 基于平台 + 赛道的最优发布时间建议 |
+| **AI 透明度** | 所有 AI 响应携带 `data_source` / `confidence` / `model_version` |
 
 ---
 

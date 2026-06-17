@@ -1,0 +1,2468 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "TopicAI",
+    "description": "TopicAI — AI驱动的短视频创作选题助手，提供热点选题推荐、病毒性分析、标题优化、内容风险评估和发布建议等创作全链路智能服务。",
+    "contact": {
+      "name": "TopicAI Team",
+      "email": "support@topicai.com"
+    },
+    "license": {
+      "name": "Proprietary"
+    },
+    "version": "4.0.0"
+  },
+  "paths": {
+    "/api/v1/health": {
+      "get": {
+        "tags": [
+          "Health",
+          "Health"
+        ],
+        "summary": "Health Check",
+        "description": "Overall system health check.\n\nReturns basic service status and version info.\nNo authentication required.\n\nReturns:\n    JSON response with status, version, and uptime info.",
+        "operationId": "health_check_api_v1_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/health/llm": {
+      "get": {
+        "tags": [
+          "Health",
+          "Health"
+        ],
+        "summary": "Llm Health Check",
+        "description": "Check LLM provider availability.\n\nReturns status for each configured LLM provider.\nNo authentication required.\n\nReturns:\n    JSON response with per-provider availability status.",
+        "operationId": "llm_health_check_api_v1_health_llm_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/register": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Register",
+        "description": "Register a new user account.\n\nArgs:\n    req: FastAPI request (for shared DB access).\n    request: Registration details (email, username, password).\n\nReturns:\n    User info with JWT tokens.",
+        "operationId": "register_api_v1_auth_register_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/login": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Login",
+        "description": "Authenticate a user and return JWT tokens.\n\nArgs:\n    req: FastAPI request (for shared DB access).\n    request: Login credentials (email, password).\n\nReturns:\n    JWT access and refresh tokens.",
+        "operationId": "login_api_v1_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/refresh": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Refresh Token",
+        "description": "Refresh an expired access token.\n\nArgs:\n    req: FastAPI request (for shared DB access).\n    request: Refresh token.\n\nReturns:\n    New access token.",
+        "operationId": "refresh_token_api_v1_auth_refresh_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/me": {
+      "get": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Me",
+        "description": "Get the currently authenticated user's information.\n\nReturns:\n    Current user details.",
+        "operationId": "me_api_v1_auth_me_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/profiles/onboarding": {
+      "post": {
+        "tags": [
+          "Profiles",
+          "Profiles"
+        ],
+        "summary": "Submit Onboarding",
+        "description": "Submit onboarding answers and generate a creator profile.\n\nArgs:\n    request: FastAPI request object.\n    data: Onboarding answers (track, content_formats, etc.).\n\nReturns:\n    Created CreatorProfile with 201 status.",
+        "operationId": "submit_onboarding_api_v1_profiles_onboarding_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OnboardingRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/profiles/me": {
+      "get": {
+        "tags": [
+          "Profiles",
+          "Profiles"
+        ],
+        "summary": "Get My Profile",
+        "description": "Get the current user's creator profile.\n\nArgs:\n    request: FastAPI request object.\n    user: Current authenticated user (injected by Depends).\n\nReturns:\n    User's CreatorProfile or 404 if not found.",
+        "operationId": "get_my_profile_api_v1_profiles_me_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Profiles",
+          "Profiles"
+        ],
+        "summary": "Update My Profile",
+        "description": "Update the current user's creator profile.\n\nArgs:\n    request: FastAPI request object.\n    data: Fields to update.\n    user: Current authenticated user (injected by Depends).\n\nReturns:\n    Updated profile confirmation.",
+        "operationId": "update_my_profile_api_v1_profiles_me_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfileUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/feedback": {
+      "post": {
+        "tags": [
+          "Feedback",
+          "Feedback"
+        ],
+        "summary": "Submit Feedback",
+        "operationId": "submit_feedback_api_v1_feedback_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeedbackSubmitRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/feedback/analysis": {
+      "get": {
+        "tags": [
+          "Feedback",
+          "Feedback"
+        ],
+        "summary": "Get Feedback Analysis",
+        "operationId": "get_feedback_analysis_api_v1_feedback_analysis_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/feedback/history": {
+      "get": {
+        "tags": [
+          "Feedback",
+          "Feedback"
+        ],
+        "summary": "Feedback History",
+        "description": "Return persisted feedback records for the current user (Spec-007 T057).\n\nRead-only view of ``user_feedback`` for personalization audits and\nthe on-device feedback history. The Pydantic ``FeedbackRecord``\nmodel validates each row at the router boundary.",
+        "operationId": "feedback_history_api_v1_feedback_history_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "description": "Max records to return",
+              "default": 50,
+              "title": "Limit"
+            },
+            "description": "Max records to return"
+          },
+          {
+            "name": "source_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^(topic|title|idea|viral|track|publish|effect_review)$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional SourceType filter",
+              "title": "Source Type"
+            },
+            "description": "Optional SourceType filter"
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional ISO-8601 lower bound on created_at",
+              "title": "Since"
+            },
+            "description": "Optional ISO-8601 lower bound on created_at"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/topics/recommend": {
+      "get": {
+        "tags": [
+          "Topics",
+          "Topics"
+        ],
+        "summary": "Recommend Topics",
+        "description": "Generate topic recommendations.",
+        "operationId": "recommend_topics_api_v1_topics_recommend_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/topics/refresh": {
+      "post": {
+        "tags": [
+          "Topics",
+          "Topics"
+        ],
+        "summary": "Refresh Recommendations",
+        "description": "Refresh topic recommendations (get a new batch).",
+        "operationId": "refresh_recommendations_api_v1_topics_refresh_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TopicRecommendRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/topics/{topic_id}/explain": {
+      "get": {
+        "tags": [
+          "Topics",
+          "Topics"
+        ],
+        "summary": "Explain Recommendation",
+        "description": "Explain why a topic was recommended.",
+        "operationId": "explain_recommendation_api_v1_topics__topic_id__explain_get",
+        "parameters": [
+          {
+            "name": "topic_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Topic Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/topics/history": {
+      "get": {
+        "tags": [
+          "Topics",
+          "Topics"
+        ],
+        "summary": "Topics History",
+        "description": "Return recently recommended topics (Spec-007 US2 T046).\n\nSpec-007 marks /topics/history as future-接入; this implementation\nserves the cached output of the most recent /topics/recommend call\n(DataManager.cache_recent_topics). When nothing has been cached\nyet, returns an empty list with a meta marker.",
+        "operationId": "topics_history_api_v1_topics_history_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/viral/analyze": {
+      "post": {
+        "tags": [
+          "Viral",
+          "Viral"
+        ],
+        "summary": "Analyze Viral Content",
+        "description": "Analyze viral/爆款 content (text or image).",
+        "operationId": "analyze_viral_content_api_v1_viral_analyze_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ViralAnalyzeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/viral/result/{analysis_id}": {
+      "get": {
+        "tags": [
+          "Viral",
+          "Viral"
+        ],
+        "summary": "Get Viral Result",
+        "description": "Get a previous viral analysis result.",
+        "operationId": "get_viral_result_api_v1_viral_result__analysis_id__get",
+        "parameters": [
+          {
+            "name": "analysis_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Analysis Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ideas/boost": {
+      "post": {
+        "tags": [
+          "Ideas",
+          "Ideas"
+        ],
+        "summary": "Boost Idea",
+        "description": "Boost a fuzzy idea into a structured content plan.",
+        "operationId": "boost_idea_api_v1_ideas_boost_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdeaBoostRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/titles/optimize": {
+      "post": {
+        "tags": [
+          "Titles",
+          "Titles"
+        ],
+        "summary": "Optimize Title",
+        "description": "Generate optimized title variations.",
+        "operationId": "optimize_title_api_v1_titles_optimize_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TitleOptimizeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tracks/diagnose": {
+      "post": {
+        "tags": [
+          "Tracks",
+          "Tracks"
+        ],
+        "summary": "Diagnose Track",
+        "description": "Diagnose a content track.",
+        "operationId": "diagnose_track_api_v1_tracks_diagnose_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TrackDiagnoseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/publish/suggest": {
+      "post": {
+        "tags": [
+          "Publish",
+          "Publish"
+        ],
+        "summary": "Suggest Publish Time",
+        "description": "Suggest optimal publish times.",
+        "operationId": "suggest_publish_time_api_v1_publish_suggest_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublishSuggestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reviews/predict": {
+      "post": {
+        "tags": [
+          "Reviews",
+          "Reviews"
+        ],
+        "summary": "Predict Effect",
+        "description": "Create a blind prediction for content performance before publishing.\n\nSpec-007 US4 (T062): delegates to ``EffectReviewService.create_prediction``\nwhich calls ``EffectReviewChain.predict`` and INSERTs into\n``effect_reviews`` (status='awaiting_actuals').\n\nReturns 201 Created per the spec-007 contract.",
+        "operationId": "predict_effect_api_v1_reviews_predict_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EffectPredictRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reviews/attribute": {
+      "post": {
+        "tags": [
+          "Reviews",
+          "Reviews"
+        ],
+        "summary": "Attribute Effect",
+        "description": "Analyze the attribution of content performance after publishing.\n\nSpec-007 US4 (T063): delegates to ``EffectReviewService.attribute``\nwhich calls ``EffectReviewChain.attribute`` and UPDATEs the\n``effect_reviews`` row with actual_result / attribution / learnings\n(status='attributed').\n\nReturns 201 Created.",
+        "operationId": "attribute_effect_api_v1_reviews_attribute_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EffectAttributeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reviews/learnings": {
+      "get": {
+        "tags": [
+          "Reviews",
+          "Reviews"
+        ],
+        "summary": "Reviews Learnings",
+        "description": "Aggregate the user's recent learnings (Spec-007 T066 + US4 T060).\n\nScans the user's ``effect_reviews`` within ``window_days`` and\nsurfaces the top recurring strengths and weaknesses. Returns a\n``LearningsPayload`` shape, validated at the boundary.",
+        "operationId": "reviews_learnings_api_v1_reviews_learnings_get",
+        "parameters": [
+          {
+            "name": "window_days",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 365,
+              "minimum": 1,
+              "description": "Rolling window size",
+              "default": 30,
+              "title": "Window Days"
+            },
+            "description": "Rolling window size"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reviews/list": {
+      "get": {
+        "tags": [
+          "Reviews",
+          "Reviews"
+        ],
+        "summary": "Reviews List",
+        "description": "List effect reviews for the current user (Spec-007 T066).\n\nReturns persisted reviews from the ``effect_reviews`` table,\nnewest first. The Pydantic ``EffectReview`` model validates each\nrow at the boundary.",
+        "operationId": "reviews_list_api_v1_reviews_list_get",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^(awaiting_actuals|predicted|attributed)$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional status filter",
+              "title": "Status"
+            },
+            "description": "Optional status filter"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "description": "Max records to return",
+              "default": 20,
+              "title": "Limit"
+            },
+            "description": "Max records to return"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/risk/check": {
+      "post": {
+        "tags": [
+          "Risk",
+          "Risk"
+        ],
+        "summary": "Risk Check",
+        "description": "Check content for compliance risks (Spec-007 T074).\n\nDelegates to ``ContentRiskService.check`` and validates the result\nwith the ``ContentRiskReport`` Pydantic model. The response\n``meta.ai_quality`` carries the required AI transparency fields\n(``confidence`` / ``data_source`` / ``model_version``) per\nConstitution Principle III.",
+        "operationId": "risk_check_api_v1_risk_check_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RiskCheckRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/assets": {
+      "get": {
+        "tags": [
+          "Assets",
+          "Assets"
+        ],
+        "summary": "List Assets",
+        "operationId": "list_assets_api_v1_assets_get",
+        "parameters": [
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Type"
+            }
+          },
+          {
+            "name": "tag_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tag Id"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "title": "Page Size"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/assets/storage": {
+      "get": {
+        "tags": [
+          "Assets",
+          "Assets"
+        ],
+        "summary": "Get Storage",
+        "operationId": "get_storage_api_v1_assets_storage_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/assets/{asset_id}": {
+      "get": {
+        "tags": [
+          "Assets",
+          "Assets"
+        ],
+        "summary": "Get Asset",
+        "operationId": "get_asset_api_v1_assets__asset_id__get",
+        "parameters": [
+          {
+            "name": "asset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Asset Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Assets",
+          "Assets"
+        ],
+        "summary": "Delete Asset",
+        "operationId": "delete_asset_api_v1_assets__asset_id__delete",
+        "parameters": [
+          {
+            "name": "asset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Asset Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/assets/{asset_id}/usage": {
+      "get": {
+        "tags": [
+          "Assets",
+          "Assets"
+        ],
+        "summary": "Get Asset Usage",
+        "operationId": "get_asset_usage_api_v1_assets__asset_id__usage_get",
+        "parameters": [
+          {
+            "name": "asset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Asset Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/assets/upload-url": {
+      "post": {
+        "tags": [
+          "Assets",
+          "Assets"
+        ],
+        "summary": "Create Upload",
+        "operationId": "create_upload_api_v1_assets_upload_url_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssetUploadRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/assets/{asset_id}/tags": {
+      "patch": {
+        "tags": [
+          "Assets",
+          "Assets"
+        ],
+        "summary": "Update Asset Tags",
+        "operationId": "update_asset_tags_api_v1_assets__asset_id__tags_patch",
+        "parameters": [
+          {
+            "name": "asset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Asset Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssetTagUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/accounts": {
+      "get": {
+        "tags": [
+          "Accounts",
+          "Accounts"
+        ],
+        "summary": "List Accounts",
+        "operationId": "list_accounts_api_v1_accounts_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Accounts",
+          "Accounts"
+        ],
+        "summary": "Create Account",
+        "operationId": "create_account_api_v1_accounts_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAccountBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/accounts/{account_id}": {
+      "get": {
+        "tags": [
+          "Accounts",
+          "Accounts"
+        ],
+        "summary": "Get Account",
+        "operationId": "get_account_api_v1_accounts__account_id__get",
+        "parameters": [
+          {
+            "name": "account_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Account Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Accounts",
+          "Accounts"
+        ],
+        "summary": "Set Primary Account",
+        "operationId": "set_primary_account_api_v1_accounts__account_id__patch",
+        "parameters": [
+          {
+            "name": "account_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Account Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Accounts",
+          "Accounts"
+        ],
+        "summary": "Disconnect Account",
+        "operationId": "disconnect_account_api_v1_accounts__account_id__delete",
+        "parameters": [
+          {
+            "name": "account_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Account Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/accounts/{account_id}/sync": {
+      "post": {
+        "tags": [
+          "Accounts",
+          "Accounts"
+        ],
+        "summary": "Trigger Sync",
+        "operationId": "trigger_sync_api_v1_accounts__account_id__sync_post",
+        "parameters": [
+          {
+            "name": "account_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Account Id"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/team/members": {
+      "get": {
+        "tags": [
+          "Team",
+          "Team"
+        ],
+        "summary": "List Members",
+        "operationId": "list_members_api_v1_team_members_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Team",
+          "Team"
+        ],
+        "summary": "Invite Member",
+        "operationId": "invite_member_api_v1_team_members_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InviteBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/team/members/{member_id}": {
+      "patch": {
+        "tags": [
+          "Team",
+          "Team"
+        ],
+        "summary": "Change Role",
+        "operationId": "change_role_api_v1_team_members__member_id__patch",
+        "parameters": [
+          {
+            "name": "member_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Member Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeRoleBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Team",
+          "Team"
+        ],
+        "summary": "Remove Member",
+        "operationId": "remove_member_api_v1_team_members__member_id__delete",
+        "parameters": [
+          {
+            "name": "member_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Member Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ApiResponse": {
+        "properties": {
+          "code": {
+            "type": "integer",
+            "title": "Code",
+            "description": "HTTP status code",
+            "default": 200
+          },
+          "data": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data",
+            "description": "Response payload"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "Human-readable message",
+            "default": "success"
+          },
+          "meta": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Meta",
+            "description": "Additional metadata"
+          }
+        },
+        "type": "object",
+        "title": "ApiResponse",
+        "description": "Unified API response format.\n\nAll TopicAI API responses use this format:\n{code, data, message, meta}\n\nAttributes:\n    code: HTTP status code.\n    data: Response payload (can be None for errors).\n    message: Human-readable message.\n    meta: Additional metadata (AI quality, pagination, etc.)."
+      },
+      "AssetTagUpdateRequest": {
+        "properties": {
+          "tag_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tag Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tag_ids"
+        ],
+        "title": "AssetTagUpdateRequest"
+      },
+      "AssetUploadRequest": {
+        "properties": {
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "mime_type": {
+            "type": "string",
+            "title": "Mime Type"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "image",
+              "document",
+              "audio",
+              "video",
+              "template"
+            ],
+            "title": "Type"
+          },
+          "tags": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tags"
+          }
+        },
+        "type": "object",
+        "required": [
+          "filename",
+          "mime_type",
+          "type"
+        ],
+        "title": "AssetUploadRequest"
+      },
+      "ChangeRoleBody": {
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": [
+              "admin",
+              "editor",
+              "viewer"
+            ],
+            "title": "Role"
+          }
+        },
+        "type": "object",
+        "required": [
+          "role"
+        ],
+        "title": "ChangeRoleBody"
+      },
+      "CreateAccountBody": {
+        "properties": {
+          "platform": {
+            "type": "string",
+            "enum": [
+              "wechat_mp",
+              "wechat_video",
+              "xhs",
+              "bilibili",
+              "douyin",
+              "zhihu"
+            ],
+            "title": "Platform"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "platform",
+          "display_name"
+        ],
+        "title": "CreateAccountBody"
+      },
+      "EffectAttributeRequest": {
+        "properties": {
+          "review_id": {
+            "type": "string",
+            "title": "Review Id",
+            "description": "EffectReview ID"
+          },
+          "actual_data": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Actual Data",
+            "description": "Actual performance metrics"
+          }
+        },
+        "type": "object",
+        "required": [
+          "review_id",
+          "actual_data"
+        ],
+        "title": "EffectAttributeRequest",
+        "description": "Schema for attribution request (post-publish).\n\nAttributes:\n    review_id: The EffectReview ID from the prediction step.\n    actual_data: Actual performance metrics."
+      },
+      "EffectPredictRequest": {
+        "properties": {
+          "topic_title": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Topic Title",
+            "description": "Topic/title to predict"
+          },
+          "content_outline": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Outline",
+            "description": "Content outline for context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "topic_title"
+        ],
+        "title": "EffectPredictRequest",
+        "description": "Schema for blind prediction request.\n\nAttributes:\n    topic_title: The topic/title to predict performance for.\n    content_outline: Optional content outline for context."
+      },
+      "FeedbackSubmitRequest": {
+        "properties": {
+          "target_type": {
+            "type": "string",
+            "pattern": "^(topic|title|idea|viral)$",
+            "title": "Target Type",
+            "description": "Type of AI output (legacy 4-value set)"
+          },
+          "target_id": {
+            "type": "string",
+            "title": "Target Id",
+            "description": "ID of the AI output"
+          },
+          "feedback_type": {
+            "type": "string",
+            "pattern": "^(thumb_up|thumb_down|adopted|modified|ignored)$",
+            "title": "Feedback Type",
+            "description": "Feedback type"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason",
+            "description": "Optional reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "target_type",
+          "target_id",
+          "feedback_type"
+        ],
+        "title": "FeedbackSubmitRequest",
+        "description": "Schema for submitting feedback.\n\nAttributes:\n    target_type: 'topic', 'viral', 'title', or 'idea'.\n    target_id: ID of the AI output.\n    feedback_type: 'thumb_up', 'thumb_down', 'adopted', 'modified', 'ignored'.\n    reason: Optional reason for the feedback."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "IdeaBoostRequest": {
+        "properties": {
+          "idea_text": {
+            "type": "string",
+            "maxLength": 5000,
+            "minLength": 1,
+            "title": "Idea Text",
+            "description": "Idea text"
+          }
+        },
+        "type": "object",
+        "required": [
+          "idea_text"
+        ],
+        "title": "IdeaBoostRequest",
+        "description": "Schema for idea boost request.\n\nAttributes:\n    idea: The fuzzy idea text to crystallize."
+      },
+      "InviteBody": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "admin",
+              "editor",
+              "viewer"
+            ],
+            "title": "Role"
+          },
+          "username": {
+            "type": "string",
+            "title": "Username"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "role",
+          "username"
+        ],
+        "title": "InviteBody"
+      },
+      "LoginRequest": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email",
+            "description": "User email address"
+          },
+          "password": {
+            "type": "string",
+            "title": "Password",
+            "description": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "LoginRequest",
+        "description": "User login request body."
+      },
+      "OnboardingRequest": {
+        "properties": {
+          "track": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Track",
+            "description": "Content track"
+          },
+          "content_formats": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Content Formats",
+            "description": "Content formats"
+          },
+          "production_complexity": {
+            "type": "string",
+            "title": "Production Complexity",
+            "description": "Production complexity"
+          },
+          "content_depth": {
+            "type": "string",
+            "title": "Content Depth",
+            "description": "Content depth preference"
+          },
+          "hotspot_preference": {
+            "type": "string",
+            "title": "Hotspot Preference",
+            "description": "Hotspot preference"
+          }
+        },
+        "type": "object",
+        "required": [
+          "track",
+          "content_formats",
+          "production_complexity",
+          "content_depth",
+          "hotspot_preference"
+        ],
+        "title": "OnboardingRequest",
+        "description": "Schema for onboarding submission.\n\nAttributes:\n    track: Selected content track.\n    content_formats: Preferred content formats.\n    production_complexity: Production complexity level.\n    content_depth: Content depth preference.\n    hotspot_preference: Hotspot preference."
+      },
+      "ProfileUpdateRequest": {
+        "properties": {
+          "track": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Track",
+            "description": "Content track"
+          },
+          "content_formats": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Formats",
+            "description": "Content formats"
+          },
+          "production_complexity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Production Complexity",
+            "description": "Production complexity"
+          },
+          "content_depth": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Depth",
+            "description": "Content depth"
+          },
+          "hotspot_preference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hotspot Preference",
+            "description": "Hotspot preference"
+          },
+          "recommendation_mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recommendation Mode",
+            "description": "Recommendation mode"
+          }
+        },
+        "type": "object",
+        "title": "ProfileUpdateRequest",
+        "description": "Schema for updating a creator profile (all fields optional)."
+      },
+      "PublishSuggestRequest": {
+        "properties": {
+          "platform": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Platform",
+            "description": "Target platform"
+          },
+          "content_type": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Content Type",
+            "description": "Content type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "platform",
+          "content_type"
+        ],
+        "title": "PublishSuggestRequest",
+        "description": "Schema for publish time suggestion request.\n\nAttributes:\n    platform: Target platform.\n    content_type: Content type."
+      },
+      "RefreshRequest": {
+        "properties": {
+          "refresh_token": {
+            "type": "string",
+            "title": "Refresh Token",
+            "description": "Refresh token"
+          }
+        },
+        "type": "object",
+        "required": [
+          "refresh_token"
+        ],
+        "title": "RefreshRequest",
+        "description": "Token refresh request body."
+      },
+      "RegisterRequest": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email",
+            "description": "User email address"
+          },
+          "username": {
+            "type": "string",
+            "maxLength": 50,
+            "minLength": 3,
+            "title": "Username",
+            "description": "Username"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 8,
+            "title": "Password",
+            "description": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "username",
+          "password"
+        ],
+        "title": "RegisterRequest",
+        "description": "User registration request body."
+      },
+      "RiskCheckRequest": {
+        "properties": {
+          "content": {
+            "type": "string",
+            "maxLength": 10000,
+            "minLength": 1,
+            "title": "Content",
+            "description": "Content to check"
+          }
+        },
+        "type": "object",
+        "required": [
+          "content"
+        ],
+        "title": "RiskCheckRequest",
+        "description": "Schema for content risk check request.\n\nAttributes:\n    content: The content text to check for risks."
+      },
+      "TitleOptimizeRequest": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Title",
+            "description": "Original title"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary",
+            "description": "Content summary"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title"
+        ],
+        "title": "TitleOptimizeRequest",
+        "description": "Schema for title optimization request.\n\nAttributes:\n    title: The original title to optimize.\n    content_summary: Optional summary of the content."
+      },
+      "TopicRecommendRequest": {
+        "properties": {
+          "mode": {
+            "type": "string",
+            "pattern": "^(hotspot_fusion|evergreen_deep)$",
+            "title": "Mode",
+            "description": "Recommendation mode",
+            "default": "hotspot_fusion"
+          },
+          "track": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Track",
+            "description": "Track override"
+          }
+        },
+        "type": "object",
+        "title": "TopicRecommendRequest",
+        "description": "Schema for topic recommendation request.\n\nAttributes:\n    mode: Recommendation mode ('hotspot_fusion' or 'evergreen_deep').\n    track: Optional track override (defaults to user profile track)."
+      },
+      "TrackDiagnoseRequest": {
+        "properties": {
+          "track_keyword": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Track Keyword",
+            "description": "Track keyword"
+          }
+        },
+        "type": "object",
+        "required": [
+          "track_keyword"
+        ],
+        "title": "TrackDiagnoseRequest",
+        "description": "Schema for track diagnosis request.\n\nAttributes:\n    track_keyword: The track keyword to diagnose."
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "ViralAnalyzeRequest": {
+        "properties": {
+          "input_type": {
+            "type": "string",
+            "pattern": "^(text|image)$",
+            "title": "Input Type",
+            "description": "Input type: text or image",
+            "default": "text"
+          },
+          "content": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Content",
+            "description": "Content to analyze"
+          }
+        },
+        "type": "object",
+        "required": [
+          "content"
+        ],
+        "title": "ViralAnalyzeRequest",
+        "description": "Schema for viral analysis request.\n\nAttributes:\n    input_type: 'text' or 'image'.\n    content: Text content or image URL/base64."
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Health",
+      "description": "健康检查与系统状态"
+    },
+    {
+      "name": "Authentication",
+      "description": "用户注册、登录与 Token 管理"
+    },
+    {
+      "name": "Profiles",
+      "description": "创作画像创建与管理"
+    },
+    {
+      "name": "Topics",
+      "description": "选题推荐、刷新与解释"
+    },
+    {
+      "name": "Viral",
+      "description": "内容病毒性分析与拆解"
+    },
+    {
+      "name": "Ideas",
+      "description": "创意点子的可行性评估与深化"
+    },
+    {
+      "name": "Titles",
+      "description": "标题优化与变体生成"
+    },
+    {
+      "name": "Tracks",
+      "description": "赛道健康度诊断"
+    },
+    {
+      "name": "Publish",
+      "description": "最佳发布时间建议"
+    },
+    {
+      "name": "Feedback",
+      "description": "用户反馈提交与分析"
+    }
+  ]
+}

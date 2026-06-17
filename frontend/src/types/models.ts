@@ -73,6 +73,8 @@ export interface TopicRecommendation {
   topics: TopicItem[];
   recommendation_mode: RecommendationMode;
   data_source_used: DataSourceLevel | string;
+  /** Spec-007 US2 T044: AI confidence in [0, 1]. */
+  confidence: number;
   created_at: string;
 }
 
