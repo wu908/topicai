@@ -309,6 +309,89 @@ def _make_creator_profile():
     )
 
 
+# ==================== Spec-007 US6 (T079-T080) ====================
+
+
+class TestDeriveRubricWeights:
+    """Spec-007 US6 (T079-T080): LLM-first rubric_weights derivation.
+
+    LLMClient.generate_structured is sync (Pydantic schema validation),
+    so derive_rubric_weights is sync — matching the codebase convention
+    (existing ``generate_profile`` is also sync).
+    """
+
+    def test_llm_path_returns_derived_weights(self, monkeypatch):
+        """T079: LLM 成功 → 权重反映输入 + AI meta 字段."""
+        from app.models.creator_profile import OnboardingRequest
+        from app.services.onboarding import OnboardingService
+
+        def fake_generate_structured(prompt, schema, system_prompt=None, **kwargs):
+            # Return what the schema will accept.
+            return schema.model_validate({
+                "rubric_weights": {
+                    "track_match": 0.40,
+                    "format_match": 0.30,
+                    "hotspot_relevance": 0.20,
+                    "timeliness": 0.05,
+                    "data_quality": 0.05,
+                },
+                "model_version": "onboarding_rubric.v1",
+            })
+
+        mock_llm = MagicMock()
+        mock_llm.generate_structured.side_effect = fake_generate_structured
+        svc = OnboardingService()
+        svc._get_llm = lambda: mock_llm
+
+        req = OnboardingRequest(
+            track="科技",
+            content_formats=["短视频"],
+            production_complexity="medium",
+            content_depth="balanced",
+            hotspot_preference="medium",
+        )
+        result = svc.derive_rubric_weights(req)
+
+        assert result["data_source"] == "llm_simulation"
+        assert result["confidence"] >= 0.6
+        assert result["model_version"] == "onboarding_rubric.v1"
+        # track="科技" should be reflected in a high track_match weight
+        assert result["rubric_weights"]["track_match"] == 0.40
+        # 5 canonical dimensions
+        assert set(result["rubric_weights"].keys()) == {
+            "track_match", "format_match", "hotspot_relevance",
+            "timeliness", "data_quality",
+        }
+
+    def test_llm_failure_returns_fallback(self, monkeypatch):
+        """T080: LLM 失败 → 降级到 heuristic + 低 confidence."""
+        from app.models.creator_profile import OnboardingRequest
+        from app.services.onboarding import OnboardingService
+
+        # LLM 故意 raise
+        mock_llm = MagicMock()
+        mock_llm.generate_structured.side_effect = RuntimeError("LLM unavailable")
+        svc = OnboardingService()
+        svc._get_llm = lambda: mock_llm
+
+        req = OnboardingRequest(
+            track="美妆",
+            content_formats=["图文"],
+            production_complexity="low",
+            content_depth="shallow",
+            hotspot_preference="追热点",
+        )
+        result = svc.derive_rubric_weights(req)
+
+        # Fallback fired
+        assert result["data_source"] in ("template_fallback", "heuristic_fallback")
+        assert result["confidence"] <= 0.5
+        # Default rubric_weights: 5 dims, sum ≈ 1.0
+        weights = result["rubric_weights"]
+        assert len(weights) == 5
+        assert abs(sum(weights.values()) - 1.0) < 1e-6
+
+
 def _make_creator_profile_dict(profile_id: str, user_id: str) -> dict:
     """Create a dict for database insertion."""
     import json
