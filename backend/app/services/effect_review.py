@@ -1,16 +1,25 @@
 """Effect review service for TopicAI v4.0.
 
-Implements the cheat-on-content calibration loop:
-Blind prediction → T+N attribution → Profile evolution.
+Spec-007 US4 (T065): DB-persistent implementation of the three-phase
+calibration loop (predict -> attribute -> derive_learnings).
 
-Spec-007 US7 (T066): adds ``list_by_user`` and ``derive_learnings`` for
-the ``GET /api/v1/reviews/list`` and ``GET /api/v1/reviews/learnings``
-endpoints. Reads from the persisted ``effect_reviews`` table.
+Persistence: every phase hits the ``effect_reviews`` table.
+- ``create_prediction`` INSERTs a new row in status='awaiting_actuals'.
+- ``attribute`` UPDATEs the same row with actual_result / attribution /
+  learnings / status='attributed'.
+- ``derive_learnings`` SELECTs the user's last-30-day window, delegates
+  the aggregation to ``EffectReviewChain.derive_learnings``, and caches
+  the result for 1h per (user_id, window_days) tuple.
+- ``list_by_user`` SELECTs the user's reviews, newest first, with an
+  optional status filter.
+
+The pre-US4 in-memory ``self._predictions`` dict is removed.
 """
 
-import hashlib
 import json
 import logging
+import time
+import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -19,267 +28,232 @@ from app.core.utils import utc_now
 logger = logging.getLogger(__name__)
 
 
-class EffectReviewService:
-    """Manages the content effect review lifecycle.
+# Spec-007 US4 T065: 1h learn-cache TTL
+LEARN_CACHE_TTL_SECONDS = 3600
 
-    The calibration loop consists of three phases:
-    1. Blind prediction (pre-publish)
-    2. T+N attribution (post-publish actual data)
-    3. Profile evolution (rubric_weights update)
+
+class EffectReviewService:
+    """DB-persistent effect review lifecycle service.
+
+    Args:
+        db: ``Database`` instance (required for all methods).
+        chain: Optional pre-built ``EffectReviewChain``; lazily constructed
+            on first use if omitted.
     """
 
-    def __init__(self):
-        self._predictions: dict[str, dict[str, Any]] = {}
+    def __init__(self, db: Any, chain: Any | None = None):
+        self.db = db
+        self.chain = chain  # lazily built on first chain call
+        # Per-instance 1h cache: (user_id, window_days) -> (ts, payload)
+        self._learn_cache: dict[tuple[str, int], tuple[float, dict]] = {}
 
-    def create_prediction(
-        self, user_id: str, content_data: dict[str, Any]
+    # ---------------- T065: create_prediction ----------------
+
+    async def create_prediction(
+        self,
+        user_id: str,
+        data: dict[str, Any],
     ) -> dict[str, Any]:
-        """Create a blind prediction before publishing.
+        """Insert a blind prediction row.
 
         Args:
             user_id: User ID.
-            content_data: Content details (topic_title, content_type,
-                         platform, track, outline).
+            data: Dict with ``topic_title`` (required) and
+                ``content_outline`` (optional).
 
         Returns:
-            Prediction dict with id, prediction, summary, confidence.
+            ``EffectReview``-shaped dict (with prediction JSON deserialized).
         """
-        prediction_id = f"er-{user_id}-{_timestamp_hash()}"
+        topic_title = (data.get("topic_title") or "").strip()
+        content_outline = (data.get("content_outline") or "").strip() or None
+        if not topic_title:
+            raise ValueError("topic_title is required")
 
-        # Generate prediction (heuristic for MVP)
-        estimated_views = self._estimate_views(content_data)
-        estimated_likes = int(estimated_views * 0.05)
-        estimated_comments = int(estimated_views * 0.01)
-
-        prediction = {
-            "estimated_views": estimated_views,
-            "estimated_likes": estimated_likes,
-            "estimated_comments": estimated_comments,
-            "engagement_rate": round(estimated_likes / max(estimated_views, 1), 4),
-        }
-
-        record = {
-            "id": prediction_id,
-            "user_id": user_id,
-            "content_data": content_data,
-            "prediction": prediction,
-            "prediction_summary": self._summarize_prediction(prediction),
-            "confidence": 0.7,
-            "is_immutable": True,
-            "created_at": utc_now(),
-        }
-
-        self._predictions[prediction_id] = record
-        return record
-
-    def _estimate_views(self, data: dict[str, Any]) -> int:
-        """Estimate view count based on content characteristics.
-
-        Args:
-            data: Content metadata.
-
-        Returns:
-            Estimated view count.
-        """
-        base = 500  # base reach
-        if data.get("platform") == "小红书":
-            base = 300
-        elif data.get("platform") == "抖音":
-            base = 1000
-        content_type = data.get("content_type", "图文")
-        if content_type == "短视频":
-            base *= 2
-        # Add randomness
-        import random
-        return int(base * random.uniform(0.7, 1.5))
-
-    def _summarize_prediction(self, prediction: dict[str, Any]) -> str:
-        """Create a human-readable prediction summary.
-
-        Does NOT expose exact numerical estimates.
-
-        Args:
-            prediction: Raw prediction dict.
-
-        Returns:
-            Summary string.
-        """
-        views = prediction["estimated_views"]
-        if views < 500:
-            tier = "低"
-        elif views < 2000:
-            tier = "中等"
+        chain = self._get_chain()
+        prediction: Any = await chain.predict(
+            topic_title=topic_title,
+            content_outline=content_outline,
+        )
+        if hasattr(prediction, "model_dump"):
+            prediction_dict = prediction.model_dump()
         else:
-            tier = "较高"
-        return f"预估该内容的表现属于{tier}水平，建议关注标题吸引力和发布时间优化。"
+            prediction_dict = dict(prediction)
 
-    def verify_immutable(self, prediction_id: str) -> dict[str, Any]:
-        """Check if a prediction is immutable.
+        review_id = str(uuid.uuid4())
+        now = utc_now()
+        row = {
+            "id": review_id,
+            "user_id": user_id,
+            "topic_title": topic_title,
+            "content_outline": content_outline or "",
+            "prediction": json.dumps(prediction_dict, ensure_ascii=False),
+            "status": "awaiting_actuals",
+            "created_at": now,
+            "updated_at": now,
+        }
+        await self.db.insert("effect_reviews", row)
 
-        Args:
-            prediction_id: Prediction ID.
+        return {
+            "id": review_id,
+            "user_id": user_id,
+            "topic_title": topic_title,
+            "content_outline": content_outline or "",
+            "prediction": prediction_dict,
+            "actual_result": None,
+            "attribution": None,
+            "learnings": None,
+            "status": "awaiting_actuals",
+            "created_at": now,
+        }
 
-        Returns:
-            Dict with is_immutable flag.
-        """
-        if prediction_id in self._predictions:
-            return {"is_immutable": True, "prediction_id": prediction_id}
-        return {"is_immutable": False, "prediction_id": prediction_id}
+    # ---------------- T065: attribute ----------------
 
-    def create_attribution(
+    async def attribute(
         self,
         user_id: str,
         prediction_id: str,
         actual_data: dict[str, Any],
     ) -> dict[str, Any]:
-        """Create attribution analysis from actual performance data.
+        """Run attribution and persist actual_result / attribution / learnings.
+
+        Args:
+            user_id: User ID (ownership check).
+            prediction_id: EffectReview.id from the predict step.
+            actual_data: Actual post-publish metrics.
+
+        Returns:
+            Updated ``EffectReview``-shaped dict.
+
+        Raises:
+            ValueError: If the prediction doesn't exist or doesn't belong
+                to ``user_id``.
+        """
+        row = await self.db.fetch_one(
+            "SELECT id, user_id, topic_title, content_outline, prediction, "
+            "status FROM effect_reviews WHERE id = :id",
+            {"id": prediction_id},
+        )
+        if not row or row.get("user_id") != user_id:
+            raise ValueError(f"prediction not found: {prediction_id}")
+
+        prediction_raw = row.get("prediction") or "{}"
+        prediction = _maybe_load_json(prediction_raw) or {}
+
+        chain = self._get_chain()
+        attribution = await chain.attribute(prediction, actual_data)
+        if hasattr(attribution, "model_dump"):
+            attribution_dict = attribution.model_dump()
+        else:
+            attribution_dict = dict(attribution)
+
+        # Roll the attribution into a top-level summary so derive_learnings
+        # can rank dimensions without re-walking every conclusion.
+        learnings_dict = {
+            "top_strengths": [
+                c["dimension"] for c in attribution_dict.get("conclusions", [])
+                if c.get("relevance", 0.5) >= 0.5
+            ],
+            "top_weaknesses": [
+                c["dimension"] for c in attribution_dict.get("conclusions", [])
+                if c.get("relevance", 0.5) < 0.5
+            ],
+        }
+
+        now = utc_now()
+        await self.db.update(
+            "effect_reviews",
+            {
+                "actual_result": json.dumps(actual_data, ensure_ascii=False),
+                # EffectReview.attribution is typed as ``str``; store the
+                # full AttributionPayload as a JSON string so the
+                # /api/v1/reviews/list endpoint round-trips cleanly.
+                "attribution": json.dumps(attribution_dict, ensure_ascii=False),
+                "learnings": json.dumps(learnings_dict, ensure_ascii=False),
+                "status": "attributed",
+                "updated_at": now,
+            },
+            {"id": prediction_id},
+        )
+
+        return {
+            "id": prediction_id,
+            "user_id": user_id,
+            "topic_title": row.get("topic_title"),
+            "content_outline": row.get("content_outline"),
+            "prediction": prediction,
+            "actual_result": actual_data,
+            "attribution": attribution_dict,
+            "learnings": learnings_dict,
+            "status": "attributed",
+            "created_at": row.get("created_at"),
+            "updated_at": now,
+        }
+
+    # ---------------- T065: derive_learnings (1h cache) ----------------
+
+    async def derive_learnings(
+        self,
+        user_id: str,
+        window_days: int = 30,
+    ) -> dict[str, Any]:
+        """Aggregate the user's attributed reviews over ``window_days``.
+
+        Spec-007 US4 T065: 1h per-(user_id, window_days) cache.
+        Returns the ``LearningsPayload`` shape.
 
         Args:
             user_id: User ID.
-            prediction_id: Original prediction ID.
-            actual_data: Actual performance metrics.
+            window_days: Rolling window in days (1..365).
 
         Returns:
-            Attribution dict with conclusions and learnings.
+            ``LearningsPayload``-shaped dict.
         """
-        prediction = self._predictions.get(prediction_id, {}).get("prediction", {})
+        window_days = max(1, min(int(window_days), 365))
+        cache_key = (user_id, window_days)
+        cached = self._learn_cache.get(cache_key)
+        if cached and (time.monotonic() - cached[0]) < LEARN_CACHE_TTL_SECONDS:
+            return cached[1]
 
-        accuracy = self.compute_accuracy(prediction, actual_data) if prediction else {}
+        cutoff = (
+            datetime.now(UTC) - timedelta(days=window_days)
+        ).isoformat()
+        rows = await self.db.fetch_all(
+            "SELECT id, user_id, topic_title, prediction, actual_result, "
+            "attribution, learnings, status, created_at "
+            "FROM effect_reviews "
+            "WHERE user_id = :uid AND created_at >= :cutoff "
+            "ORDER BY created_at DESC",
+            {"uid": user_id, "cutoff": cutoff},
+        )
 
-        conclusions, learnings = self._derive_conclusions(accuracy, actual_data)
+        chain = self._get_chain()
+        payload = await chain.derive_learnings(
+            user_id=user_id, effect_reviews=rows, window_days=window_days
+        )
+        if hasattr(payload, "model_dump"):
+            result = payload.model_dump()
+        else:
+            result = dict(payload)
 
-        return {
-            "id": f"attr-{user_id}-{_timestamp_hash()}",
-            "user_id": user_id,
-            "prediction_id": prediction_id,
-            "actual_data": actual_data,
-            "accuracy": accuracy,
-            "attribution_conclusions": conclusions,
-            "learnings": learnings,
-            "created_at": utc_now(),
-        }
+        self._learn_cache[cache_key] = (time.monotonic(), result)
+        return result
 
-    def compute_accuracy(
-        self, prediction: dict[str, Any], actual: dict[str, Any]
-    ) -> dict[str, Any]:
-        """Compute prediction accuracy against actual data.
-
-        Args:
-            prediction: Predicted metrics.
-            actual: Actual metrics.
-
-        Returns:
-            Accuracy metrics dict.
-        """
-        def _deviation(pred_key: str, actual_key: str) -> float:
-            p = prediction.get(pred_key, 0)
-            a = actual.get(actual_key, 0)
-            if a == 0:
-                return 0.0
-            return round((p - a) / a, 4)
-
-        return {
-            "view_deviation": _deviation("estimated_views", "views"),
-            "like_deviation": _deviation("estimated_likes", "likes"),
-            "comment_deviation": _deviation("estimated_comments", "comments"),
-        }
-
-    def _derive_conclusions(
-        self, accuracy: dict[str, Any], actual: dict[str, Any]
-    ) -> tuple[list[dict[str, Any]], list[str]]:
-        """Derive attribution conclusions from accuracy data.
-
-        Args:
-            accuracy: Accuracy metrics.
-            actual: Actual performance data.
-
-        Returns:
-            (conclusions_list, learnings_list) tuple.
-        """
-        conclusions = []
-        learnings = []
-
-        if accuracy.get("view_deviation", 0) < -0.3:
-            conclusions.append({
-                "dimension": "流量",
-                "finding": "实际播放量显著低于预期",
-                "possible_causes": ["标题吸引力不足", "发布时间不佳", "平台流量波动"],
-            })
-            learnings.append("标题吸引力不足")
-
-        if accuracy.get("like_deviation", 0) < -0.2:
-            conclusions.append({
-                "dimension": "互动",
-                "finding": "用户互动率低于预期",
-                "possible_causes": ["内容深度不够", "缺乏互动引导"],
-            })
-            learnings.append("发布时间非黄金时段")
-
-        if not conclusions:
-            conclusions.append({
-                "dimension": "整体",
-                "finding": "表现符合预期",
-                "possible_causes": [],
-            })
-            learnings.append("内容策略方向正确")
-
-        return conclusions, learnings
-
-    def evolve_profile_weights(
-        self,
-        current_weights: dict[str, float],
-        learnings: list[str],
-    ) -> dict[str, float]:
-        """Evolve rubric weights based on review learnings.
-
-        Args:
-            current_weights: Current rubric weight mapping.
-            learnings: Learning strings from attribution.
-
-        Returns:
-            Updated rubric weights (sum to 1.0).
-        """
-        new_weights = dict(current_weights)
-
-        # Learning → dimension mapping
-        learning_map = {
-            "标题吸引力不足": "format_match",
-            "发布时间非黄金时段": "timeliness",
-            "内容深度不够": "content_depth_match",
-            "内容策略方向正确": "track_match",
-            "制作成本过高": "production_complexity_match",
-        }
-
-        for learning in learnings:
-            dim = None
-            for keyword, match_dim in learning_map.items():
-                if keyword in learning:
-                    dim = match_dim
-                    break
-            if dim and dim in new_weights:
-                new_weights[dim] += 0.02
-
-        # Normalize to sum to 1.0
-        total = sum(new_weights.values())
-        if total > 0:
-            for key in new_weights:
-                new_weights[key] = round(new_weights[key] / total, 4)
-
-        return new_weights
-
-    # ---------- Spec-007 US7 (T066): persisted reads ----------
+    # ---------------- T066 (US7, kept compatible): list_by_user ----------------
 
     async def list_by_user(
         self,
-        db: Any,
         user_id: str,
         status: str | None = None,
         limit: int = 20,
     ) -> list[dict[str, Any]]:
         """List effect reviews for a user, newest first (Spec-007 T066).
 
+        Note: signature is ``(user_id, status, limit)`` with no ``db`` arg
+        — the service is constructed with ``db`` once and reuses it. The
+        US7 router passes ``db`` to the service constructor, so this
+        works unchanged.
+
         Args:
-            db: Shared ``Database`` instance from app state.
             user_id: User whose reviews to return.
             status: Optional status filter
                 ('awaiting_actuals' | 'predicted' | 'attributed').
@@ -288,12 +262,10 @@ class EffectReviewService:
         Returns:
             List of ``EffectReview``-shaped dicts.
         """
-        from sqlalchemy import text
-
         limit = max(1, min(int(limit), 100))
         query = (
-            "SELECT id, user_id, topic_title, prediction, actual_result, "
-            "attribution, learnings, status, created_at "
+            "SELECT id, user_id, topic_title, content_outline, prediction, "
+            "actual_result, attribution, learnings, status, created_at "
             "FROM effect_reviews WHERE user_id = :uid"
         )
         params: dict[str, Any] = {"uid": user_id}
@@ -303,99 +275,51 @@ class EffectReviewService:
         query += " ORDER BY created_at DESC LIMIT :limit"
         params["limit"] = limit
 
-        rows = await db.fetch_all(query, params)
+        rows = await self.db.fetch_all(query, params)
         return [_row_to_review(r) for r in rows]
 
-    async def derive_learnings(
-        self,
-        db: Any,
-        user_id: str,
-        window_days: int = 30,
-    ) -> dict[str, Any]:
-        """Aggregate learnings from attributed reviews (Spec-007 T066).
+    # ---------------- internal ----------------
 
-        Scans the user's reviews within ``window_days`` (default 30) and
-        collects the recurring ``top_strengths`` / ``top_weaknesses``
-        observations. Returns a ``LearningsPayload`` shape.
+    def _get_chain(self) -> Any:
+        if self.chain is None:
+            from app.chains.effect_review_chain import EffectReviewChain
 
-        Args:
-            db: Shared ``Database`` instance from app state.
-            user_id: User whose reviews to aggregate.
-            window_days: Rolling window size in days.
+            self.chain = EffectReviewChain()
+        return self.chain
 
-        Returns:
-            ``LearningsPayload``-shaped dict.
-        """
-        cutoff = (
-            datetime.now(UTC) - timedelta(days=max(1, int(window_days)))
-        ).isoformat()
-        rows = await db.fetch_all(
-            "SELECT learnings FROM effect_reviews "
-            "WHERE user_id = :uid AND created_at >= :cutoff "
-            "AND learnings IS NOT NULL",
-            {"uid": user_id, "cutoff": cutoff},
-        )
 
-        strengths: dict[str, int] = {}
-        weaknesses: dict[str, int] = {}
-        for r in rows:
-            raw = r.get("learnings")
-            if not raw:
-                continue
-            try:
-                d = json.loads(raw)
-            except (TypeError, ValueError):
-                continue
-            if isinstance(d, dict):
-                for s in d.get("top_strengths", []) or []:
-                    strengths[s] = strengths.get(s, 0) + 1
-                for w in d.get("top_weaknesses", []) or []:
-                    weaknesses[w] = weaknesses.get(w, 0) + 1
-            elif isinstance(d, list):
-                # Legacy: learnings stored as a flat list of strings.
-                for item in d:
-                    if isinstance(item, str):
-                        weaknesses[item] = weaknesses.get(item, 0) + 1
-
-        top_strengths = [
-            s for s, _ in sorted(strengths.items(), key=lambda x: -x[1])[:3]
-        ]
-        top_weaknesses = [
-            w for w, _ in sorted(weaknesses.items(), key=lambda x: -x[1])[:3]
-        ]
-
-        return {
-            "top_strengths": top_strengths,
-            "top_weaknesses": top_weaknesses,
-            "sample_size": len(rows),
-            "window_days": int(window_days),
-        }
+# ==================== module-level helpers ====================
 
 
 def _row_to_review(r: Any) -> dict[str, Any]:
-    """Convert a raw DB row into an ``EffectReview``-shaped dict."""
-    def _maybe_load(v: Any) -> Any:
-        if v is None:
-            return None
-        if isinstance(v, (dict, list)):
-            return v
-        try:
-            return json.loads(v)
-        except (TypeError, ValueError):
-            return v
+    """Convert a raw DB row into an ``EffectReview``-shaped dict.
 
+    Per the Pydantic contract (``EffectReview.attribution: str | None``),
+    the ``attribution`` column is kept as a JSON-encoded string and
+    only the dict-typed fields (``prediction``, ``actual_result``,
+    ``learnings``) are parsed back to objects.
+    """
     return {
         "id": r["id"],
         "user_id": r["user_id"],
         "topic_title": r["topic_title"],
-        "prediction": _maybe_load(r.get("prediction")) or {},
-        "actual_result": _maybe_load(r.get("actual_result")),
-        "attribution": _maybe_load(r.get("attribution")),
-        "learnings": _maybe_load(r.get("learnings")),
+        "prediction": _maybe_load_json(r.get("prediction")) or {},
+        "actual_result": _maybe_load_json(r.get("actual_result")),
+        "attribution": r.get("attribution"),
+        "learnings": _maybe_load_json(r.get("learnings")),
+        "status": r.get("status", "awaiting_actuals"),
         "created_at": r["created_at"],
     }
 
 
-def _timestamp_hash() -> str:
-    raw = datetime.now(UTC).isoformat()
-    return hashlib.sha256(raw.encode()).hexdigest()[:8]
+def _maybe_load_json(v: Any) -> Any:
+    if v is None:
+        return None
+    if isinstance(v, (dict, list)):
+        return v
+    if isinstance(v, str):
+        try:
+            return json.loads(v)
+        except (TypeError, ValueError):
+            return v
+    return v

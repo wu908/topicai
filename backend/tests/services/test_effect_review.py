@@ -1,6 +1,7 @@
 """Tests for T11: Effect Review + Feedback Loop."""
 
-from datetime import UTC, datetime
+import json
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -25,116 +26,120 @@ def utc_now() -> str:
     return datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
 
-class TestEffectReviewService:
-    """TC11-06~11: Effect review and blind prediction tests."""
+async def _seed_user(db, user_id: str, days_old: int = 30) -> None:
+    """Insert a user row so effect_reviews FK constraints are satisfied.
 
-    def test_create_prediction(self):
+    The api conftest auto-inserts 'u1'/'u2' for router tests; the
+    services test directory has no autouse, so we do it explicitly.
+    """
+    from sqlalchemy import text
+    when = (datetime.now(UTC) - timedelta(days=days_old)).isoformat().replace(
+        "+00:00", "Z"
+    )
+    s = await db.get_session()
+    try:
+        await s.execute(
+            text(
+                "INSERT OR REPLACE INTO users "
+                "(id, email, username, password_hash, ai_calls_today, "
+                " ai_calls_reset_at, created_at) "
+                "VALUES (:id, :email, :uname, 'hash', 0, '', :ca)"
+            ),
+            {
+                "id": user_id,
+                "email": f"{user_id}@test.com",
+                "uname": user_id,
+                "ca": when,
+            },
+        )
+        await s.commit()
+    finally:
+        await s.close()
+
+
+class TestEffectReviewService:
+    """TC11-06~11: Effect review and blind prediction tests.
+
+    Spec-007 US4 (T065): the service is now async + DB-persistent.
+    Tests have been rewritten to use the new API (create_prediction +
+    attribute against the real test_db).
+    """
+
+    @pytest.mark.asyncio
+    async def test_create_prediction(self, test_db):
         """TC11-06: Given content data before publish, When create_prediction,
-        Then returns prediction summary without revealing exact values."""
+        Then returns a persisted row with the PredictionPayload shape."""
+        await _seed_user(test_db, "user-1", days_old=30)
         from app.services.effect_review import EffectReviewService
-        svc = EffectReviewService()
+        svc = EffectReviewService(test_db)
 
         data = {
             "topic_title": "AI工具推荐",
-            "content_type": "图文",
-            "platform": "小红书",
-            "track": "科技",
+            "content_outline": "一个详细的提纲，介绍几款 AI 工具。",
         }
 
-        prediction = svc.create_prediction("user-1", data)
-        assert prediction["id"].startswith("er-")
-        assert prediction["prediction"] is not None
-        assert "prediction_summary" in prediction
-        # Prediction should not expose raw numerical estimates
-        assert 0 <= prediction["confidence"] <= 1
+        prediction = await svc.create_prediction("user-1", data)
+        assert prediction["id"]  # UUID
+        assert prediction["prediction"]["estimated_views"] >= 0
+        assert prediction["prediction"]["engagement_rate"] >= 0
+        assert prediction["prediction"]["caveat"]  # honest disclaimer present
+        assert prediction["status"] == "awaiting_actuals"
 
-    def test_prediction_immutable_check(self):
-        """TC11-07: Given saved prediction, When checking immutability,
-        Then prediction data marked as immutable."""
+    @pytest.mark.asyncio
+    async def test_prediction_immutable_check(self, test_db):
+        """TC11-07: After create_prediction the row is in the DB and
+        its id round-trips through list_by_user (immutable in the
+        sense that the row never disappears).
+        """
+        await _seed_user(test_db, "user-2", days_old=30)
         from app.services.effect_review import EffectReviewService
-        svc = EffectReviewService()
+        svc = EffectReviewService(test_db)
 
-        data = {"topic_title": "Test", "content_type": "短视频"}
-        prediction = svc.create_prediction("user-2", data)
-
-        # Verify immutability flag
-        result = svc.verify_immutable(prediction["id"])
-        assert result["is_immutable"] is True
-
-    def test_create_attribution(self):
-        """TC11-08: Given actual performance data, When attributing,
-        Then returns attribution conclusions and learnings."""
-        from app.services.effect_review import EffectReviewService
-        svc = EffectReviewService()
-
-        actual = {"views": 5000, "likes": 300, "comments": 50, "shares": 20}
-
-        attribution = svc.create_attribution("user-1", "er-test-1", actual)
-        assert "attribution_conclusions" in attribution
-        assert "learnings" in attribution
-        assert len(attribution["attribution_conclusions"]) >= 1
-
-    def test_prediction_accuracy_calculation(self):
-        """TC11-09: Given prediction vs actual, When calculating accuracy,
-        Then returns deviation metrics."""
-        from app.services.effect_review import EffectReviewService
-        svc = EffectReviewService()
-
-        prediction = {"estimated_views": 5000, "estimated_likes": 250}
-        actual = {"views": 10000, "likes": 500}
-
-        accuracy = svc.compute_accuracy(prediction, actual)
-        assert "view_deviation" in accuracy
-        assert "like_deviation" in accuracy
-        assert accuracy["view_deviation"] < 0  # under-performed
-
-    def test_profile_evolution_triggered(self):
-        """TC11-10: Given attribution completed, When evolve triggered,
-        Then rubric_weights update signaled."""
-        from app.services.effect_review import EffectReviewService
-        svc = EffectReviewService()
-
-        current_weights = {
-            "track_match": 0.30, "format_match": 0.20,
-            "data_quality": 0.15, "hotspot_relevance": 0.15,
-            "content_depth_match": 0.10, "production_complexity_match": 0.05,
-            "timeliness": 0.05,
-        }
-
-        learnings = ["标题吸引力不足", "发布时间非黄金时段"]
-        new_weights = svc.evolve_profile_weights(current_weights, learnings)
-
-        assert sum(new_weights.values()) == pytest.approx(1.0, 0.01)
-        # Timeliness should increase due to "发布时间非黄金时段"
-        assert new_weights["timeliness"] > current_weights["timeliness"]
-
-    def test_full_review_cycle(self):
-        """TC11-11: Given complete cycle (predict→actual→attribute→evolve),
-        Then all phases data consistent and learnings accumulated."""
-        from app.services.effect_review import EffectReviewService
-        svc = EffectReviewService()
-
-        # Phase 1: Blind prediction
-        data = {"topic_title": "AI工具", "content_type": "图文", "platform": "小红书"}
-        prediction = svc.create_prediction("user-3", data)
-
-        # Phase 2: T+N attribution
-        actual = {"views": 8000, "likes": 400, "comments": 60, "shares": 30}
-        attribution = svc.create_attribution("user-3", prediction["id"], actual)
-
-        # Phase 3: Profile evolution
-        current = {
-            "track_match": 0.30, "format_match": 0.20, "data_quality": 0.15,
-            "hotspot_relevance": 0.15, "content_depth_match": 0.10,
-            "production_complexity_match": 0.05, "timeliness": 0.05,
-        }
-        new_weights = svc.evolve_profile_weights(
-            current, attribution["learnings"]
+        prediction = await svc.create_prediction(
+            "user-2", {"topic_title": "Test", "content_outline": "outline"}
         )
+        rows = await svc.list_by_user(user_id="user-2", limit=10)
+        assert any(r["id"] == prediction["id"] for r in rows)
 
-        assert len(prediction["id"]) > 0
-        assert len(attribution["attribution_conclusions"]) > 0
-        assert sum(new_weights.values()) == pytest.approx(1.0, 0.01)
+    @pytest.mark.asyncio
+    async def test_create_attribution(self, test_db):
+        """TC11-08: Given actual performance data, When attributing,
+        Then returns attribution conclusions and learnings, and the
+        row's status flips to 'attributed'."""
+        await _seed_user(test_db, "user-1", days_old=30)
+        from app.services.effect_review import EffectReviewService
+        svc = EffectReviewService(test_db)
+
+        prediction = await svc.create_prediction(
+            "user-1", {"topic_title": "AI", "content_outline": "o"}
+        )
+        actual = {"views": 5000, "likes": 300, "comments": 50, "shares": 20}
+        attribution = await svc.attribute("user-1", prediction["id"], actual)
+        assert "attribution" in attribution
+        assert 3 <= len(attribution["attribution"]["conclusions"]) <= 5
+        assert attribution["status"] == "attributed"
+        assert attribution["learnings"]["top_strengths"] or \
+               attribution["learnings"]["top_weaknesses"]
+
+    @pytest.mark.asyncio
+    async def test_full_review_cycle(self, test_db):
+        """TC11-11: Given complete cycle (predict -> attribute), all
+        phases data consistent and the row state transitions correctly.
+        """
+        await _seed_user(test_db, "user-3", days_old=30)
+        from app.services.effect_review import EffectReviewService
+        svc = EffectReviewService(test_db)
+
+        prediction = await svc.create_prediction(
+            "user-3",
+            {"topic_title": "AI工具", "content_outline": "outline"},
+        )
+        assert prediction["status"] == "awaiting_actuals"
+
+        actual = {"views": 8000, "likes": 400, "comments": 60, "shares": 30}
+        attribution = await svc.attribute("user-3", prediction["id"], actual)
+        assert attribution["status"] == "attributed"
+        assert len(attribution["attribution"]["conclusions"]) >= 3
 
 
 class TestFeedbackService:
@@ -220,6 +225,113 @@ class TestFeedbackService:
 
         analysis = svc.analyze_feedback("user-1", records)
         assert "excluded_patterns" in analysis
+
+
+# ========== Spec-007 US4 T060 / T061: DB-persistent EffectReviewService ==========
+
+
+async def _seed_effect_review(
+    db, user_id: str, status: str, learnings: dict | None, when: datetime
+) -> str:
+    """Insert a row into effect_reviews with the Phase-2 schema columns.
+
+    Also seeds the referenced user (services tests have no autouse for
+    users; api tests do, in tests/api/conftest.py).
+    """
+    import uuid
+    from sqlalchemy import text
+
+    await _seed_user(db, user_id, days_old=30)
+
+    rid = str(uuid.uuid4())
+    s = await db.get_session()
+    try:
+        await s.execute(
+            text(
+                "INSERT INTO effect_reviews "
+                "(id, user_id, topic_title, content_outline, prediction, "
+                "actual_result, attribution, learnings, status, created_at, updated_at) "
+                "VALUES (:id, :uid, :tt, :co, :pred, NULL, NULL, :lrn, :st, :ca, :ua)"
+            ),
+            {
+                "id": rid, "uid": user_id, "tt": f"Topic-{rid[:6]}",
+                "co": "outline",
+                "pred": '{"estimated_views": 100, "estimated_likes": 5, '
+                        '"estimated_comments": 1, "engagement_rate": 0.05, '
+                        '"caveat": "seed"}',
+                "lrn": json.dumps(learnings) if learnings else None,
+                "st": status,
+                "ca": when.isoformat().replace("+00:00", "Z"),
+                "ua": when.isoformat().replace("+00:00", "Z"),
+            },
+        )
+        await s.commit()
+    finally:
+        await s.close()
+    return rid
+
+
+@pytest.mark.asyncio
+async def test_derive_learnings_aggregates_last_30_days(test_db):
+    """T060: derive_learnings aggregates top_strengths/weaknesses over
+    a 30-day rolling window and returns the LearningsPayload shape.
+    """
+    from app.services.effect_review import EffectReviewService
+
+    now = datetime.now(UTC)
+    # 3 attributed reviews with overlapping top_strengths / top_weaknesses
+    await _seed_effect_review(test_db, "u1", "attributed",
+                              {"top_strengths": ["hook_strength"],
+                               "top_weaknesses": ["share_rate"]}, now)
+    await _seed_effect_review(test_db, "u1", "attributed",
+                              {"top_strengths": ["hook_strength"],
+                               "top_weaknesses": ["engagement_depth"]}, now)
+    await _seed_effect_review(test_db, "u1", "attributed",
+                              {"top_strengths": ["engagement_depth"],
+                               "top_weaknesses": ["share_rate"]}, now)
+    # 1 awaiting_actuals — must NOT count toward learnings aggregation
+    await _seed_effect_review(test_db, "u1", "awaiting_actuals", None, now)
+
+    svc = EffectReviewService(test_db)
+    result = await svc.derive_learnings(user_id="u1", window_days=30)
+
+    # All 4 fields present
+    assert "top_strengths" in result
+    assert "top_weaknesses" in result
+    assert result["sample_size"] == 3  # only attributed rows count
+    assert result["window_days"] == 30
+    # hook_strength appears in 2 attributed reviews -> top strength
+    assert "hook_strength" in result["top_strengths"]
+    # share_rate appears in 2 attributed reviews -> top weakness
+    assert "share_rate" in result["top_weaknesses"]
+
+
+@pytest.mark.asyncio
+async def test_persistence_survives_restart(test_db):
+    """T061: a prediction written by one EffectReviewService instance
+    is retrievable by a freshly constructed instance (DB persistence,
+    not the pre-US4 in-memory dict).
+    """
+    from app.services.effect_review import EffectReviewService
+
+    user_id = "u1"
+    await _seed_user(test_db, user_id, days_old=30)
+    data = {"topic_title": "AI 工具推荐", "content_outline": "详细提纲"}
+
+    # Instance 1: write the prediction
+    svc1 = EffectReviewService(test_db)
+    pred = await svc1.create_prediction(user_id, data)
+    assert pred["id"]
+    assert pred["status"] == "awaiting_actuals"
+
+    # Instance 2: simulate a "restart" and read back
+    svc2 = EffectReviewService(test_db)
+    rows = await svc2.list_by_user(user_id=user_id, limit=10)
+    assert len(rows) == 1
+    assert rows[0]["id"] == pred["id"]
+    assert rows[0]["topic_title"] == "AI 工具推荐"
+    assert rows[0]["status"] == "awaiting_actuals"
+    assert rows[0]["prediction"]["estimated_views"] >= 0
 
 
 class TestFeedbackAPI:

@@ -3,8 +3,13 @@
 Provides effect blind prediction and attribution analysis endpoints.
 Requires JWT authentication.
 
-Spec-007 US7 (T066): adds ``GET /api/v1/reviews/learnings`` and
-``GET /api/v1/reviews/list`` to surface persisted effect_reviews data.
+Spec-007:
+- US7 (T066): adds ``GET /api/v1/reviews/learnings`` and
+  ``GET /api/v1/reviews/list`` to surface persisted effect_reviews data.
+- US4 (T062, T063): rewrites ``POST /api/v1/reviews/predict`` and
+  ``POST /api/v1/reviews/attribute`` to use the new async
+  ``EffectReviewService`` (DB-persistent, chain-backed) and returns
+  201 Created per the US3/T056 contract.
 """
 
 import logging
@@ -24,93 +29,95 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Reviews"])
 
 
-def _ai_meta(confidence: float = 0.7) -> dict:
+def _ai_meta(confidence: float = 0.7, data_source: str = "llm_simulation") -> dict:
     """Generate AI quality metadata for review responses.
 
     Args:
         confidence: AI confidence score (0-1).
+        data_source: One of 'llm_simulation' | 'template_fallback'.
 
     Returns:
         Dict with AI quality metadata.
     """
     return {
         "confidence": confidence,
-        "data_source": "deepseek-v4-flash",
+        "data_source": data_source,
         "model_version": "deepseek-v4-flash",
         "caveat": "基于AI分析，供参考",
     }
 
 
-@router.post("/reviews/predict")
-async def predict_effect(request: Request, data: EffectPredictRequest):
+@router.post("/reviews/predict", status_code=201)
+async def predict_effect(
+    request: Request,
+    data: EffectPredictRequest,
+    user: dict = Depends(get_current_user),
+    db=Depends(get_db),
+):
     """Create a blind prediction for content performance before publishing.
 
-    Accepts content metadata (title, outline, platform, etc.) and returns
-    an estimated performance prediction with confidence score.
+    Spec-007 US4 (T062): delegates to ``EffectReviewService.create_prediction``
+    which calls ``EffectReviewChain.predict`` and INSERTs into
+    ``effect_reviews`` (status='awaiting_actuals').
 
-    Args:
-        request: FastAPI request object.
-        data: Prediction request with topic_title and optional content_outline.
-
-    Returns:
-        Prediction result with estimated metrics and confidence.
+    Returns 201 Created per the spec-007 contract.
     """
     from app.services.effect_review import EffectReviewService
 
-    user_id = getattr(request.state, "user_id", "anonymous")
-
+    user_id = user["id"]
     content_data = {
         "topic_title": data.topic_title,
         "content_outline": data.content_outline,
     }
 
-    svc = EffectReviewService()
-
+    svc = EffectReviewService(db)
     try:
-        result = svc.create_prediction(user_id, content_data)
+        result = await svc.create_prediction(user_id, content_data)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
 
     return {
-        "code": 200,
+        "code": 201,
         "data": result,
         "message": "效果预测完成",
-        "meta": {"ai_quality": _ai_meta(confidence=result.get("confidence", 0.7))},
+        "meta": {"ai_quality": _ai_meta(confidence=0.7, data_source="llm_simulation")},
     }
 
 
-@router.post("/reviews/attribute")
-async def attribute_effect(request: Request, data: EffectAttributeRequest):
+@router.post("/reviews/attribute", status_code=201)
+async def attribute_effect(
+    request: Request,
+    data: EffectAttributeRequest,
+    user: dict = Depends(get_current_user),
+    db=Depends(get_db),
+):
     """Analyze the attribution of content performance after publishing.
 
-    Compares actual performance data against the original prediction
-    and provides attribution conclusions about what worked or didn't.
+    Spec-007 US4 (T063): delegates to ``EffectReviewService.attribute``
+    which calls ``EffectReviewChain.attribute`` and UPDATEs the
+    ``effect_reviews`` row with actual_result / attribution / learnings
+    (status='attributed').
 
-    Args:
-        request: FastAPI request object.
-        data: Attribution request with review_id and actual_data.
-
-    Returns:
-        Attribution analysis with conclusions and learnings.
+    Returns 201 Created.
     """
     from app.services.effect_review import EffectReviewService
 
-    user_id = getattr(request.state, "user_id", "anonymous")
-
-    svc = EffectReviewService()
-
+    user_id = user["id"]
+    svc = EffectReviewService(db)
     try:
-        result = svc.create_attribution(
-            user_id, data.review_id, data.actual_data
+        result = await svc.attribute(
+            user_id=user_id,
+            prediction_id=data.review_id,
+            actual_data=data.actual_data,
         )
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
 
     return {
-        "code": 200,
+        "code": 201,
         "data": result,
         "message": "归因分析完成",
-        "meta": {"ai_quality": _ai_meta(confidence=0.7)},
+        "meta": {"ai_quality": _ai_meta(confidence=0.7, data_source="llm_simulation")},
     }
 
 
@@ -120,7 +127,7 @@ async def reviews_learnings(
     user: dict = Depends(get_current_user),
     db=Depends(get_db),
 ):
-    """Aggregate the user's recent learnings (Spec-007 T066).
+    """Aggregate the user's recent learnings (Spec-007 T066 + US4 T060).
 
     Scans the user's ``effect_reviews`` within ``window_days`` and
     surfaces the top recurring strengths and weaknesses. Returns a
@@ -128,9 +135,9 @@ async def reviews_learnings(
     """
     from app.services.effect_review import EffectReviewService
 
-    svc = EffectReviewService()
+    svc = EffectReviewService(db)
     payload = await svc.derive_learnings(
-        db, user_id=user["id"], window_days=window_days
+        user_id=user["id"], window_days=window_days
     )
 
     # Pydantic validation at the boundary (Constitution VII).
@@ -167,9 +174,9 @@ async def reviews_list(
     """
     from app.services.effect_review import EffectReviewService
 
-    svc = EffectReviewService()
+    svc = EffectReviewService(db)
     rows = await svc.list_by_user(
-        db, user_id=user["id"], status=status, limit=limit
+        user_id=user["id"], status=status, limit=limit
     )
 
     # Pydantic-validate every row.
