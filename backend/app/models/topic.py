@@ -85,14 +85,16 @@ class TopicRecommendRequest(BaseModel):
     """Schema for topic recommendation request.
 
     Attributes:
-        mode: Recommendation mode ('hotspot_fusion' or 'evergreen_deep').
+        mode: Recommendation mode. Accepts 'hotspot_fusion' (default),
+            'evergreen_deep', or legacy aliases ('trending', 'evergreen',
+            'default', 'fuse', 'fusion') for backwards compatibility with
+            older clients. Unknown values fall back to 'hotspot_fusion'.
         track: Optional track override (defaults to user profile track).
     """
 
     mode: str = Field(
         default="hotspot_fusion",
-        pattern=r"^(hotspot_fusion|evergreen_deep)$",
-        description="Recommendation mode",
+        description="Recommendation mode (lenient: unknown values are mapped to a default at the service layer)",
     )
     track: str | None = Field(
         default=None, description="Track override"

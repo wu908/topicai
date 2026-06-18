@@ -267,6 +267,31 @@ def setup_exception_handlers(app: FastAPI) -> None:
     """
     from fastapi import Request
     from fastapi.responses import JSONResponse
+    from fastapi.exceptions import RequestValidationError
+    from fastapi.encoders import jsonable_encoder
+
+    @app.exception_handler(RequestValidationError)
+    async def request_validation_error_handler(
+        request: Request, exc: RequestValidationError
+    ):
+        """Surface real Pydantic / body-parse errors instead of the generic
+        400 'There was an error parsing the body' returned by FastAPI's
+        default routing layer.
+        """
+        errors = jsonable_encoder(exc.errors())
+        return JSONResponse(
+            status_code=422,
+            content={
+                "code": 422,
+                "data": None,
+                "message": "请求参数校验失败",
+                "meta": {
+                    "error_code": "VALIDATION_ERROR",
+                    "errors": errors,
+                    "timestamp": utc_now(),
+                },
+            },
+        )
 
     @app.exception_handler(AppException)
     async def app_exception_handler(request: Request, exc: AppException):
