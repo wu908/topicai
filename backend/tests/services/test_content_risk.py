@@ -5,8 +5,11 @@ Tests in this file exercise the content risk detection service directly:
 - T070: medical-overclaim keyword -> severity=high, category=medical_overclaim
 - T071: benign content -> empty risks, overall_risk_score < 0.2
 - T072: LLM unavailable -> falls back to keyword-only path
+- T075: 80/20 LLM+keyword blend (LLM success path + defensive branches)
 """
 from __future__ import annotations
+
+import json
 
 import pytest
 
@@ -119,3 +122,144 @@ async def test_keyword_only_when_llm_unavailable(monkeypatch):
     # Financial keyword is still surfaced via the keyword path.
     assert any(r["category"] == "financial_inducement" for r in result["risks"])
     # No exception leaks to the caller.
+
+
+# ========== T075: 80/20 LLM+keyword blend (LLM success path) ==========
+
+def _llm_risk_payload(extra_risks=None, overall: float = 0.65) -> str:
+    """Return a valid LLM risk response JSON string."""
+    base = {
+        "risks": [
+            {"category": "tone_polarization", "description": "语气两极化",
+             "severity": "medium", "suggestion": "建议增加中性陈述"},
+        ],
+        "overall_risk_score": overall,
+    }
+    if extra_risks:
+        base["risks"].extend(extra_risks)
+    return json.dumps(base, ensure_ascii=False)
+
+
+@pytest.mark.asyncio
+async def test_80_20_blend_llm_success_path(monkeypatch):
+    """T075: when LLM succeeds, data_source=llm_simulation, confidence=0.75."""
+    from app.core.llm import LLMClient
+    from app.services.content_risk import ContentRiskService
+
+    monkeypatch.setattr(
+        LLMClient, "generate",
+        lambda *a, **kw: _llm_risk_payload(overall=0.65),
+    )
+
+    svc = ContentRiskService()
+    # '保本' (financial inducement) -> keyword confidence low -> LLM gate opens
+    result = await svc.check(user_id="u-blend", content="保本高收益理财")
+
+    assert result["data_source"] == "llm_simulation"
+    assert result["model_version"] == "deepseek-v4-flash"
+    # 0.2 * keyword_score + 0.8 * 0.65 (clamped to [0,1])
+    assert 0.0 <= result["overall_risk_score"] <= 1.0
+    # LLM-succeeded path caps confidence at 0.75
+    assert result["confidence"] == 0.75
+    # LLM-provided risk is present in the merged union
+    assert any(r["category"] == "tone_polarization" for r in result["risks"])
+
+
+@pytest.mark.asyncio
+async def test_80_20_blend_dedupes_overlapping_risks(monkeypatch):
+    """T075: keyword + LLM risks with same (severity, category) collapse to one."""
+    from app.core.llm import LLMClient
+    from app.services.content_risk import ContentRiskService
+
+    # LLM echoes the same financial_inducement category the keyword scanner found.
+    duplicate = _llm_risk_payload(
+        extra_risks=[{
+            "category": "financial_inducement",
+            "description": "LLM-detected financial risk",
+            "severity": "high",
+            "suggestion": "delete",
+        }],
+    )
+    monkeypatch.setattr(LLMClient, "generate", lambda *a, **kw: duplicate)
+
+    svc = ContentRiskService()
+    result = await svc.check(user_id="u-dup", content="保本理财")
+
+    # Dedup: only ONE financial_inducement risk in the merged output.
+    financial = [r for r in result["risks"] if r["category"] == "financial_inducement"]
+    assert len(financial) == 1
+    # High-severity risks are listed first (stable ordering).
+    high_risks = [r for r in result["risks"] if r["severity"] == "high"]
+    assert result["risks"][0] in high_risks
+
+
+@pytest.mark.asyncio
+async def test_80_20_blend_filters_invalid_llm_severity(monkeypatch):
+    """T075: LLM risks with severity not in {low,medium,high} are filtered out."""
+    from app.core.llm import LLMClient
+    from app.services.content_risk import ContentRiskService
+
+    bad = json.dumps({
+        "risks": [
+            {"category": "x", "description": "y", "severity": "extreme",
+             "suggestion": "z"},
+        ],
+        "overall_risk_score": 0.5,
+    })
+    monkeypatch.setattr(LLMClient, "generate", lambda *a, **kw: bad)
+
+    svc = ContentRiskService()
+    result = await svc.check(user_id="u-bad", content="保本")
+
+    # The 'extreme' LLM risk is dropped; merged list is empty for that category.
+    assert all(r["severity"] in ("low", "medium", "high") for r in result["risks"])
+
+
+@pytest.mark.asyncio
+async def test_llm_unparseable_json_falls_back(monkeypatch):
+    """Defensive: LLM returns non-JSON -> warning logged, keyword-only path."""
+    from app.core.llm import LLMClient
+    from app.services.content_risk import ContentRiskService
+
+    monkeypatch.setattr(LLMClient, "generate", lambda *a, **kw: "not json at all")
+
+    svc = ContentRiskService()
+    result = await svc.check(user_id="u-bad-json", content="保本理财")
+
+    assert result["data_source"] == "keyword_only"
+    assert result["confidence"] <= 0.5
+
+
+@pytest.mark.asyncio
+async def test_llm_response_missing_risks_field_falls_back(monkeypatch):
+    """Defensive: LLM returns JSON without 'risks' -> keyword-only fallback."""
+    from app.core.llm import LLMClient
+    from app.services.content_risk import ContentRiskService
+
+    monkeypatch.setattr(
+        LLMClient, "generate",
+        lambda *a, **kw: json.dumps({"overall_risk_score": 0.5}),
+    )
+
+    svc = ContentRiskService()
+    result = await svc.check(user_id="u-no-risks", content="保本理财")
+
+    assert result["data_source"] == "keyword_only"
+
+
+@pytest.mark.asyncio
+async def test_llm_response_risks_not_list_falls_back(monkeypatch):
+    """Defensive: LLM returns 'risks' as non-list -> keyword-only fallback."""
+    from app.core.llm import LLMClient
+    from app.services.content_risk import ContentRiskService
+
+    monkeypatch.setattr(
+        LLMClient, "generate",
+        lambda *a, **kw: json.dumps({"risks": "should be a list"}),
+    )
+
+    svc = ContentRiskService()
+    result = await svc.check(user_id="u-bad-risks", content="保本理财")
+
+    assert result["data_source"] == "keyword_only"
+
