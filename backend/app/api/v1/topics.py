@@ -31,7 +31,7 @@ async def recommend_topics(request: Request):
 
     from app.services.topic_recommend import TopicRecommendService
     svc = TopicRecommendService()
-    result = svc.recommend(user_id, track, mode, count=5)
+    result = await svc.recommend_async(user_id, track, mode, count=5)
 
     return {
         "code": 200,
@@ -50,7 +50,7 @@ async def refresh_recommendations(request: Request, data: TopicRecommendRequest)
 
     from app.services.topic_recommend import TopicRecommendService
     svc = TopicRecommendService()
-    result = svc.recommend(user_id, track, mode, count=5)
+    result = await svc.recommend_async(user_id, track, mode, count=5)
 
     return {
         "code": 200,
