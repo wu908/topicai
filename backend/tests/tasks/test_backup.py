@@ -96,8 +96,9 @@ async def test_run_full_backup_returns_summary(tmp_path: Path) -> None:
 
 
 def test_backup_filename_uses_today() -> None:
-    """_backup_filename uses today's ISO date."""
+    """_backup_filename uses today's UTC ISO date (timezone-consistent)."""
     svc = BackupService()
     name = svc._backup_filename(".db.bak")  # noqa: SLF001 - intentional
-    assert name == f"{date.today().isoformat()}.db.bak"
+    expected_date = datetime.now(UTC).date().isoformat()
+    assert name == f"{expected_date}.db.bak"
     assert (datetime.now(UTC) - datetime.fromisoformat(name.split('.')[0]).replace(tzinfo=UTC)).days == 0

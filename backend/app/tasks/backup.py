@@ -20,8 +20,18 @@ class BackupService:
         self.backup_root = Path("backups")
         self.retention_days: int = 30
 
+    def _today_utc(self) -> str:
+        """Today's date in UTC, ISO format (YYYY-MM-DD).
+
+        Returns UTC date (not local) so backup folders are timezone-consistent
+        with cleanup_old_backups which uses datetime.now(UTC) as the cutoff.
+        Without this, in UTC+offset environments a backup created near
+        midnight local time would be cleaned up immediately.
+        """
+        return datetime.now(UTC).date().isoformat()
+
     def _backup_filename(self, suffix: str = ".db.bak") -> str:
-        return f"{date.today().isoformat()}{suffix}"
+        return f"{self._today_utc()}{suffix}"
 
     async def backup_sqlite(self) -> str:
         """Backup SQLite database.
@@ -30,7 +40,7 @@ class BackupService:
             Path to backup file.
         """
         self.backup_root.mkdir(parents=True, exist_ok=True)
-        today_dir = self.backup_root / date.today().isoformat()
+        today_dir = self.backup_root / self._today_utc()
         today_dir.mkdir(parents=True, exist_ok=True)
 
         dest = today_dir / f"topicai{self._backup_filename('.db.bak')}"
@@ -48,7 +58,7 @@ class BackupService:
         if not self.chroma_path.exists():
             return ""
 
-        today_dir = self.backup_root / date.today().isoformat()
+        today_dir = self.backup_root / self._today_utc()
         today_dir.mkdir(parents=True, exist_ok=True)
 
         dest = today_dir / "chroma"

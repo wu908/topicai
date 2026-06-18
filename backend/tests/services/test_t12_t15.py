@@ -84,12 +84,14 @@ class TestSchedulerTasks:
         assert svc is not None
 
     def test_backup_generates_filename(self):
-        from datetime import date
+        from datetime import UTC, datetime
 
         from app.tasks.backup import BackupService
         svc = BackupService()
         fname = svc._backup_filename()
-        assert str(date.today()) in fname
+        # Backup folder name uses UTC date for timezone consistency with cleanup.
+        utc_today = datetime.now(UTC).date().isoformat()
+        assert utc_today in fname
         assert fname.endswith(".db.bak")
 
     def test_cleanup_service_exists(self):
