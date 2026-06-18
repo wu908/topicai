@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Topics"])
 
 
-def _ai_quality_meta(confidence: float = 0.7, data_source: str = "ai_inference") -> dict:
+def _ai_quality_meta(confidence: float = 0.7, data_source: str = "template_fallback") -> dict:
     return {
         "confidence": confidence,
         "data_source": data_source,

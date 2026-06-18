@@ -11,7 +11,7 @@ router = APIRouter(tags=["Tracks"])
 
 
 def _ai_meta() -> dict:
-    return {"confidence": 0.75, "data_source": "ai_inference", "model_version": "deepseek-v4-flash", "caveat": "基于基准数据分析"}
+    return {"confidence": 0.75, "data_source": "template_fallback", "model_version": "deepseek-v4-flash", "caveat": "基于基准数据分析"}
 
 
 @router.post("/tracks/diagnose")
