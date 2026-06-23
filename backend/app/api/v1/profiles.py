@@ -5,7 +5,6 @@ Requires JWT authentication.
 """
 
 import logging
-import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
@@ -17,27 +16,48 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Profiles"])
 
 @router.post("/profiles/onboarding", status_code=201)
-async def submit_onboarding(request: Request, data: OnboardingRequest):
+async def submit_onboarding(
+    request: Request,
+    data: OnboardingRequest,
+    user: dict = Depends(get_current_user),
+):
     """Submit onboarding answers and generate a creator profile.
+
+    Idempotent: re-submitting onboarding updates the existing profile
+    rather than raising a UNIQUE(user_id) violation.
 
     Args:
         request: FastAPI request object.
         data: Onboarding answers (track, content_formats, etc.).
+        user: Authenticated user (injected by Depends via JWT middleware).
 
     Returns:
         Created CreatorProfile with 201 status.
     """
+    from app.services.creator_profile import CreatorProfileService
     from app.services.onboarding import OnboardingService
 
-    # Extract user_id from auth (stub: use anonymous for now)
-    user_id = getattr(request.state, "user_id", str(uuid.uuid4()))
-
-    svc = OnboardingService()
+    user_id = user["id"]
+    db = request.app.state.db
+    onboarding_svc = OnboardingService()
+    profile_svc = CreatorProfileService(db)
 
     try:
-        profile = svc.generate_profile(user_id, data.model_dump())
+        profile = onboarding_svc.generate_profile(user_id, data.model_dump())
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
+
+    # Persist (upsert) so GET /profiles/me can find it. Re-onboarding
+    # replaces profile fields while keeping id / user_id / created_at.
+    profile_dict = profile.model_dump()
+    if await profile_svc.exists(user_id):
+        updates = {
+            k: v for k, v in profile_dict.items()
+            if k not in {"id", "user_id", "created_at"}
+        }
+        await profile_svc.update(user_id, updates)
+    else:
+        await profile_svc.create(profile_dict)
 
     return {
         "code": 201,

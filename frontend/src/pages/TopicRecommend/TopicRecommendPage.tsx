@@ -29,6 +29,7 @@ import { formatScore } from '@/utils/format';
 
 const TopicRecommendPage: React.FC = () => {
   const [mode, setMode] = useState<RecommendationMode>('hotspot_fusion');
+  const [activeFilter, setActiveFilter] = useState<string>('全部');
   const { checkAndConsume, rollback } = useRateLimit();
   const { data: recommendation, isLoading, execute } = useApi<TopicRecommendation>(recommendTopics);
 
@@ -86,17 +87,17 @@ const TopicRecommendPage: React.FC = () => {
             key={c}
             component="button"
             type="button"
-            onClick={() => undefined}
+            onClick={() => setActiveFilter(c)}
             sx={{
               px: 2,
               py: 0.75,
               borderRadius: 20,
               fontSize: 12.5,
               border: '1px solid var(--v3-border)',
-              background: c === '全部' ? 'var(--v3-accent-soft)' : 'var(--v3-surface)',
-              color: c === '全部' ? 'var(--v3-text)' : 'var(--v3-text-sec)',
+              background: activeFilter === c ? 'var(--v3-accent-soft)' : 'var(--v3-surface)',
+              color: activeFilter === c ? 'var(--v3-text)' : 'var(--v3-text-sec)',
               cursor: 'pointer',
-              fontWeight: c === '全部' ? 500 : 400,
+              fontWeight: activeFilter === c ? 500 : 400,
               fontFamily: 'inherit',
             }}
           >
