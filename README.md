@@ -98,7 +98,7 @@ backend/
 │   ├── prompts/            # 版本化 Prompt 文件
 │   ├── services/           # 业务逻辑层（17 个服务）
 │   └── tasks/              # 定时任务
-├── tests/                  # 274 条 pytest 测试用例
+├── tests/                  # 46 python test files (pytest)
 ├── main.py                 # FastAPI 工厂函数入口
 └── requirements.txt
 ```

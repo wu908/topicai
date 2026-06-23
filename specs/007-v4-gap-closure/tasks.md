@@ -1,4 +1,4 @@
-﻿# Tasks: 007 TopicAI v4.1 Implementation-Gap Closure
+# Tasks: 007 TopicAI v4.1 Implementation-Gap Closure
 
 **Input**: Design documents from `/specs/007-v4-gap-closure/`
 
@@ -110,7 +110,7 @@
 - [x] T039 [US2] Extend `TianAPISource` in `backend/app/data_sources/tianapi_source.py` -- real httpx call already exists, gated on `TIANAPI_KEY`; wire per-tier config from FR-004
 - [x] T040 [P] [US2] Extend `BilibiliSource` in `backend/app/data_sources/bilibili_source.py` -- real httpx call already exists; wire per-tier config
 - [x] T041 [P] [US2] REWRITE `LLMDataSource` in `backend/app/data_sources/llm_source.py` to actually call `LLMClient.generate` (replace the `_generate_mock_topics` shim at l103)
-- [x] T042 [US2] Seed `PreloadedDataSource` in `backend/app/data_sources/preloaded_source.py` with 8 tracks (绉戞妧, 鏃惰?, 缇庨, 鑱屽満, 鏁欒偛, 璐㈢粡, 娓告垙, 濞变箰) -- currently 5; expand to 8 (FR-003)
+- [x] T042 [US2] Seed `PreloadedDataSource` in `backend/app/data_sources/preloaded_source.py` with 8 tracks (科技, 时�?, 美食, 职场, 教育, 财经, 游戏, 娱乐) -- currently 5; expand to 8 (FR-003)
 - [x] T043 [US2] Refactor `TopicRecommendService.recommend()` in `backend/app/services/topic_recommend.py` to delegate to `DataManager.get_trending_topics()` and rank by `rubric_weights` (FR-003)
 - [x] T044 [US2] Ensure the response carries `data_source`, `confidence`, and `model_version` (FR-013)
 - [x] T045 [US2] Add `tier_shift` structured log in `DataManager._try_tier()` per FR-004
@@ -128,20 +128,20 @@
 
 ### Tests for User Story 3
 
-- [ ] T047 [P] [US3] Test in `backend/tests/api/test_feedback_router.py::test_submit_persists_row` -- POST `/api/v1/feedback`; assert row in `user_feedback` table; response 202 with persisted id
-- [ ] T048 [P] [US3] Test in `backend/tests/api/test_feedback_router.py::test_five_thumb_downs_update_rubric_weights` -- submit 5 thumb-downs; assert `creator_profiles.rubric_weights` decreased for the targeted dimension; bounded by `0.15`
-- [ ] T049 [P] [US3] Test in `backend/tests/services/test_feedback.py::test_cold_start_keeps_default_weights` -- new account (< 7 days, 0 events); submit feedback; assert `rubric_weights` unchanged
-- [ ] T050 [P] [US3] Test in `backend/tests/services/test_feedback.py::test_bounded_shift_per_dimension` -- established account; submit 10 thumb-downs; assert total shift <= 0.15
-- [ ] T051 [P] [US3] Test in `backend/tests/services/test_feedback.py::test_rolling_window_excludes_30d_old` -- backdate a feedback record to 31 days ago; assert `adjust_weights` excludes it
-- [ ] T052 [P] [US3] Test in `backend/tests/api/test_feedback_router.py::test_get_history_returns_paginated_records` -- `GET /api/v1/feedback/history` (US7, FR-011)
+- [x] T047 [P] [US3] Test in `backend/tests/api/test_feedback_router.py::test_submit_persists_row` -- POST `/api/v1/feedback`; assert row in `user_feedback` table; response 202 with persisted id
+- [x] T048 [P] [US3] Test in `backend/tests/api/test_feedback_router.py::test_five_thumb_downs_update_rubric_weights` -- submit 5 thumb-downs; assert `creator_profiles.rubric_weights` decreased for the targeted dimension; bounded by `0.15`
+- [x] T049 [P] [US3] Test in `backend/tests/services/test_feedback.py::test_cold_start_keeps_default_weights` -- new account (< 7 days, 0 events); submit feedback; assert `rubric_weights` unchanged
+- [x] T050 [P] [US3] Test in `backend/tests/services/test_feedback.py::test_bounded_shift_per_dimension` -- established account; submit 10 thumb-downs; assert total shift <= 0.15
+- [x] T051 [P] [US3] Test in `backend/tests/services/test_feedback.py::test_rolling_window_excludes_30d_old` -- backdate a feedback record to 31 days ago; assert `adjust_weights` excludes it
+- [x] T052 [P] [US3] Test in `backend/tests/api/test_feedback_router.py::test_get_history_returns_paginated_records` -- `GET /api/v1/feedback/history` (US7, FR-011)
 
 ### Implementation for User Story 3
 
-- [ ] T053 [US3] Refactor `FeedbackService.submit` in `backend/app/services/feedback.py` to persist via injected `Database`; return 202 with persisted id (FR-005)
-- [ ] T054 [US3] Add `FeedbackService._maybe_update_profile(user_id)` enforcing cold-start grace (7d OR <5 events) and bounded shift (0.15) (FR-006)
-- [ ] T055 [US3] Add 30-day rolling-window filter inside `adjust_weights` (FR-006)
-- [ ] T056 [US3] Convert `submit` endpoint in `backend/app/api/v1/feedback.py` to `async`; return 202; remove the `analyze_feedback(user_id, [])` call from `get_feedback_analysis`
-- [ ] T057 [US3] Add `GET /api/v1/feedback/history` endpoint in `backend/app/api/v1/feedback.py` (US7, FR-011)
+- [x] T053 [US3] Refactor `FeedbackService.submit` in `backend/app/services/feedback.py` to persist via injected `Database`; return 202 with persisted id (FR-005)
+- [x] T054 [US3] Add `FeedbackService._maybe_update_profile(user_id)` enforcing cold-start grace (7d OR <5 events) and bounded shift (0.15) (FR-006)
+- [x] T055 [US3] Add 30-day rolling-window filter inside `adjust_weights` (FR-006)
+- [x] T056 [US3] Convert `submit` endpoint in `backend/app/api/v1/feedback.py` to `async`; return 202; remove the `analyze_feedback(user_id, [])` call from `get_feedback_analysis`
+- [x] T057 [US3] Add `GET /api/v1/feedback/history` endpoint in `backend/app/api/v1/feedback.py` (US7, FR-011)
 
 **Checkpoint**: US3 fully functional and testable independently; feedback-driven personalization now closes the loop with US2.
 
@@ -155,20 +155,20 @@
 
 ### Tests for User Story 4
 
-- [ ] T058 [P] [US4] Test in `backend/tests/chains/test_effect_review_chain.py::test_predict_returns_predicted_payload` -- patch `LLMClient.generate_structured`; assert the 4 numeric fields and `caveat` are populated
-- [ ] T059 [P] [US4] Test in `backend/tests/chains/test_effect_review_chain.py::test_attribute_returns_3_to_5_dimensional_conclusions`
-- [ ] T060 [P] [US4] Test in `backend/tests/services/test_effect_review.py::test_derive_learnings_aggregates_last_30_days`
-- [ ] T061 [P] [US4] Test in `backend/tests/services/test_effect_review.py::test_persistence_survives_restart` -- write a prediction; simulate restart (new `EffectReviewService` instance); assert the prediction is still retrievable by id
-- [ ] T062 [P] [US4] Test in `backend/tests/api/test_reviews_router.py::test_predict_endpoint_returns_schema` -- 201, schema matches `PredictionPayload`
-- [ ] T063 [P] [US4] Test in `backend/tests/api/test_reviews_router.py::test_attribute_endpoint_persists_conclusions` -- `actual_result` and `attribution` JSON written to the table
+- [x] T058 [P] [US4] Test in `backend/tests/chains/test_effect_review_chain.py::test_predict_returns_predicted_payload` -- patch `LLMClient.generate_structured`; assert the 4 numeric fields and `caveat` are populated
+- [x] T059 [P] [US4] Test in `backend/tests/chains/test_effect_review_chain.py::test_attribute_returns_3_to_5_dimensional_conclusions`
+- [x] T060 [P] [US4] Test in `backend/tests/services/test_effect_review.py::test_derive_learnings_aggregates_last_30_days`
+- [x] T061 [P] [US4] Test in `backend/tests/services/test_effect_review.py::test_persistence_survives_restart` -- write a prediction; simulate restart (new `EffectReviewService` instance); assert the prediction is still retrievable by id
+- [x] T062 [P] [US4] Test in `backend/tests/api/test_reviews_router.py::test_predict_endpoint_returns_schema` -- 201, schema matches `PredictionPayload`
+- [x] T063 [P] [US4] Test in `backend/tests/api/test_reviews_router.py::test_attribute_endpoint_persists_conclusions` -- `actual_result` and `attribution` JSON written to the table
 
 ### Implementation for User Story 4
 
-- [ ] T064 [US4] Rewrite `EffectReviewChain` in `backend/app/chains/effect_review_chain.py` -- three methods: `predict(topic, outline)`, `attribute(prediction, actual)`, `derive_learnings(user_id)`, all calling `LLMClient.generate` or `generate_structured` (FR-007)
-- [ ] T065 [US4] REWRITE `EffectReviewService` in `backend/app/services/effect_review.py` -- persistence + chain wrapping + caching `learnings` for 1h; replace `self._predictions` with DB queries
-- [ ] T066 [US4] Add 4 endpoints to `backend/app/api/v1/reviews.py`: predict, attribute, learnings, list (with `?status=` filter) (FR-007, FR-011)
-- [ ] T067 [US4] Expand `frontend/src/pages/EffectReview/EffectReviewPage.tsx` to render the `/learnings` card and the `?status=awaiting` list
-- [ ] T068 [US4] Add API client at `frontend/src/services/api/reviews.ts` with 4 methods
+- [x] T064 [US4] Rewrite `EffectReviewChain` in `backend/app/chains/effect_review_chain.py` -- three methods: `predict(topic, outline)`, `attribute(prediction, actual)`, `derive_learnings(user_id)`, all calling `LLMClient.generate` or `generate_structured` (FR-007)
+- [x] T065 [US4] REWRITE `EffectReviewService` in `backend/app/services/effect_review.py` -- persistence + chain wrapping + caching `learnings` for 1h; replace `self._predictions` with DB queries
+- [x] T066 [US4] Add 4 endpoints to `backend/app/api/v1/reviews.py`: predict, attribute, learnings, list (with `?status=` filter) (FR-007, FR-011)
+- [x] T067 [US4] Expand `frontend/src/pages/EffectReview/EffectReviewPage.tsx` to render the `/learnings` card and the `?status=awaiting` list
+- [x] T068 [US4] Add API client at `frontend/src/services/api/reviews.ts` with 4 methods
 
 **Checkpoint**: US4 fully functional and testable independently; the creator can now learn from their own history.
 
@@ -182,19 +182,19 @@
 
 ### Tests for User Story 5
 
-- [ ] T069 [P] [US5] Test in `backend/tests/services/test_content_risk.py::test_financial_inducement_flagged_high` -- "guaranteed no loss" -> `severity="high"`, `category="financial_inducement"`
-- [ ] T070 [P] [US5] Test in `backend/tests/services/test_content_risk.py::test_medical_overclaim_flagged_high` -- "100% cure" -> `severity="high"`, `category="medical_overclaim"`
-- [ ] T071 [P] [US5] Test in `backend/tests/services/test_content_risk.py::test_benign_content_passes_with_empty_risks` -- `risks: []`, `overall_risk_score < 0.2`
-- [ ] T072 [P] [US5] Test in `backend/tests/services/test_content_risk.py::test_keyword_only_when_llm_unavailable` -- patch `LLMClient.generate` to raise; assert keyword path runs alone, `data_source="template_fallback"`, `confidence <= 0.5`
-- [ ] T073 [P] [US5] Test in `backend/tests/api/test_risk_router.py::test_risk_check_endpoint_returns_report`
+- [x] T069 [P] [US5] Test in `backend/tests/services/test_content_risk.py::test_financial_inducement_flagged_high` -- "guaranteed no loss" -> `severity="high"`, `category="financial_inducement"`
+- [x] T070 [P] [US5] Test in `backend/tests/services/test_content_risk.py::test_medical_overclaim_flagged_high` -- "100% cure" -> `severity="high"`, `category="medical_overclaim"`
+- [x] T071 [P] [US5] Test in `backend/tests/services/test_content_risk.py::test_benign_content_passes_with_empty_risks` -- `risks: []`, `overall_risk_score < 0.2`
+- [x] T072 [P] [US5] Test in `backend/tests/services/test_content_risk.py::test_keyword_only_when_llm_unavailable` -- patch `LLMClient.generate` to raise; assert keyword path runs alone, `data_source="template_fallback"`, `confidence <= 0.5`
+- [x] T073 [P] [US5] Test in `backend/tests/api/test_risk_router.py::test_risk_check_endpoint_returns_report`
 
 ### Implementation for User Story 5
 
-- [ ] T074 [US5] Create `backend/app/api/v1/risk_router.py` with `POST /api/v1/risk/check` (reuse existing `RiskCheckRequest` / `ContentRiskReport` from `backend/app/models/risk.py`) (FR-008)
-- [ ] T075 [US5] REWRITE `ContentRiskService` in `backend/app/services/content_risk.py` -- add LLM layer, keep keyword layer, blend 80/20 per Constitution Principle XI
-- [ ] T076 [US5] Mount risk router in `backend/app/api/v1/router.py`
-- [ ] T077 [US5] Add blocking badge to publish flow in `frontend/src/pages/PublishAdvisor/PublishAdvisorPage.tsx` -- consult `/risk/check` before submit
-- [ ] T078 [US5] Add `frontend/src/services/api/risk.ts` client
+- [x] T074 [US5] Create `backend/app/api/v1/risk_router.py` with `POST /api/v1/risk/check` (reuse existing `RiskCheckRequest` / `ContentRiskReport` from `backend/app/models/risk.py`) (FR-008)
+- [x] T075 [US5] REWRITE `ContentRiskService` in `backend/app/services/content_risk.py` -- add LLM layer, keep keyword layer, blend 80/20 per Constitution Principle XI
+- [x] T076 [US5] Mount risk router in `backend/app/api/v1/router.py`
+- [x] T077 [US5] Add blocking badge to publish flow in `frontend/src/pages/PublishAdvisor/PublishAdvisorPage.tsx` -- consult `/risk/check` before submit
+- [x] T078 [US5] Add `frontend/src/services/api/risk.ts` client
 
 **Checkpoint**: US5 fully functional and testable independently; the lowest-effort, highest-stakes safeguard is online.
 
@@ -208,14 +208,14 @@
 
 ### Tests for User Story 6
 
-- [ ] T079 [P] [US6] Test in `backend/tests/services/test_onboarding.py::test_llm_path_returns_derived_weights` -- patch `LLMClient.generate_structured`; assert weights reflect the input
-- [ ] T080 [P] [US6] Test in `backend/tests/services/test_onboarding.py::test_llm_failure_returns_fallback` -- patch LLM to raise; assert fallback fires and `data_source="template_fallback"`
-- [ ] T081 [P] [US6] Test in `backend/tests/services/test_onboarding.py::test_weights_sum_to_one` -- assert `sum(rubric_weights.values()) == 1.0` within 1e-6
+- [x] T079 [P] [US6] Test in `backend/tests/services/test_onboarding.py::test_llm_path_returns_derived_weights` -- patch `LLMClient.generate_structured`; assert weights reflect the input
+- [x] T080 [P] [US6] Test in `backend/tests/services/test_onboarding.py::test_llm_failure_returns_fallback` -- patch LLM to raise; assert fallback fires and `data_source="template_fallback"`
+- [x] T081 [P] [US6] Test in `backend/tests/services/test_onboarding.py::test_weights_sum_to_one` -- assert `sum(rubric_weights.values()) == 1.0` within 1e-6
 
 ### Implementation for User Story 6
 
-- [ ] T082 [US6] REWRITE `_build_profile_with_llm` in `backend/app/services/onboarding.py` to use `LLMClient.generate_structured(schema=CreatorProfile, ...)` (FR-009)
-- [ ] T083 [US6] Confirm `_build_profile_fallback` path is preserved (existing behavior must match when no key) (FR-009)
+- [x] T082 [US6] REWRITE `_build_profile_with_llm` in `backend/app/services/onboarding.py` to use `LLMClient.generate_structured(schema=CreatorProfile, ...)` (FR-009)
+- [x] T083 [US6] Confirm `_build_profile_fallback` path is preserved (existing behavior must match when no key) (FR-009)
 
 **Checkpoint**: US6 fully functional and testable independently; new users get personalized weights from day 0.
 
@@ -229,15 +229,15 @@
 
 ### Tests for User Story 7
 
-- [ ] T084 [P] [US7] CI-config test asserting `backend/pyproject.toml` contains `cov-fail-under = 80`
-- [ ] T085 [P] [US7] CI-config test asserting `frontend/vitest.config.ts` has `coverage.thresholds.lines >= 80`
-- [ ] T086 [P] [US7] E2E test in `frontend/e2e/full-loop.spec.ts`: login -> topics -> feedback x5 -> weight change -> effect review predict -> attribute -> learnings card visible
+- [x] T084 [P] [US7] CI-config test asserting `backend/pyproject.toml` contains `cov-fail-under = 80`
+- [x] T085 [P] [US7] CI-config test asserting `frontend/vitest.config.ts` has `coverage.thresholds.lines >= 80`
+- [x] T086 [P] [US7] E2E test in `frontend/e2e/full-loop.spec.ts`: login -> topics -> feedback x5 -> weight change -> effect review predict -> attribute -> learnings card visible
 
 ### Implementation for User Story 7
 
-- [ ] T087 [US7] Confirm the 5 endpoint additions from T046 (topics/history), T057 (feedback/history), T066 (reviews/learnings, reviews/list), T074 (risk/check) are all in `backend/app/api/v1/router.py`
-- [ ] T088 [US7] Add `frontend/e2e/full-loop.spec.ts` covering the full flow
-- [ ] T089 [US7] Verify `pytest --cov=app --cov-fail-under=80` and `pnpm vitest run --coverage` both green on a fresh branch (this is the release gate)
+- [x] T087 [US7] Confirm the 5 endpoint additions from T046 (topics/history), T057 (feedback/history), T066 (reviews/learnings, reviews/list), T074 (risk/check) are all in `backend/app/api/v1/router.py`
+- [x] T088 [US7] Add `frontend/e2e/full-loop.spec.ts` covering the full flow
+- [x] T089 [US7] Verify `pytest --cov=app --cov-fail-under=80` and `pnpm vitest run --coverage` both green on a fresh branch (this is the release gate)
 
 **Checkpoint**: All 7 missing endpoints exist; coverage gate enforced.
 
@@ -247,14 +247,14 @@
 
 **Purpose**: Improvements that affect multiple user stories.
 
-- [ ] T090 [P] Add `ConfidenceBadge` + `AICreatedBadge` audit to the four coach outputs in `frontend/src/components/ai-badge/AICreatedBadge.tsx` (FR-013, Principle III)
-- [ ] T091 [P] Update `frontend/src/services/api/feedback.ts` to use the async `submit` endpoint (T056) and the `history` endpoint (T057)
-- [ ] T092 [P] Update `frontend/src/services/api/topics.ts` to surface `data_source` and `confidence` in the recommendations UI
-- [ ] T093 [P] Add integration test `backend/tests/integration/test_full_loop.py` covering: login -> topics -> feedback -> weight change -> effect-review
-- [ ] T094 [P] Verify `backend/app/data/seed/risk_keywords.json` has 100 entries; verify each category has >= 15 examples
-- [ ] T095 [P] Update `README.md` so the "Features" table matches runtime behavior post-roadmap
-- [ ] T096 [P] Sync `openapi3.json` with the new endpoints under `/api/v1/`
-- [ ] T097 [P] Final constitution-sync audit: open `AGENTS.md` SPECKIT block, re-run checklist, confirm Sync Impact Report mentions all 7 new principles (none added in 007; confirm 006''s additions still cover the surface)
+- [x] T090 [P] Add `ConfidenceBadge` + `AICreatedBadge` audit to the four coach outputs in `frontend/src/components/ai-badge/AICreatedBadge.tsx` (FR-013, Principle III)
+- [x] T091 [P] Update `frontend/src/services/api/feedback.ts` to use the async `submit` endpoint (T056) and the `history` endpoint (T057)
+- [x] T092 [P] Update `frontend/src/services/api/topics.ts` to surface `data_source` and `confidence` in the recommendations UI
+- [x] T093 [P] Add integration test `backend/tests/integration/test_full_loop.py` covering: login -> topics -> feedback -> weight change -> effect-review
+- [x] T094 [P] Verify `backend/app/data/seed/risk_keywords.json` has 100 entries; verify each category has >= 15 examples
+- [x] T095 [P] Update `README.md` so the "Features" table matches runtime behavior post-roadmap
+- [x] T096 [P] Sync `openapi3.json` with the new endpoints under `/api/v1/`
+- [x] T097 [P] Final constitution-sync audit: open `AGENTS.md` SPECKIT block, re-run checklist, confirm Sync Impact Report mentions all 7 new principles (none added in 007; confirm 006''s additions still cover the surface)
 
 ---
 

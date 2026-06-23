@@ -7,6 +7,21 @@ import type { User } from '@/types/models';
 import * as authApi from '@/services/api/auth';
 import { extractErrorMessage } from '@/utils/error';
 
+/** Safe localStorage accessor — fails silently in sandboxed / privacy-mode browsers. */
+function safeGet(key: string): string | null {
+  try { return localStorage.getItem(key); }
+  catch { return null; }
+}
+function safeSet(key: string, value: string): void {
+  try { localStorage.setItem(key, value); }
+  catch { /* no-op */ }
+}
+function safeRemove(key: string): void {
+  try { localStorage.removeItem(key); }
+  catch { /* no-op */ }
+}
+
+
 interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
@@ -23,7 +38,7 @@ interface AuthState {
 
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
-  isAuthenticated: !!localStorage.getItem('access_token'),
+  isAuthenticated: !!safeGet('access_token'),
   isLoading: false,
   error: null,
 
@@ -33,8 +48,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const response = await authApi.login({ email, password });
       // Backend returns ApiResponse<LoginResponse>: { code, data: { access_token, refresh_token, user }, message }
       const { access_token, refresh_token, user } = response.data;
-      localStorage.setItem('access_token', access_token);
-      localStorage.setItem('refresh_token', refresh_token);
+      safeSet('access_token', access_token);
+      safeSet('refresh_token', refresh_token);
       set({ user, isAuthenticated: true, isLoading: false });
     } catch (err: unknown) {
       const message = extractErrorMessage(err, '登录失败，请检查邮箱和密码');
@@ -49,8 +64,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const response = await authApi.register({ email, username, password });
       // Backend returns tokens directly in registration response
       const { access_token, refresh_token, user } = response.data;
-      localStorage.setItem('access_token', access_token);
-      localStorage.setItem('refresh_token', refresh_token);
+      safeSet('access_token', access_token);
+      safeSet('refresh_token', refresh_token);
       const userObj: User = {
         id: user.id,
         email: user.email,
@@ -69,20 +84,20 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   logout: () => {
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('refresh_token');
+    safeRemove('access_token');
+    safeRemove('refresh_token');
     set({ user: null, isAuthenticated: false, error: null });
   },
 
   refreshToken: async () => {
-    const refreshTokenValue = localStorage.getItem('refresh_token');
+    const refreshTokenValue = safeGet('refresh_token');
     if (!refreshTokenValue) {
       get().logout();
       return;
     }
     try {
       const response = await authApi.refreshToken({ refresh_token: refreshTokenValue });
-      localStorage.setItem('access_token', response.data.access_token);
+      safeSet('access_token', response.data.access_token);
     } catch {
       get().logout();
     }

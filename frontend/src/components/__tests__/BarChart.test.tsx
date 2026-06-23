@@ -1,5 +1,5 @@
 /**
- * Tests for BarChart — V3 bar chart.
+ * Tests for BarChart -- V3 bar chart.
  *
  * Key behaviors:
  * 1. Renders one bar per data point with role=button and aria-label.
@@ -7,6 +7,9 @@
  * 3. Min bar height is 4px (Math.max(4, ...)).
  * 4. Largest bar fills the full chart height; smaller bars scale proportionally.
  * 5. onBarClick fires on click; Enter/Space also trigger.
+ * 6. Hovering a bar reveals the value label (opacity 0 -> 1) and recolors
+ *    the bar fill. (No floating tooltip; the value sits above the bar.)
+ * 7. Mouse leave hides the value label again and restores the muted fill.
  */
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
@@ -30,12 +33,9 @@ describe('BarChart', () => {
 
   it('largest bar fills 100% of chart height (height = pct*1.1)', () => {
     const { container } = render(<BarChart data={sampleData} />);
-    // Find inner bar divs (the ones with height: <N>px).
     const bars = Array.from(
       container.querySelectorAll<HTMLElement>('div[style*="height"][style*="px"]')
     ).filter((el) => el.style.height.endsWith('px'));
-    // max=30. (10/30)*100=33 → 33*1.1=36.3. (30/30)*100=100 → 110.
-    // (20/30)*100=67 → 73.7. (Final value depends on actual rounding.)
     const heights = bars.map((b) => parseFloat(b.style.height));
     expect(Math.max(...heights)).toBeGreaterThan(100);
   });
@@ -47,8 +47,6 @@ describe('BarChart', () => {
         { label: 'B', value: 0 },
       ]} />
     );
-    // pct = round((0/1)*100) = 0, height = max(4, 0) = 4.
-    // Filter to inner fill divs (height < 130, since the container has height: 130).
     const barDivs = Array.from(
       container.querySelectorAll<HTMLElement>('div')
     ).filter((el) => {
@@ -74,5 +72,44 @@ describe('BarChart', () => {
     fireEvent.keyDown(bar, { key: 'Enter' });
     fireEvent.keyDown(bar, { key: ' ' });
     expect(onBarClick).toHaveBeenCalledTimes(2);
+  });
+
+  it('reveals the value label and recolors the fill on mouse enter', () => {
+    render(<BarChart data={sampleData} />);
+    const groups = screen.getAllByRole('button');
+    const targetGroup = groups[1]; // Tue 30
+    const fill = targetGroup.querySelector(
+      'div[style*="border-radius"]'
+    ) as HTMLElement;
+    expect(fill).toBeTruthy();
+    const label = targetGroup.querySelector(
+      '.v3-bar-value'
+    ) as HTMLElement;
+    expect(label.style.opacity).toBe('0');
+    expect(fill.style.background).toContain('--v3-border');
+    fireEvent.mouseEnter(fill);
+    expect(label.style.opacity).toBe('1');
+    expect(fill.style.background).toContain('--v3-text');
+  });
+
+  it('hides the value label and restores the muted fill on mouse leave', () => {
+    render(<BarChart data={sampleData} />);
+    const groups = screen.getAllByRole('button');
+    const targetGroup = groups[1]; // Tue 30
+    const fill = targetGroup.querySelector(
+      'div[style*="border-radius"]'
+    ) as HTMLElement;
+    const label = targetGroup.querySelector(
+      '.v3-bar-value'
+    ) as HTMLElement;
+
+    // Hover first to enter the "visible" state.
+    fireEvent.mouseEnter(fill);
+    expect(label.style.opacity).toBe('1');
+
+    // Leaving reverts opacity and recolors the fill back to muted.
+    fireEvent.mouseLeave(fill);
+    expect(label.style.opacity).toBe('0');
+    expect(fill.style.background).toContain('--v3-border');
   });
 });

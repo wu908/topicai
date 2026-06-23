@@ -187,5 +187,16 @@ describe('HomePage', () => {
       expect(authStateRef.fetchCurrentUser).toHaveBeenCalled();
       expect(profileStateRef.fetchProfile).toHaveBeenCalled();
     });
+  
+
+  });
+  
+
+  it('onboarding "继续设置" button navigates to /profile', async () => {
+    profileStateRef.profile = { track: undefined, content_formats: ['article'] };
+    renderPage();
+    const btn = await screen.findByText(/继续设置/);
+    btn.click();
+    expect(navigateMock).toHaveBeenCalledWith('/profile');
   });
 });
