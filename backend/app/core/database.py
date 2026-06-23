@@ -145,18 +145,23 @@ CREATE TABLE IF NOT EXISTS feedback_analyses (
     FOREIGN KEY (feedback_record_id) REFERENCES feedback_records(id)
 );
 
--- Effect reviews table
+-- Effect reviews table (Spec-007 T012 lifecycle: predict/attribute/derive_learnings)
 CREATE TABLE IF NOT EXISTS effect_reviews (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,
     topic_title TEXT NOT NULL,
+    content_outline TEXT NOT NULL DEFAULT '',
     prediction TEXT NOT NULL,
     actual_result TEXT,
     attribution TEXT,
     learnings TEXT,
+    status TEXT NOT NULL DEFAULT 'awaiting_actuals',
     created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT '',
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
+CREATE INDEX IF NOT EXISTS idx_effect_reviews_user_id_created_at ON effect_reviews(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_effect_reviews_status ON effect_reviews(status);
 
 -- Content risks table
 CREATE TABLE IF NOT EXISTS content_risks (

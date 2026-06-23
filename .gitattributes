@@ -1,0 +1,14 @@
+# Normalize line endings to LF in the repo regardless of platform.
+# Prevents whole-file CRLF/LF diff churn (e.g. authStore.ts, profiles.py).
+# Existing files are not re-checked-out automatically; run
+# `git add --renormalize .` in a dedicated commit to migrate history.
+* text=auto eol=lf
+
+# Binary assets — never normalize.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
