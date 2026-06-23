@@ -90,3 +90,8 @@ backend/app/data/assets/
 specs/006-topicai-v4-roadmap/
 specs/007-v4-gap-closure/checklists/
 specs/007-v4-gap-closure/contracts/
+
+# Spec-007 test-session artifacts (regenerable)
+backend/coverage/
+backend/logs/
+frontend/test-shots/
