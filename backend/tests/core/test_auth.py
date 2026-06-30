@@ -195,6 +195,26 @@ class TestRateLimiter:
         assert "reset_at" in result
         assert "T00:00:00" in result["reset_at"] or "Z" in result["reset_at"]
 
+    def test_reset_at_month_end_rolls_over(self, monkeypatch):
+        """Regression: on the last day of a 30-day month, reset_at must roll
+        into the next month instead of raising ValueError(day=31)."""
+        import app.core.rate_limiter as rl
+
+        fixed = datetime(2026, 6, 30, 23, 59, 59, tzinfo=UTC)
+
+        class _FixedDT(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return fixed
+
+        monkeypatch.setattr(rl, "datetime", _FixedDT)
+
+        from app.core.rate_limiter import RateLimiter
+
+        limiter = RateLimiter(max_calls=20)
+        result = limiter.check_and_increment("month-end-user")
+        assert result["reset_at"] == "2026-07-01T00:00:00Z"
+
 
 class TestExceptions:
     """TC05-15/16/17: Exception handling."""

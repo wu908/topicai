@@ -6,7 +6,7 @@ No Redis dependency — pure Python for MVP simplicity.
 """
 
 import threading
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from config.settings import get_settings
 
@@ -50,7 +50,7 @@ class RateLimiter:
 
             # Initialize or check reset
             if user_id not in self._counts:
-                reset_at = (today_reset.replace(day=today_reset.day + 1))
+                reset_at = today_reset + timedelta(days=1)
                 self._counts[user_id] = {
                     "count": 0,
                     "reset_at": reset_at.isoformat().replace("+00:00", "Z"),
@@ -62,9 +62,7 @@ class RateLimiter:
                 )
                 if now >= reset_at:
                     # Reset for new day
-                    next_reset = today_reset.replace(
-                        day=today_reset.day + 1
-                    )
+                    next_reset = today_reset + timedelta(days=1)
                     self._counts[user_id] = {
                         "count": 0,
                         "reset_at": next_reset.isoformat().replace(
@@ -137,5 +135,5 @@ def _next_reset_iso() -> str:
     """Get the next UTC midnight as ISO 8601 string."""
     now = datetime.now(UTC)
     today_reset = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    next_reset = today_reset.replace(day=today_reset.day + 1)
+    next_reset = today_reset + timedelta(days=1)
     return next_reset.isoformat().replace("+00:00", "Z")
