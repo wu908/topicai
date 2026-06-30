@@ -2,6 +2,15 @@
 -- Three-phase lifecycle (predict -> attribute -> derive_learnings)
 -- backed by EffectReviewService (US4, FR-007).
 -- Idempotent: safe to re-run; the runner records the version in schema_migrations.
+--
+-- The two CREATE INDEX statements that reference the additive ``status``
+-- column live in the runner's post-step (``_post_step_003_effect_reviews``),
+-- NOT here. On a database that predates the column addition,
+-- ``CREATE TABLE IF NOT EXISTS`` is a no-op and the column would be
+-- missing, so an index on ``status`` would raise "no such column" (Bug 3).
+-- The post-step back-fills the columns first, then creates the indexes.
+-- On a fresh DB this .sql builds the full table; the post-step is a no-op
+-- for columns and just adds the indexes.
 
 CREATE TABLE IF NOT EXISTS effect_reviews (
     id                CHAR(36) PRIMARY KEY,
@@ -19,9 +28,5 @@ CREATE TABLE IF NOT EXISTS effect_reviews (
 );
 
 -- Learning aggregation: derive_learnings scans the last 30 days for a user.
-CREATE INDEX IF NOT EXISTS idx_effect_reviews_user_id_created_at
-    ON effect_reviews (user_id, created_at DESC);
-
--- GET /api/v1/reviews/list?status=awaiting_actuals filter.
-CREATE INDEX IF NOT EXISTS idx_effect_reviews_status
-    ON effect_reviews (status);
+-- Index idx_effect_reviews_user_id_created_at and idx_effect_reviews_status
+-- are created by the runner post-step (see runner._post_step_003_effect_reviews).
