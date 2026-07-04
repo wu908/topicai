@@ -1,76 +1,17 @@
-"""Unit tests for viral_analysis service + chains/*.
+"""Unit tests for viral_analysis service.
 
-Targets the heuristic and chain glue methods that were at 0% or 25% coverage.
+Targets the heuristic and parse methods that were at 0% or 25% coverage.
+The chain classes (ViralChain, TitleChain) were removed in F1 (redundant
+stubs); only ViralAnalysisService retains real logic.
 """
 
 import json
 from datetime import UTC, datetime, timedelta
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
-from app.chains.title_chain import TitleChain
-from app.chains.viral_chain import ViralChain
 from app.services.viral_analysis import ViralAnalysisService
-
-
-# ─── Chains (ViralChain, TitleChain) ──────────────────────────────────────
-
-
-class TestViralChain:
-    def test_init_stores_llm_client(self):
-        c = ViralChain(llm_client=None)
-        assert c.llm is None
-        m = MagicMock()
-        c2 = ViralChain(llm_client=m)
-        assert c2.llm is m
-
-    def test_run_structural_returns_template(self):
-        c = ViralChain()
-        out = c.run_structural("hello world")
-        assert set(out.keys()) == {"title_hook", "opening", "rhythm", "emotion", "cta"}
-        for v in out.values():
-            assert v == ""
-
-    def test_run_attribution_returns_empty_list(self):
-        c = ViralChain()
-        assert c.run_attribution({"a": 1}) == []
-
-    def test_run_mimic_returns_empty_string(self):
-        c = ViralChain()
-        assert c.run_mimic([], {}) == ""
-
-    def test_run_risk_returns_empty_list(self):
-        c = ViralChain()
-        assert c.run_risk("any content") == []
-
-    def test_run_full_with_no_profile(self):
-        c = ViralChain()
-        out = c.run_full("content here")
-        assert "structural_analysis" in out
-        assert "attributions" in out
-        assert "transferable_template" in out
-        assert "risk_warnings" in out
-        assert out["structural_analysis"]["title_hook"] == ""
-
-    def test_run_full_with_profile(self):
-        c = ViralChain()
-        out = c.run_full("content", profile={"track": "tech"})
-        assert out["transferable_template"] == ""
-
-
-class TestTitleChain:
-    def test_init_stores_llm_client(self):
-        c = TitleChain(llm_client=None)
-        assert c.llm is None
-        m = MagicMock()
-        c2 = TitleChain(llm_client=m)
-        assert c2.llm is m
-
-    def test_run_returns_empty_list(self):
-        c = TitleChain()
-        assert c.run("any title", summary="any") == []
-        assert c.run("any title") == []
 
 
 # ─── ViralAnalysisService ────────────────────────────────────────────────

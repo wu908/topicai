@@ -14,83 +14,13 @@ import { Title } from '@mui/icons-material';
 import PageContainer from '@/components/layout/PageContainer';
 import LoadingCard from '@/components/common/LoadingCard';
 import EmptyState from '@/components/common/EmptyState';
+import ScoreBar from '@/components/common/ScoreBar';
 import AICreatedBadge from '@/components/ai-badge/AICreatedBadge';
 import ThumbFeedback from '@/components/feedback/ThumbFeedback';
 import { useApi } from '@/hooks/useApi';
 import { useRateLimit } from '@/hooks/useRateLimit';
 import { optimizeTitle } from '@/services/api/titles';
 import type { TitleOptimization, OptimizedTitle } from '@/types/models';
-
-interface ScoreBarProps {
-  label: string;
-  value: number;
-  helpText: string;
-}
-
-const ScoreBar: React.FC<ScoreBarProps> = ({ label, value, helpText }) => {
-  const [showHelp, setShowHelp] = useState(false);
-  return (
-    <Box sx={{ position: 'relative' }}>
-      <Box
-        sx={{
-          height: 6,
-          background: 'var(--v3-border)',
-          borderRadius: 3,
-          overflow: 'hidden',
-          mb: 0.8,
-        }}
-      >
-        <Box
-          sx={{
-            width: `${value * 10}%`,
-            height: '100%',
-            background: 'var(--v3-text)',
-            borderRadius: 3,
-            transition: 'width 0.4s',
-          }}
-        />
-      </Box>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6, fontSize: 12, color: 'var(--v3-text-sec)' }}>
-        <span>{label}</span>
-        <strong style={{ color: 'var(--v3-text)' }}>{value.toFixed(1)}</strong>
-        <button
-          type="button"
-          aria-label={`${label} 评分说明`}
-          onClick={() => setShowHelp((v) => !v)}
-          style={{
-            background: 'var(--v3-tag-bg)',
-            color: 'var(--v3-text-sec)',
-            fontSize: 10,
-            padding: '1px 5px',
-            borderRadius: 3,
-            border: 'none',
-            cursor: 'pointer',
-            fontFamily: 'inherit',
-          }}
-        >
-          ?
-        </button>
-      </Box>
-      {showHelp && (
-        <Box
-          role="tooltip"
-          sx={{
-            mt: 0.5,
-            p: 1,
-            background: 'var(--v3-panel-bg)',
-            border: '1px solid var(--v3-border-light)',
-            borderRadius: 1,
-            fontSize: 11.5,
-            color: 'var(--v3-text-sec)',
-            lineHeight: 1.5,
-          }}
-        >
-          {helpText}
-        </Box>
-      )}
-    </Box>
-  );
-};
 
 const TitleOptimizerPage: React.FC = () => {
   const [title, setTitle] = useState('');
