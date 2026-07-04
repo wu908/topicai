@@ -11,6 +11,7 @@ import logging
 from fastapi import APIRouter, Depends
 
 from app.api.v1.deps import get_current_user
+from app.models.common import ApiResponse
 from app.models.risk import ContentRiskReport, RiskCheckRequest
 
 logger = logging.getLogger(__name__)
@@ -18,11 +19,11 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Risk"])
 
 
-@router.post("/risk/check")
+@router.post("/risk/check", response_model=ApiResponse[ContentRiskReport])
 async def risk_check(
     data: RiskCheckRequest,
     user: dict = Depends(get_current_user),
-):
+) -> ApiResponse[ContentRiskReport]:
     """Check content for compliance risks (Spec-007 T074).
 
     Delegates to ``ContentRiskService.check`` and validates the result
@@ -38,24 +39,34 @@ async def risk_check(
 
     # Pydantic validation at the boundary. The service may include
     # extra keys (e.g. ``confidence``) — only the declared fields are
-    # preserved in the response payload.
+    # preserved on the parsed instance.
     parsed = ContentRiskReport(**report)
 
-    confidence = float(report.get("confidence", 0.5))
-    data_source = str(report.get("data_source", "keyword_only"))
-    model_version = str(report.get("model_version", "keyword-v1"))
+    # AI transparency fields are read off the parsed Pydantic instance.
+    # ``ContentRiskReport`` does not yet declare these, so ``getattr``
+    # falls back to keyword-only defaults when the field is absent.
+    confidence = float(getattr(parsed, "confidence", 0.5))
+    data_source = str(getattr(parsed, "data_source", "keyword_only"))
+    model_version = str(getattr(parsed, "model_version", "keyword-v1"))
+    caveat = str(
+        getattr(
+            parsed,
+            "caveat",
+            "基于关键词扫描（必要时LLM增强），发布前请人工复核",
+        )
+    )
 
-    return {
-        "code": 200,
-        "data": parsed.model_dump(),
-        "message": "success",
-        "meta": {
+    return ApiResponse[ContentRiskReport](
+        code=200,
+        data=parsed,
+        message="success",
+        meta={
             "ai_quality": {
                 "confidence": confidence,
                 "data_source": data_source,
                 "model_version": model_version,
-                "caveat": "基于关键词扫描（必要时LLM增强），发布前请人工复核",
+                "caveat": caveat,
             },
             "note": "Spec-007 T074: pre-publish content risk guard",
         },
-    }
+    )

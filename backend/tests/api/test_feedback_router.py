@@ -112,7 +112,7 @@ async def test_feedback_history_does_not_leak_other_users(client, client_as_u2, 
 async def test_feedback_history_respects_limit(client, test_db):
     """limit query param caps returned rows."""
     base = datetime.now(UTC)
-    for i in range(5):
+    for _ in range(5):
         await _seed_feedback(test_db, "u1", "topic", "thumb_up", base)
     r = await client.get("/api/v1/feedback/history?limit=2")
     assert r.status_code == 200
@@ -242,3 +242,152 @@ async def test_five_thumb_downs_update_rubric_weights(client, test_db):
         assert abs(new - old) <= 0.15 + 1e-9, (
             f"Dim {dim} shifted by {abs(new - old):.4f} (> 0.15 bound)"
         )
+
+
+# ========== A8: response_model envelope contract tests ==========
+
+# Required envelope keys for every ApiResponse[T] response.
+_API_ENVELOPE_KEYS = {"code", "data", "message", "meta"}
+
+# Required keys for any FeedbackRecord (Pydantic schema).
+_FEEDBACK_RECORD_KEYS = {
+    "id",
+    "user_id",
+    "source_type",
+    "source_id",
+    "feedback_type",
+    "created_at",
+}
+
+
+def _assert_envelope(body: dict, expected_code: int) -> None:
+    """Assert body carries the standard ApiResponse envelope."""
+    assert set(body.keys()) >= _API_ENVELOPE_KEYS, (
+        f"Missing envelope keys; got {set(body.keys())}"
+    )
+    assert body["code"] == expected_code
+    assert isinstance(body["message"], str) and body["message"]
+    assert isinstance(body["meta"], dict)
+
+
+@pytest.mark.asyncio
+async def test_submit_response_envelope_is_typed(client, test_db):
+    """A8: POST /feedback response matches ApiResponse[FeedbackRecord].
+
+    The endpoint must:
+    - return 202
+    - emit the standard envelope (code, data, message, meta)
+    - carry message == '反馈已提交'
+    - expose data as a fully-populated FeedbackRecord (no dict-only shape)
+    """
+    payload = {
+        "target_type": "title",
+        "target_id": "title-xyz-789",
+        "feedback_type": "thumb_up",
+        "reason": "good",
+    }
+    r = await client.post("/api/v1/feedback", json=payload)
+    assert r.status_code == 202
+    body = r.json()
+    _assert_envelope(body, expected_code=202)
+    assert body["message"] == "反馈已提交"
+
+    # data is a FeedbackRecord instance (serialized to dict)
+    data = body["data"]
+    assert isinstance(data, dict)
+    missing = _FEEDBACK_RECORD_KEYS - set(data.keys())
+    assert not missing, f"FeedbackRecord missing fields: {missing}"
+    assert data["user_id"] == "u1"
+    assert data["source_type"] == "title"
+    assert data["source_id"] == "title-xyz-789"
+    assert data["feedback_type"] == "thumb_up"
+    assert data["reason"] == "good"
+
+
+@pytest.mark.asyncio
+async def test_analysis_deprecation_shim_envelope(client):
+    """A8: GET /feedback/analysis returns a typed deprecation notice.
+
+    Replaces the legacy analyze_feedback(user_id, []) call with a typed
+    shim that points clients at /api/v1/feedback/history.
+    """
+    r = await client.get("/api/v1/feedback/analysis")
+    assert r.status_code == 200
+    body = r.json()
+    _assert_envelope(body, expected_code=200)
+
+    data = body["data"]
+    assert set(data.keys()) >= {"deprecated", "replacement", "message"}
+    assert data["deprecated"] is True
+    assert data["replacement"] == "/api/v1/feedback/history"
+    assert isinstance(data["message"], str) and data["message"]
+
+
+@pytest.mark.asyncio
+async def test_analysis_deprecation_shim_no_auth_401(client_no_auth):
+    """A8: /feedback/analysis still 401s without auth (manual guard preserved)."""
+    r = await client_no_auth.get("/api/v1/feedback/analysis")
+    assert r.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_history_response_envelope_is_typed(client, test_db):
+    """A8: GET /feedback/history matches ApiResponse[FeedbackHistoryResponse].
+
+    Envelope must carry a typed data payload with {items, total, limit,
+    source_type, since}; meta must retain data_source='user_feedback_table'
+    so the AI transparency audit can trace the read path.
+    """
+    now = datetime.now(UTC)
+    await _seed_feedback(test_db, "u1", "topic", "thumb_up", now)
+    r = await client.get("/api/v1/feedback/history?limit=10")
+    assert r.status_code == 200
+    body = r.json()
+    _assert_envelope(body, expected_code=200)
+
+    data = body["data"]
+    expected_keys = {"items", "total", "limit", "source_type", "since"}
+    assert set(data.keys()) >= expected_keys, (
+        f"FeedbackHistoryResponse missing keys: {expected_keys - set(data.keys())}"
+    )
+    assert isinstance(data["items"], list)
+    assert data["total"] == len(data["items"])
+    assert data["limit"] == 10
+    # source_type omitted in query -> response field is None
+    assert data["source_type"] is None
+    assert data["since"] is None
+
+    # Every item is a fully-typed FeedbackRecord
+    for item in data["items"]:
+        missing = _FEEDBACK_RECORD_KEYS - set(item.keys())
+        assert not missing, f"item missing FeedbackRecord fields: {missing}"
+
+    # AI transparency: history reads from the persisted table, not LLM
+    assert body["meta"]["data_source"] == "user_feedback_table"
+    assert body["meta"]["model_version"] == "history-v1"
+
+
+@pytest.mark.asyncio
+async def test_history_response_empty_envelope_is_typed(client):
+    """A8: empty history still carries the typed envelope and zero total."""
+    r = await client.get("/api/v1/feedback/history")
+    assert r.status_code == 200
+    body = r.json()
+    _assert_envelope(body, expected_code=200)
+    data = body["data"]
+    assert data["items"] == []
+    assert data["total"] == 0
+    assert data["source_type"] is None
+    assert data["since"] is None
+
+
+@pytest.mark.asyncio
+async def test_history_response_source_type_filter_passthrough(client, test_db):
+    """A8: source_type query param is echoed in the typed response."""
+    now = datetime.now(UTC)
+    await _seed_feedback(test_db, "u1", "title", "thumb_down", now)
+    r = await client.get("/api/v1/feedback/history?source_type=title")
+    assert r.status_code == 200
+    data = r.json()["data"]
+    assert data["source_type"] == "title"
+    assert all(item["source_type"] == "title" for item in data["items"])

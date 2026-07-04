@@ -6,7 +6,6 @@ AI transparency meta fields.
 """
 import pytest
 
-
 # ========== Happy path ==========
 
 @pytest.mark.asyncio
@@ -94,6 +93,15 @@ async def test_risk_check_sets_content_expiry(client):
 
 # ========== US5 T073: endpoint returns ContentRiskReport ==========
 
+# ContentRiskReport declared fields — the response ``data`` payload must
+# match this set exactly (no extras leaked from the service dict).
+_CONTENT_RISK_REPORT_FIELDS = frozenset({
+    "id", "user_id", "content_text",
+    "content_text_expires_at", "risks",
+    "overall_risk_score", "created_at",
+})
+
+
 @pytest.mark.asyncio
 async def test_risk_check_endpoint_returns_report(client):
     """T073: POST /api/v1/risk/check returns ContentRiskReport-shaped body
@@ -110,17 +118,24 @@ async def test_risk_check_endpoint_returns_report(client):
     assert r.status_code == 200
     body = r.json()
     assert body["code"] == 200
+    # ApiResponse envelope (Constitution VII — response_model typed schema)
+    assert body["message"] == "success"
+    assert "meta" in body
+    assert isinstance(body["meta"], dict)
 
-    # ContentRiskReport shape (subset of declared fields)
+    # ContentRiskReport shape: declared fields present, no extras leaked.
     data = body["data"]
-    for key in (
-        "id", "user_id", "content_text",
-        "content_text_expires_at", "risks",
-        "overall_risk_score", "created_at",
-    ):
-        assert key in data, f"Missing ContentRiskReport field: {key}"
+    missing = _CONTENT_RISK_REPORT_FIELDS - set(data.keys())
+    assert not missing, f"Missing ContentRiskReport fields: {missing}"
+    extra = set(data.keys()) - _CONTENT_RISK_REPORT_FIELDS
+    assert not extra, (
+        f"Unexpected extra fields in response data (Pydantic should "
+        f"strip non-declared service fields): {extra}"
+    )
     assert 0.0 <= float(data["overall_risk_score"]) <= 1.0
     assert isinstance(data["risks"], list)
+    for risk in data["risks"]:
+        assert set(risk.keys()) == {"category", "description", "severity", "suggestion"}
 
     # AI transparency meta (Constitution III)
     ai = body["meta"]["ai_quality"]

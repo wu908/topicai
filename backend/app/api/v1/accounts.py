@@ -9,7 +9,7 @@ from pydantic import BaseModel
 
 from app.api.v1.deps import get_current_user, get_db
 from app.core.database import Database
-from app.models.accounts import Platform
+from app.models.accounts import Platform, PlatformAccount
 from app.models.common import ApiResponse
 from app.services.account_service import AccountService
 
@@ -21,7 +21,7 @@ class CreateAccountBody(BaseModel):
     display_name: str
 
 
-@router.get("/accounts")
+@router.get("/accounts", response_model=ApiResponse[list[PlatformAccount]])
 async def list_accounts(
     user=Depends(get_current_user),
     db: Database = Depends(get_db),
@@ -31,7 +31,7 @@ async def list_accounts(
     return ApiResponse(code=200, data=[r.model_dump() for r in result], message="success")
 
 
-@router.get("/accounts/{account_id}")
+@router.get("/accounts/{account_id}", response_model=ApiResponse[PlatformAccount])
 async def get_account(
     account_id: str,
     user=Depends(get_current_user),
@@ -42,7 +42,7 @@ async def get_account(
     return ApiResponse(code=200, data=result.model_dump(), message="success")
 
 
-@router.post("/accounts", status_code=201)
+@router.post("/accounts", status_code=201, response_model=ApiResponse[PlatformAccount])
 async def create_account(
     body: CreateAccountBody,
     user=Depends(get_current_user),
@@ -61,7 +61,7 @@ async def create_account(
     )
 
 
-@router.patch("/accounts/{account_id}")
+@router.patch("/accounts/{account_id}", response_model=ApiResponse[PlatformAccount])
 async def set_primary_account(
     account_id: str,
     user=Depends(get_current_user),
@@ -83,7 +83,7 @@ async def disconnect_account(
     return ApiResponse(code=204, data={}, message="Disconnected")
 
 
-@router.post("/accounts/{account_id}/sync", status_code=202)
+@router.post("/accounts/{account_id}/sync", status_code=202, response_model=ApiResponse[dict])
 async def trigger_sync(
     account_id: str,
     user=Depends(get_current_user),
