@@ -60,11 +60,16 @@ class PaginatedResponse(BaseModel, Generic[T]):
     page: int = Field(..., ge=1, description="Current page number")
     page_size: int = Field(..., ge=1, le=100, description="Items per page")
 
-class ApiResponse(BaseModel):
+class ApiResponse(BaseModel, Generic[T]):
     """Unified API response format.
 
     All TopicAI API responses use this format:
     {code, data, message, meta}
+
+    Generic over the data payload type T. Use ``response_model=ApiResponse[Foo]``
+    on endpoints so FastAPI emits a typed OpenAPI schema instead of an untyped
+    Any blob. ``data: Any | None`` is kept as the runtime fallback for endpoints
+    that have not yet been migrated to a concrete T.
 
     Attributes:
         code: HTTP status code.
@@ -74,6 +79,6 @@ class ApiResponse(BaseModel):
     """
 
     code: int = Field(default=200, description="HTTP status code")
-    data: Any | None = Field(default=None, description="Response payload")
+    data: T | Any | None = Field(default=None, description="Response payload")
     message: str = Field(default="success", description="Human-readable message")
     meta: dict = Field(default_factory=dict, description="Additional metadata")
