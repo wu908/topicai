@@ -35,14 +35,14 @@ class TestLLMDataSource:
         out = await src.fetch_trending_topics("科技")
         assert len(out) == 5
         for t in out:
-            assert t["data_source"] == "ai_inference"
+            assert t["data_source"] == "llm_simulation"
 
     @pytest.mark.asyncio
     async def test_fetch_track_data_returns_dict(self):
         src = LLMDataSource(llm_client=None)
         out = await src.fetch_track_data("科技")
         assert out["track_keyword"] == "科技"
-        assert out["data_source"] == "ai_inference"
+        assert out["data_source"] == "llm_simulation"
         assert out["health_score"] == 0.65
 
     @pytest.mark.asyncio
@@ -65,7 +65,7 @@ class TestLLMDataSource:
     async def test_health_check_shape(self):
         src = LLMDataSource(llm_client=None)
         status = await src.health_check()
-        assert status["source"] == "ai_inference"
+        assert status["source"] == "llm_simulation"
         assert status["available"] is False
 
 

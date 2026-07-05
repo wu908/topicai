@@ -134,7 +134,7 @@ class TestLLMDataSource:
         source = LLMDataSource(llm_client=MagicMock())
         result = await source.fetch_trending_topics("科技")
         assert len(result) > 0
-        assert result[0]["data_source"] == "ai_inference"
+        assert result[0]["data_source"] == "llm_simulation"
         assert "AI推断" in result[0]["caveat"]
 
     @pytest.mark.asyncio

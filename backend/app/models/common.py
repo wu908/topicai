@@ -19,7 +19,7 @@ class AIQualityMeta(BaseModel):
 
     Attributes:
         confidence: Confidence score (0.0 to 1.0).
-        data_source: Data source identifier (e.g., 'tianapi', 'ai_inference').
+        data_source: Data source identifier (e.g., 'tianapi', 'llm_simulation').
         model_version: Specific model version used (e.g., 'deepseek-v4-flash').
         caveat: Optional caveat/warning about the data quality.
         generated_at: ISO 8601 UTC timestamp of generation.

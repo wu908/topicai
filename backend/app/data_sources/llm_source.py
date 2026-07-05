@@ -2,12 +2,12 @@
 
 Generates structured topic/trend data using LLM inference when
 real-time data sources are unavailable. All outputs are marked
-data_source="ai_inference" with appropriate confidence and caveats.
+data_source="llm_simulation" with appropriate confidence and caveats.
 
 Spec-007 US2 T041: REWRITTEN to actually call LLMClient.generate()
 when configured. When LLM is unavailable (None client) or the call
 fails, falls back to a structured mock. The on-topic shape
-(data_source="ai_inference", confidence in [0.5, 0.8]) is preserved
+(data_source="llm_simulation", confidence in [0.5, 0.8]) is preserved
 so the existing test_data_manager.py tests remain green.
 """
 
@@ -87,7 +87,7 @@ class LLMDataSource(DataSource):
             "health_score": 0.65,
             "competitiveness_score": 0.55,
             "trend_direction": "stable",
-            "data_source": "ai_inference",
+            "data_source": "llm_simulation",
             "confidence": 0.7,
             "caveat": "基于AI推断，非实时数据",
         }
@@ -115,7 +115,7 @@ class LLMDataSource(DataSource):
             Status dictionary.
         """
         return {
-            "source": "ai_inference",
+            "source": "llm_simulation",
             "available": self._available,
             "confidence_range": "0.5-0.8",
             "caveat": "基于AI推断，非实时数据",
@@ -147,7 +147,7 @@ class LLMDataSource(DataSource):
         return topics if isinstance(topics, list) else []
 
     def _mock_topics(self, track: str, count: int) -> list[dict[str, Any]]:
-        """Structured mock data with data_source='ai_inference' (legacy).
+        """Structured mock data with data_source='llm_simulation'.
 
         Confidence range 0.5-0.8 preserved to match the existing
         test_data_manager.py::TestLLMDataSource expectations.
@@ -163,7 +163,7 @@ class LLMDataSource(DataSource):
                 "data_quality_score": 0.6,
                 "composite_score": 0.65,
                 "confidence": 0.7,
-                "data_source": "ai_inference",
+                "data_source": "llm_simulation",
                 "caveat": "基于AI推断，非实时数据",
             }
             for i in range(count)

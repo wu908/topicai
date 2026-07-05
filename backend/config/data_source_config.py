@@ -105,7 +105,7 @@ DATA_SOURCE_LAYERS: dict[str, dict[str, Any]] = {
     "layer2": {
         "name": "AI辅助数据",
         "sources": ["llm_inference"],
-        "data_source_label": "ai_inference",
+        "data_source_label": "llm_simulation",
         "confidence_range": (0.6, 0.8),
         "caveat": "基于AI推断，非实时数据",
         "description": "Layer 2: LLM模拟生成，标注AI推断",
