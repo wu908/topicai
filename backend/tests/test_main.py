@@ -45,6 +45,127 @@ class TestFastAPIAppCreation:
         assert "/api/v1/health" in routes
 
 
+class TestJwtSecretStartupValidation:
+    """D2: Startup validation strengthens JWT_SECRET_KEY checks.
+
+    Production env must reject weak secret keys containing known
+    placeholder phrases, or any key shorter than 32 characters.
+    Non-production env tolerates weak keys (with a warning) so dev/test
+    workflows keep working.
+    """
+
+    @staticmethod
+    def _reset_settings_singleton() -> None:
+        """Clear the cached settings singleton so the next get_settings()
+        call reloads from the (monkeypatched) environment."""
+        import config.settings
+
+        config.settings._settings = None
+
+    @pytest.fixture(autouse=True)
+    def _auto_reset_settings_singleton(self):
+        """Auto-clear the settings singleton before and after each test
+        so no test leaks a cached Settings into a neighbor."""
+        self._reset_settings_singleton()
+        yield
+        self._reset_settings_singleton()
+
+    def test_create_app_rejects_weak_secret_in_production(self, monkeypatch):
+        """Given ENVIRONMENT=production and a weak JWT_SECRET_KEY,
+        When create_app() is called,
+        Then ValueError is raised mentioning the weak secret."""
+        monkeypatch.setenv("ENVIRONMENT", "production")
+        monkeypatch.setenv(
+            "JWT_SECRET_KEY", "dev-secret-key-please-change-in-prod"
+        )
+
+        from main import create_app
+
+        with pytest.raises(ValueError, match="weak"):
+            create_app()
+
+    def test_create_app_rejects_weak_secret_when_environment_is_Production(
+        self, monkeypatch
+    ):
+        """C1: ENVIRONMENT is case-insensitive. 'Production' must still
+        be treated as production and reject weak keys."""
+        monkeypatch.setenv("ENVIRONMENT", "Production")
+        monkeypatch.setenv(
+            "JWT_SECRET_KEY", "dev-secret-key-please-change-in-prod"
+        )
+
+        from main import create_app
+
+        with pytest.raises(ValueError, match="weak"):
+            create_app()
+
+    def test_create_app_rejects_weak_secret_when_environment_is_PRODUCTION(
+        self, monkeypatch
+    ):
+        """C1: ENVIRONMENT is case-insensitive. 'PRODUCTION' must still
+        be treated as production and reject weak keys."""
+        monkeypatch.setenv("ENVIRONMENT", "PRODUCTION")
+        monkeypatch.setenv(
+            "JWT_SECRET_KEY", "dev-secret-key-please-change-in-prod"
+        )
+
+        from main import create_app
+
+        with pytest.raises(ValueError, match="weak"):
+            create_app()
+
+    def test_create_app_rejects_short_secret_in_production(self, monkeypatch):
+        """H2: A secret shorter than 32 characters must be rejected in
+        production even if it contains no blacklist phrase."""
+        monkeypatch.setenv("ENVIRONMENT", "production")
+        monkeypatch.setenv("JWT_SECRET_KEY", "x9k2q7m4p1z8r6w3t5v0b8n1")  # 24 chars, no phrase
+
+        from main import create_app
+
+        with pytest.raises(ValueError, match="32"):
+            create_app()
+
+    def test_create_app_allows_strong_secret_in_production(self, monkeypatch):
+        """Given ENVIRONMENT=production and a strong JWT_SECRET_KEY
+        (>= 32 chars, no blacklist phrase),
+        When create_app() is called,
+        Then no ValueError is raised."""
+        monkeypatch.setenv("ENVIRONMENT", "production")
+        monkeypatch.setenv(
+            "JWT_SECRET_KEY",
+            "x9k2q7m4p1z8r6w3t5v0b8n2c4d6f8h0j2l4s6u8w0y3a5b7c9e1g3i5k7m9o1q3",
+        )
+
+        from main import create_app
+
+        app = create_app()
+        assert app is not None
+
+    def test_create_app_allows_weak_secret_in_dev(self, monkeypatch):
+        """Given ENVIRONMENT=development and a weak JWT_SECRET_KEY,
+        When create_app() is called,
+        Then no ValueError is raised (dev tolerates weak keys)."""
+        monkeypatch.setenv("ENVIRONMENT", "development")
+        monkeypatch.setenv("JWT_SECRET_KEY", "dev-secret-key-please-change")
+
+        from main import create_app
+
+        app = create_app()
+        assert app is not None
+
+    def test_create_app_rejects_empty_secret_any_env(self, monkeypatch):
+        """Given an empty JWT_SECRET_KEY in any environment,
+        When create_app() is called,
+        Then ValueError is raised (preserve existing behavior)."""
+        monkeypatch.setenv("ENVIRONMENT", "test")
+        monkeypatch.setenv("JWT_SECRET_KEY", "")
+
+        from main import create_app
+
+        with pytest.raises(ValueError, match="JWT_SECRET_KEY"):
+            create_app()
+
+
 class TestConfigurationLoading:
     """TC01-02: Configuration loading from environment."""
 

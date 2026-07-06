@@ -101,18 +101,25 @@ class Settings(BaseSettings):
 
     @property
     def is_production(self) -> bool:
-        """Check if running in production environment."""
-        return self.environment == "production"
+        """Check if running in production environment.
+
+        Comparison is case-insensitive and whitespace-trimmed so that
+        ``ENVIRONMENT=Production`` / ``PRODUCTION`` / `` production `` are
+        all treated as production. Without this normalization a case
+        typo would silently flip the JWT-secret strength gate to
+        fail-open in production.
+        """
+        return self.environment.strip().lower() == "production"
 
     @property
     def is_test(self) -> bool:
-        """Check if running in test environment."""
-        return self.environment == "test"
+        """Check if running in test environment (case-insensitive)."""
+        return self.environment.strip().lower() == "test"
 
     @property
     def is_development(self) -> bool:
-        """Check if running in development environment."""
-        return self.environment == "development"
+        """Check if running in development environment (case-insensitive)."""
+        return self.environment.strip().lower() == "development"
 
 
 # Singleton settings instance
