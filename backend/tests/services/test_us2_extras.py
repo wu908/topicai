@@ -427,17 +427,19 @@ def test_topic_recommend_rank_topics_keeps_existing_score():
 # ─── _load_rubric_weights JSON-string parse path (lines 117-140) ─────
 
 
-def test_topic_recommend_load_rubric_weights_anonymous():
+@pytest.mark.asyncio
+async def test_topic_recommend_load_rubric_weights_anonymous():
     """Anonymous user gets DEFAULT_RUBRIC_WEIGHTS."""
     from app.services.topic_recommend import DEFAULT_RUBRIC_WEIGHTS, TopicRecommendService
 
     svc = TopicRecommendService.__new__(TopicRecommendService)
-    assert svc._load_rubric_weights("anonymous") == DEFAULT_RUBRIC_WEIGHTS
-    assert svc._load_rubric_weights("") == DEFAULT_RUBRIC_WEIGHTS
-    assert svc._load_rubric_weights(None) == DEFAULT_RUBRIC_WEIGHTS
+    assert await svc._load_rubric_weights("anonymous") == DEFAULT_RUBRIC_WEIGHTS
+    assert await svc._load_rubric_weights("") == DEFAULT_RUBRIC_WEIGHTS
+    assert await svc._load_rubric_weights(None) == DEFAULT_RUBRIC_WEIGHTS
 
 
-def test_topic_recommend_load_rubric_weights_db_failure_falls_back():
+@pytest.mark.asyncio
+async def test_topic_recommend_load_rubric_weights_db_failure_falls_back():
     """When the DB lookup fails, DEFAULT_RUBRIC_WEIGHTS is returned."""
     from unittest.mock import patch
 
@@ -447,11 +449,12 @@ def test_topic_recommend_load_rubric_weights_db_failure_falls_back():
     # Patch the source module's get_db — `from app.core.database import
     # get_db` always reads from the source module.
     with patch("app.core.database.get_db", side_effect=Exception("db unavailable"), create=True):
-        result = svc._load_rubric_weights("u-1")
+        result = await svc._load_rubric_weights("u-1")
     assert result == DEFAULT_RUBRIC_WEIGHTS
 
 
-def test_topic_recommend_load_rubric_weights_with_profile():
+@pytest.mark.asyncio
+async def test_topic_recommend_load_rubric_weights_with_profile():
     """When the DB returns a profile with rubric_weights, those are used.
 
     Exercises lines 117-137 of _load_rubric_weights (full try block).
@@ -471,12 +474,13 @@ def test_topic_recommend_load_rubric_weights_with_profile():
     with patch("app.core.database.get_db", return_value=MagicMock(), create=True), \
          patch("app.services.creator_profile.CreatorProfileService",
                return_value=fake_profile_svc, create=True):
-        result = svc._load_rubric_weights("u-1")
+        result = await svc._load_rubric_weights("u-1")
 
     assert result == {"track_match_score": 0.5, "format_match_score": 0.5}
 
 
-def test_topic_recommend_load_rubric_weights_with_json_string():
+@pytest.mark.asyncio
+async def test_topic_recommend_load_rubric_weights_with_json_string():
     """When rubric_weights stored as JSON string, parse and return."""
     from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -493,12 +497,13 @@ def test_topic_recommend_load_rubric_weights_with_json_string():
     with patch("app.core.database.get_db", return_value=MagicMock(), create=True), \
          patch("app.services.creator_profile.CreatorProfileService",
                return_value=fake_profile_svc, create=True):
-        result = svc._load_rubric_weights("u-1")
+        result = await svc._load_rubric_weights("u-1")
 
     assert result == {"track_match_score": 0.6, "format_match_score": 0.4}
 
 
-def test_topic_recommend_load_rubric_weights_no_profile():
+@pytest.mark.asyncio
+async def test_topic_recommend_load_rubric_weights_no_profile():
     """When the profile lookup returns None, default weights are returned."""
     from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -512,7 +517,7 @@ def test_topic_recommend_load_rubric_weights_no_profile():
     with patch("app.core.database.get_db", return_value=MagicMock(), create=True), \
          patch("app.services.creator_profile.CreatorProfileService",
                return_value=fake_profile_svc, create=True):
-        result = svc._load_rubric_weights("u-1")
+        result = await svc._load_rubric_weights("u-1")
 
     assert result == DEFAULT_RUBRIC_WEIGHTS
 

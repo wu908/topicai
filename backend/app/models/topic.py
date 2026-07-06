@@ -99,3 +99,19 @@ class TopicRecommendRequest(BaseModel):
     track: str | None = Field(
         default=None, description="Track override"
     )
+
+
+class TopicHistoryResponse(BaseModel):
+    """Response payload for ``GET /api/v1/topics/history`` (Spec-007 T046).
+
+    Wraps the cached recent-topic list so the endpoint can carry a
+    ``response_model=ApiResponse[TopicHistoryResponse]`` and emit a typed
+    OpenAPI schema (Constitution VII). Items are untyped ``dict`` blobs
+    because the recent-cache shape is loose and may evolve with the
+    data-source tiers that populate it.
+    """
+
+    topics: list[dict] = Field(
+        default_factory=list, description="Recently recommended topics"
+    )
+    count: int = Field(..., ge=0, description="Number of topics returned")
