@@ -57,6 +57,9 @@ class Settings(BaseSettings):
 
     # ==================== Rate Limiting ====================
     ai_calls_per_day: int = Field(default=20, alias="AI_CALLS_PER_DAY")
+    auth_rate_limit_per_minute: int = Field(
+        default=5, alias="AUTH_RATE_LIMIT_PER_MINUTE", ge=1
+    )
 
     # ==================== Monitoring ====================
     sentry_dsn: str = Field(default="", alias="SENTRY_DSN")

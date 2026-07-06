@@ -1,11 +1,20 @@
-"""In-memory rate limiter for AI call throttling.
+"""In-memory rate limiters.
 
-Free users get 20 AI calls per day, resetting at UTC 00:00.
-Thread-safe implementation using a simple dict with lock.
-No Redis dependency — pure Python for MVP simplicity.
+Two distinct limiters coexist:
+
+* ``RateLimiter`` — daily AI call quota per user (UTC midnight reset).
+* ``MinuteRateLimiter`` — per-IP minute fixed-window limiter used by the
+  auth endpoints (login / register / refresh) to mitigate credential
+  stuffing and registration flooding.
+
+Both are thread-safe and keep state in-process (no Redis). ``MinuteRateLimiter``
+is deliberately separate from ``RateLimiter`` to avoid coupling the AI daily
+quota with the auth per-minute budget — they have different windows, different
+keys (user_id vs IP) and different error semantics.
 """
 
 import threading
+import time
 from datetime import UTC, datetime, timedelta
 
 from config.settings import get_settings
@@ -137,3 +146,116 @@ def _next_reset_iso() -> str:
     today_reset = now.replace(hour=0, minute=0, second=0, microsecond=0)
     next_reset = today_reset + timedelta(days=1)
     return next_reset.isoformat().replace("+00:00", "Z")
+
+
+class MinuteRateLimiter:
+    """Thread-safe per-IP fixed-window rate limiter with a 60s window.
+
+    Designed for auth endpoints (login/register/refresh) where the budget is
+    small (default 5/min/IP) and the key is the client IP rather than a
+    user_id (because the user is not yet authenticated).
+
+    A fixed window is sufficient for MVP: a window_start timestamp is kept
+    per IP, and once 60 seconds elapse the counter resets. Edge bursts at
+    window boundaries are an accepted trade-off for simplicity.
+    """
+
+    WINDOW_SECONDS: float = 60.0
+
+    def __init__(self, max_calls_per_minute: int | None = None):
+        """Initialize the minute rate limiter.
+
+        Args:
+            max_calls_per_minute: Maximum calls per IP within a 60s window.
+                Defaults to ``settings.auth_rate_limit_per_minute``.
+        """
+        settings = get_settings()
+        self.max_calls_per_minute = (
+            max_calls_per_minute
+            if max_calls_per_minute is not None
+            else settings.auth_rate_limit_per_minute
+        )
+        self._lock = threading.Lock()
+        # ip -> {count, window_start}
+        self._counts: dict[str, dict[str, float | int]] = {}
+
+    def check_and_increment(self, ip: str) -> dict:
+        """Check rate limit and increment the counter for the given IP.
+
+        Args:
+            ip: The client IP (use ``"unknown"`` when IP is unavailable).
+
+        Returns:
+            Dict with remaining, limit, used, reset_at (ISO 8601) fields.
+
+        Raises:
+            RateLimitException: If the per-minute budget for the IP is used up.
+        """
+        from app.core.exceptions import RateLimitException
+
+        with self._lock:
+            now = time.monotonic()
+            entry = self._counts.get(ip)
+            if entry is None or (now - float(entry["window_start"])) >= self.WINDOW_SECONDS:
+                # Start a new window.
+                entry = {"count": 0, "window_start": now}
+                self._counts[ip] = entry
+
+            if entry["count"] >= int(self.max_calls_per_minute):
+                reset_at_iso = self._reset_at_iso(entry)
+                raise RateLimitException(
+                    message="请求过于频繁，请稍后再试",
+                    error_code="AUTH_RATE_LIMIT_EXCEEDED",
+                    reset_at=reset_at_iso,
+                )
+
+            entry["count"] = int(entry["count"]) + 1
+            return {
+                "remaining": int(self.max_calls_per_minute) - int(entry["count"]),
+                "limit": int(self.max_calls_per_minute),
+                "used": int(entry["count"]),
+                "reset_at": self._reset_at_iso(entry),
+            }
+
+    def get_remaining(self, ip: str) -> dict:
+        """Get remaining quota for an IP without incrementing."""
+        with self._lock:
+            entry = self._counts.get(ip)
+            now = time.monotonic()
+            if entry is None or (now - float(entry["window_start"])) >= self.WINDOW_SECONDS:
+                return {
+                    "remaining": int(self.max_calls_per_minute),
+                    "limit": int(self.max_calls_per_minute),
+                    "used": 0,
+                    "reset_at": self._iso_now_plus(self.WINDOW_SECONDS),
+                }
+            return {
+                "remaining": max(
+                    0, int(self.max_calls_per_minute) - int(entry["count"])
+                ),
+                "limit": int(self.max_calls_per_minute),
+                "used": int(entry["count"]),
+                "reset_at": self._reset_at_iso(entry),
+            }
+
+    def reset_ip(self, ip: str) -> None:
+        """Manually reset the counter for an IP."""
+        with self._lock:
+            if ip in self._counts:
+                self._counts[ip] = {
+                    "count": 0,
+                    "window_start": time.monotonic(),
+                }
+
+    def _reset_at_iso(self, entry: dict[str, float | int]) -> str:
+        """Return ISO 8601 wall-clock time at which the current window resets."""
+        remaining = self.WINDOW_SECONDS - (time.monotonic() - float(entry["window_start"]))
+        if remaining < 0:
+            remaining = 0.0
+        reset_dt = datetime.now(UTC) + timedelta(seconds=remaining)
+        return reset_dt.isoformat().replace("+00:00", "Z")
+
+    @staticmethod
+    def _iso_now_plus(seconds: float) -> str:
+        reset_dt = datetime.now(UTC) + timedelta(seconds=seconds)
+        return reset_dt.isoformat().replace("+00:00", "Z")
