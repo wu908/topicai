@@ -18,7 +18,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from app.api.v1.deps import get_current_user, get_db
-from app.models.common import ApiResponse
+from app.models.common import ApiResponse, _build_ai_quality
 from app.models.effect_review import (
     EffectAttributeRequest,
     EffectPredictRequest,
@@ -47,24 +47,6 @@ class ReviewListResponse(BaseModel):
     status: str | None = Field(
         default=None, description="Status filter echo (if any)"
     )
-
-
-def _ai_meta(confidence: float = 0.7, data_source: str = "llm_simulation") -> dict:
-    """Generate AI quality metadata for review responses.
-
-    Args:
-        confidence: AI confidence score (0-1).
-        data_source: One of 'llm_simulation' | 'template_fallback'.
-
-    Returns:
-        Dict with AI quality metadata.
-    """
-    return {
-        "confidence": confidence,
-        "data_source": data_source,
-        "model_version": "deepseek-v4-flash",
-        "caveat": "基于AI分析，供参考",
-    }
 
 
 @router.post(
@@ -106,7 +88,7 @@ async def predict_effect(
         code=201,
         data=EffectReview(**result),
         message="效果预测完成",
-        meta={"ai_quality": _ai_meta(confidence=0.7, data_source="llm_simulation")},
+        meta={"ai_quality": _build_ai_quality(result)},
     )
 
 
@@ -152,7 +134,7 @@ async def attribute_effect(
         code=201,
         data=result,
         message="归因分析完成",
-        meta={"ai_quality": _ai_meta(confidence=0.7, data_source="llm_simulation")},
+        meta={"ai_quality": _build_ai_quality(result)},
     )
 
 

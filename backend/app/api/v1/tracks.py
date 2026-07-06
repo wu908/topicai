@@ -4,26 +4,11 @@ import logging
 
 from fastapi import APIRouter, HTTPException, Request
 
-from app.models.common import ApiResponse
+from app.models.common import ApiResponse, _build_ai_quality
 from app.models.track import TrackDiagnoseRequest, TrackDiagnosis
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Tracks"])
-
-
-def _ai_meta(result) -> dict:
-    """Build AI quality meta dict from a TrackDiagnosis-like result.
-
-    Note: batch B2 will replace this with AIQualityMeta construction.
-    For now, extract values via getattr so the function works with both
-    Pydantic TrackDiagnosis instances (tests) and dicts (service output).
-    """
-    return {
-        "confidence": getattr(result, "confidence", 0.75),
-        "data_source": getattr(result, "data_source", "llm_simulation"),
-        "model_version": getattr(result, "model_version", "deepseek-v4-flash"),
-        "caveat": "基于基准数据分析",
-    }
 
 
 @router.post("/tracks/diagnose", response_model=ApiResponse[TrackDiagnosis])
@@ -43,5 +28,5 @@ async def diagnose_track(request: Request, data: TrackDiagnoseRequest):
         code=200,
         data=result,
         message="赛道诊断完成",
-        meta={"ai_quality": _ai_meta(result)},
+        meta={"ai_quality": _build_ai_quality(result)},
     )

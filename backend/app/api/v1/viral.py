@@ -5,38 +5,11 @@ import logging
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
-from app.models.common import ApiResponse
+from app.models.common import ApiResponse, _build_ai_quality
 from app.models.viral import ViralAnalysis, ViralAnalyzeRequest
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Viral"])
-
-
-def _ai_meta(result=None) -> dict:
-    """Build AI quality metadata for viral endpoints.
-
-    Accepts an optional service result (dict or Pydantic model). Falls back
-    to safe defaults when result is None or lacks provenance fields. The
-    full provenance correction is tracked in batch B2.
-    """
-    if result is None:
-        confidence = 0.75
-        data_source = "llm_simulation"
-        model_version = "llm_simulation"
-    elif isinstance(result, dict):
-        confidence = result.get("confidence", 0.75)
-        data_source = result.get("data_source", "llm_simulation")
-        model_version = result.get("model_version", "llm_simulation")
-    else:
-        confidence = getattr(result, "confidence", 0.75)
-        data_source = getattr(result, "data_source", "llm_simulation")
-        model_version = getattr(result, "model_version", "llm_simulation")
-    return {
-        "confidence": confidence,
-        "data_source": data_source,
-        "model_version": model_version,
-        "caveat": "基于AI分析，供参考",
-    }
 
 
 class _ViralResultStatus(BaseModel):
@@ -65,7 +38,7 @@ async def analyze_viral_content(request: Request, data: ViralAnalyzeRequest):
         code=200,
         data=result,
         message="爆款拆解完成",
-        meta={"ai_quality": _ai_meta(result)},
+        meta={"ai_quality": _build_ai_quality(result)},
     )
 
 
@@ -76,5 +49,5 @@ async def get_viral_result(request: Request, analysis_id: str):
         code=200,
         data=_ViralResultStatus(id=analysis_id, status="completed"),
         message="success",
-        meta={"ai_quality": _ai_meta()},
+        meta={"ai_quality": _build_ai_quality(None)},
     )

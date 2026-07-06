@@ -43,6 +43,35 @@ class AIQualityMeta(BaseModel):
         description="ISO 8601 UTC generation timestamp",
     )
 
+
+def _build_ai_quality(
+    result: Any,
+    *,
+    default_source: str = "llm_simulation",
+) -> dict:
+    """Build ``ai_quality`` meta dict from a service result (Pydantic or dict).
+
+    Reads provenance fields from the result when available, falling back
+    to ``default_source`` for absent ``data_source`` / ``model_version``.
+    Returns a plain dict (``generated_at`` excluded) so request meta
+    stays deterministic across calls.
+
+    Foundation batch B2: replaces per-endpoint ``_ai_meta`` helpers.
+    """
+
+    def _get(field: str, default: Any) -> Any:
+        if isinstance(result, dict):
+            return result.get(field, default)
+        return getattr(result, field, default)
+
+    return AIQualityMeta(
+        confidence=float(_get("confidence", 0.75)),
+        data_source=str(_get("data_source", default_source)),
+        model_version=str(_get("model_version", default_source)),
+        caveat=_get("caveat", "基于AI推断"),
+    ).model_dump(exclude={"generated_at"})
+
+
 T = TypeVar("T")
 
 class PaginatedResponse(BaseModel, Generic[T]):
