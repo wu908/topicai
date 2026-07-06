@@ -149,31 +149,51 @@ def _next_reset_iso() -> str:
 
 
 class MinuteRateLimiter:
-    """Thread-safe per-IP fixed-window rate limiter with a 60s window.
+    """Thread-safe per-IP fixed-window rate limiter.
 
     Designed for auth endpoints (login/register/refresh) where the budget is
     small (default 5/min/IP) and the key is the client IP rather than a
-    user_id (because the user is not yet authenticated).
+    user_id (because the user is not yet authenticated). Also reused — with a
+    3600s window — as the anonymous AI-call limiter (D4): anonymous callers
+    share a strict per-IP hourly budget so an unauthenticated client cannot
+    brute-force the LLM.
 
     A fixed window is sufficient for MVP: a window_start timestamp is kept
-    per IP, and once 60 seconds elapse the counter resets. Edge bursts at
-    window boundaries are an accepted trade-off for simplicity.
+    per IP, and once ``window_seconds`` elapse the counter resets. Edge
+    bursts at window boundaries are an accepted trade-off for simplicity.
+
+    The constructor parameter ``max_calls_per_minute`` is retained for
+    backward compatibility with D3 even though the window is now
+    configurable; conceptually it is "max calls per window".
     """
 
     WINDOW_SECONDS: float = 60.0
 
-    def __init__(self, max_calls_per_minute: int | None = None):
+    def __init__(
+        self,
+        max_calls_per_minute: int | None = None,
+        window_seconds: float | None = None,
+    ):
         """Initialize the minute rate limiter.
 
         Args:
-            max_calls_per_minute: Maximum calls per IP within a 60s window.
-                Defaults to ``settings.auth_rate_limit_per_minute``.
+            max_calls_per_minute: Maximum calls per IP within one window.
+                Defaults to ``settings.auth_rate_limit_per_minute``. Despite
+                the historical name this is "max calls per window" — the
+                window length is controlled by ``window_seconds``.
+            window_seconds: Window length in seconds. Defaults to
+                ``60.0`` (one minute) for auth-endpoint use. Pass
+                ``3600.0`` to use the limiter as an hourly anonymous AI
+                limiter (D4).
         """
         settings = get_settings()
         self.max_calls_per_minute = (
             max_calls_per_minute
             if max_calls_per_minute is not None
             else settings.auth_rate_limit_per_minute
+        )
+        self.window_seconds = (
+            window_seconds if window_seconds is not None else self.WINDOW_SECONDS
         )
         self._lock = threading.Lock()
         # ip -> {count, window_start}
@@ -196,7 +216,7 @@ class MinuteRateLimiter:
         with self._lock:
             now = time.monotonic()
             entry = self._counts.get(ip)
-            if entry is None or (now - float(entry["window_start"])) >= self.WINDOW_SECONDS:
+            if entry is None or (now - float(entry["window_start"])) >= self.window_seconds:
                 # Start a new window.
                 entry = {"count": 0, "window_start": now}
                 self._counts[ip] = entry
@@ -222,12 +242,12 @@ class MinuteRateLimiter:
         with self._lock:
             entry = self._counts.get(ip)
             now = time.monotonic()
-            if entry is None or (now - float(entry["window_start"])) >= self.WINDOW_SECONDS:
+            if entry is None or (now - float(entry["window_start"])) >= self.window_seconds:
                 return {
                     "remaining": int(self.max_calls_per_minute),
                     "limit": int(self.max_calls_per_minute),
                     "used": 0,
-                    "reset_at": self._iso_now_plus(self.WINDOW_SECONDS),
+                    "reset_at": self._iso_now_plus(self.window_seconds),
                 }
             return {
                 "remaining": max(
@@ -249,7 +269,7 @@ class MinuteRateLimiter:
 
     def _reset_at_iso(self, entry: dict[str, float | int]) -> str:
         """Return ISO 8601 wall-clock time at which the current window resets."""
-        remaining = self.WINDOW_SECONDS - (time.monotonic() - float(entry["window_start"]))
+        remaining = self.window_seconds - (time.monotonic() - float(entry["window_start"]))
         if remaining < 0:
             remaining = 0.0
         reset_dt = datetime.now(UTC) + timedelta(seconds=remaining)

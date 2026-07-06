@@ -60,6 +60,9 @@ class Settings(BaseSettings):
     auth_rate_limit_per_minute: int = Field(
         default=5, alias="AUTH_RATE_LIMIT_PER_MINUTE", ge=1
     )
+    anonymous_ai_calls_per_hour: int = Field(
+        default=20, alias="ANONYMOUS_AI_CALLS_PER_HOUR", ge=1
+    )
 
     # ==================== Monitoring ====================
     sentry_dsn: str = Field(default="", alias="SENTRY_DSN")

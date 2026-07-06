@@ -15,7 +15,6 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-
 # ─── setup_monitoring ───────────────────────────────────────────────────
 
 
@@ -109,19 +108,33 @@ class TestRateLimitMiddleware:
         mock_limiter.check_and_increment.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_no_user_id_passes_through(self):
-        """request.state.user_id is None -> pass through (auth handles it)."""
+    async def test_no_user_id_routes_to_anonymous_limiter(self):
+        """request.state.user_id is None on an AI endpoint -> routed to the
+        anonymous IP limiter (NOT the daily AI limiter) and, when the anonymous
+        budget allows, the request passes through.
+
+        D4 reverses the previous D3 contract which silently passed anonymous
+        AI calls. The daily limiter (``mock_limiter``) must remain untouched.
+        """
         from app.middleware.rate_limit import RateLimitMiddleware
 
-        mock_limiter = MagicMock()
-        middleware = RateLimitMiddleware(app=MagicMock(), rate_limiter=mock_limiter)
-        request = _make_request("/api/v1/topics/recommend", user_id=None)
+        mock_limiter = MagicMock()  # daily AI limiter — must NOT be touched
+        mock_anon = MagicMock()  # anonymous IP limiter — MUST be touched
+        middleware = RateLimitMiddleware(
+            app=MagicMock(),
+            rate_limiter=mock_limiter,
+            anonymous_rate_limiter=mock_anon,
+        )
+        request = _make_request(
+            "/api/v1/topics/recommend", user_id=None, client_host="10.0.0.10"
+        )
 
         call_next = AsyncMock(return_value="passthrough")
         result = await middleware.dispatch(request, call_next)
 
         assert result == "passthrough"
         mock_limiter.check_and_increment.assert_not_called()
+        mock_anon.check_and_increment.assert_called_once_with("10.0.0.10")
 
     @pytest.mark.asyncio
     async def test_rate_limit_exceeded_returns_429(self):
@@ -177,6 +190,267 @@ class TestRateLimitMiddleware:
         assert result == "ok"
         mock_limiter.check_and_increment.assert_called_once_with("u-2")
         call_next.assert_called_once()
+
+
+# ─── Anonymous AI-call rate limiting (D4) ───────────────────────────────
+
+
+class TestAnonymousAIRateLimit:
+    """Per-IP hourly-window rate limiting for anonymous AI calls.
+
+    D4 reverses the D3 "anonymous AI endpoint passes through" hole: anonymous
+    callers (no ``user_id`` on request.state) hitting AI-call endpoints now
+    share a strict per-IP budget (default 20/hour/IP) so an unauthenticated
+    client cannot brute-force the LLM. Authenticated callers continue to use
+    the daily per-user limiter.
+    """
+
+    def _middleware(self, max_per_hour: int = 20):
+        from app.core.rate_limiter import MinuteRateLimiter
+        from app.middleware.rate_limit import RateLimitMiddleware
+
+        # AI daily limiter is a MagicMock: must NOT be touched by the anon path.
+        daily = MagicMock()
+        anon = MinuteRateLimiter(
+            max_calls_per_minute=max_per_hour, window_seconds=3600.0
+        )
+        return RateLimitMiddleware(
+            app=MagicMock(),
+            rate_limiter=daily,
+            anonymous_rate_limiter=anon,
+        )
+
+    @pytest.mark.asyncio
+    async def test_anonymous_ai_endpoint_rate_limited(self):
+        """20 same-IP anonymous AI calls pass; the 21st returns 429."""
+        middleware = self._middleware(max_per_hour=20)
+
+        call_next = AsyncMock(return_value="ok")
+        for _ in range(20):
+            request = _make_request(
+                "/api/v1/topics/recommend", user_id=None, client_host="10.0.0.10"
+            )
+            result = await middleware.dispatch(request, call_next)
+            assert result == "ok"
+
+        # 21st request — should hit the anonymous rate limiter.
+        request = _make_request(
+            "/api/v1/topics/recommend", user_id=None, client_host="10.0.0.10"
+        )
+        result = await middleware.dispatch(request, call_next)
+        assert result.status_code == 429
+        # Daily limiter untouched on the anonymous path.
+        middleware.rate_limiter.check_and_increment.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_anonymous_ai_rate_limit_per_ip(self):
+        """IP A exhausting its budget must NOT block IP B."""
+        middleware = self._middleware(max_per_hour=1)
+
+        call_next = AsyncMock(return_value="ok")
+        request_a = _make_request(
+            "/api/v1/topics/recommend", user_id=None, client_host="10.0.0.1"
+        )
+        await middleware.dispatch(request_a, call_next)
+
+        # IP A is now blocked.
+        request_a2 = _make_request(
+            "/api/v1/topics/recommend", user_id=None, client_host="10.0.0.1"
+        )
+        result_a = await middleware.dispatch(request_a2, call_next)
+        assert result_a.status_code == 429
+
+        # IP B should still pass through.
+        request_b = _make_request(
+            "/api/v1/topics/recommend", user_id=None, client_host="10.0.0.2"
+        )
+        result_b = await middleware.dispatch(request_b, call_next)
+        assert result_b == "ok"
+
+    @pytest.mark.asyncio
+    async def test_anonymous_ai_429_message_generic(self):
+        """429 message is generic — does NOT leak the auth tier (no "登录" hint).
+
+        Leaking "登录" tells an attacker the endpoint has an authentication
+        tier to chase. The anonymous 429 uses the same generic wording as the
+        auth limiter so no information about the auth state is disclosed.
+        """
+        middleware = self._middleware(max_per_hour=1)
+
+        call_next = AsyncMock(return_value="ok")
+        request1 = _make_request(
+            "/api/v1/topics/recommend", user_id=None, client_host="10.0.0.3"
+        )
+        await middleware.dispatch(request1, call_next)
+
+        request2 = _make_request(
+            "/api/v1/topics/recommend", user_id=None, client_host="10.0.0.3"
+        )
+        result = await middleware.dispatch(request2, call_next)
+        assert result.status_code == 429
+
+        import json as _json
+
+        body = (
+            result.body.decode("utf-8")
+            if isinstance(result.body, bytes)
+            else result.body
+        )
+        parsed = _json.loads(body)
+        assert parsed["code"] == 429
+        assert parsed["data"] is None
+        # Message must distinguish from the daily AI limiter ("已用完") but
+        # must NOT leak the authentication tier ("登录").
+        assert "已用完" not in parsed["message"]
+        assert "登录" not in parsed["message"]
+        assert "频繁" in parsed["message"]
+        assert parsed["meta"]["error_code"] == "ANONYMOUS_AI_RATE_LIMIT_EXCEEDED"
+
+    @pytest.mark.asyncio
+    async def test_anonymous_ai_429_does_not_leak_threshold(self):
+        """429 meta must NOT expose limit/used/reset_at/remaining.
+
+        Leaking thresholds lets an attacker tune brute-force cadence to just
+        under the budget. The anonymous 429 envelope keeps only error_code,
+        matching the D3 S2 principle applied to auth 429s.
+        """
+        middleware = self._middleware(max_per_hour=1)
+
+        call_next = AsyncMock(return_value="ok")
+        request1 = _make_request(
+            "/api/v1/topics/recommend", user_id=None, client_host="10.0.0.4"
+        )
+        await middleware.dispatch(request1, call_next)
+
+        request2 = _make_request(
+            "/api/v1/topics/recommend", user_id=None, client_host="10.0.0.4"
+        )
+        result = await middleware.dispatch(request2, call_next)
+        assert result.status_code == 429
+
+        import json as _json
+
+        body = (
+            result.body.decode("utf-8")
+            if isinstance(result.body, bytes)
+            else result.body
+        )
+        parsed = _json.loads(body)
+        assert parsed["code"] == 429
+        assert parsed["data"] is None
+        meta = parsed["meta"]
+        assert set(meta.keys()) == {"error_code"}
+        assert meta["error_code"] == "ANONYMOUS_AI_RATE_LIMIT_EXCEEDED"
+
+    @pytest.mark.asyncio
+    async def test_authenticated_user_uses_daily_limiter_not_anonymous(self):
+        """Authenticated requests must flow through the daily AI limiter, not
+        the anonymous IP limiter. The anonymous limiter must NOT count the call.
+        """
+        from app.middleware.rate_limit import RateLimitMiddleware
+
+        mock_anon = MagicMock()
+        middleware = RateLimitMiddleware(
+            app=MagicMock(),
+            rate_limiter=MagicMock(),  # daily — will be asserted
+            anonymous_rate_limiter=mock_anon,
+        )
+
+        call_next = AsyncMock(return_value="ok")
+        request = _make_request(
+            "/api/v1/topics/recommend", user_id="u-1", client_host="10.0.0.5"
+        )
+        result = await middleware.dispatch(request, call_next)
+
+        assert result == "ok"
+        middleware.rate_limiter.check_and_increment.assert_called_once_with("u-1")
+        mock_anon.check_and_increment.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_anonymous_publish_suggest_rate_limited(self):
+        """D4 M1: /api/v1/publish/suggest is reachable anonymously and calls
+        the LLM (publish_advisor._analyze_with_llm). It MUST be in
+        _RATE_LIMITED_PATHS so anonymous callers are throttled per-IP —
+        otherwise the D4 hole reopens via this route.
+        """
+        from app.middleware.rate_limit import _RATE_LIMITED_PATHS
+
+        assert "/api/v1/publish/suggest" in _RATE_LIMITED_PATHS
+
+        middleware = self._middleware(max_per_hour=2)
+        call_next = AsyncMock(return_value="ok")
+        for _ in range(2):
+            request = _make_request(
+                "/api/v1/publish/suggest", user_id=None, client_host="10.0.0.20"
+            )
+            result = await middleware.dispatch(request, call_next)
+            assert result == "ok"
+
+        request = _make_request(
+            "/api/v1/publish/suggest", user_id=None, client_host="10.0.0.20"
+        )
+        result = await middleware.dispatch(request, call_next)
+        assert result.status_code == 429
+        # Daily limiter untouched on the anonymous path.
+        middleware.rate_limiter.check_and_increment.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_anonymous_topics_refresh_rate_limited(self):
+        """D4 M1: /api/v1/topics/refresh is reachable anonymously and reroutes
+        to TopicRecommendService (DataManager cascade includes the LLM tier).
+        It MUST be in _RATE_LIMITED_PATHS so anonymous callers are throttled.
+        """
+        from app.middleware.rate_limit import _RATE_LIMITED_PATHS
+
+        assert "/api/v1/topics/refresh" in _RATE_LIMITED_PATHS
+
+        middleware = self._middleware(max_per_hour=1)
+        call_next = AsyncMock(return_value="ok")
+        request1 = _make_request(
+            "/api/v1/topics/refresh", user_id=None, client_host="10.0.0.21"
+        )
+        await middleware.dispatch(request1, call_next)
+
+        request2 = _make_request(
+            "/api/v1/topics/refresh", user_id=None, client_host="10.0.0.21"
+        )
+        result = await middleware.dispatch(request2, call_next)
+        assert result.status_code == 429
+        middleware.rate_limiter.check_and_increment.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_default_anonymous_limiter_reads_settings_anonymous_ai_calls_per_hour(
+        self, monkeypatch
+    ):
+        """D4 C1: when RateLimitMiddleware is constructed with NO explicit
+        anonymous_rate_limiter / anonymous_max_per_hour (the production path
+        — main.py just does add_middleware(RateLimitMiddleware)), the limiter
+        MUST pick up settings.anonymous_ai_calls_per_hour — NOT fall back to
+        MinuteRateLimiter's internal default which is auth_rate_limit_per_minute
+        (5). Before C1 fix the new settings field was dead code and the
+        anonymous budget was silently 5/h instead of the configured value.
+        """
+
+        # Reset the settings singleton so the patched env re-reads cleanly.
+        import config.settings as _settings_module
+
+        monkeypatch.setenv("ANONYMOUS_AI_CALLS_PER_HOUR", "7")
+        _settings_module._settings = None
+        try:
+            from app.middleware.rate_limit import RateLimitMiddleware
+
+            middleware = RateLimitMiddleware(app=MagicMock())
+            # The auto-constructed anonymous limiter's max_calls_per_minute
+            # must equal the settings value (7), proving the settings field is
+            # actually consulted on the production path.
+            assert (
+                middleware.anonymous_rate_limiter.max_calls_per_minute == 7
+            ), (
+                "anonymous_rate_limiter did not read settings.anonymous_ai_calls_per_hour; "
+                " MinuteRateLimiter likely fell back to auth_rate_limit_per_minute (D4 C1 regression)"
+            )
+        finally:
+            _settings_module._settings = None
 
 
 # ─── Auth endpoint rate limiting (D3) ───────────────────────────────────
