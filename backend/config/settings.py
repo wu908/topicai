@@ -52,6 +52,8 @@ class Settings(BaseSettings):
     jwt_refresh_token_expire_days: int = Field(
         default=7, alias="JWT_REFRESH_TOKEN_EXPIRE_DAYS"
     )
+    jwt_iss: str = Field(default="topica", alias="JWT_ISS", min_length=1)
+    jwt_aud: str = Field(default="topica", alias="JWT_AUD", min_length=1)
 
     # ==================== Rate Limiting ====================
     ai_calls_per_day: int = Field(default=20, alias="AI_CALLS_PER_DAY")
