@@ -71,11 +71,13 @@ class PublishAdvisorService:
 
     def _analyze_with_llm(self, platform: str, content_type: str) -> dict[str, Any] | None:
         try:
+            from app.core.llm import wrap_user_input
+
             llm = self._get_llm()
             prompt = (
                 self._load_prompt()
-                .replace("{platform}", platform)
-                .replace("{content_type}", content_type)
+                .replace("{platform}", wrap_user_input(platform))
+                .replace("{content_type}", wrap_user_input(content_type))
             )
             raw = llm.generate(prompt=prompt, temperature=0.3)
 

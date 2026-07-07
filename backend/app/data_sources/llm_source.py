@@ -49,13 +49,16 @@ class LLMDataSource(DataSource):
         if not self.llm:
             return []
 
+        from app.core.llm import wrap_user_input
+
         track_str = track if track else "综合"
 
         prompt = (
-            f"Generate 5 trending topic suggestions for the '{track_str}' "
-            f"content track in Chinese. Return JSON: {{\"topics\": [...]}} "
-            f"with each topic having title, reason, estimated_heat, "
-            f"content_angle fields."
+            "Generate 5 trending topic suggestions for the "
+            f"{wrap_user_input(track_str)} content track in Chinese. "
+            "Return JSON: {\"topics\": [...]} "
+            "with each topic having title, reason, estimated_heat, "
+            "content_angle fields."
         )
 
         try:

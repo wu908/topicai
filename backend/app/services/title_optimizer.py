@@ -80,13 +80,20 @@ class TitleOptimizerService:
             return "deepseek-v4-flash"
 
     def _analyze_with_llm(self, original_title: str, content_summary: str) -> dict[str, Any] | None:
-        """Call LLM and parse optimized_titles list. Returns None on any failure."""
+        """Call LLM and parse optimized_titles list. Returns None on any failure.
+
+        Both caller-supplied fields are wrapped in ``<user_input>`` XML
+        delimiters (D6) so injection attempts cannot rewrite the prompt
+        scaffold.
+        """
         try:
+            from app.core.llm import wrap_user_input
+
             llm = self._get_llm()
             prompt = (
                 self._load_prompt()
-                .replace("{original_title}", original_title)
-                .replace("{content_summary}", content_summary or "")
+                .replace("{original_title}", wrap_user_input(original_title))
+                .replace("{content_summary}", wrap_user_input(content_summary or ""))
             )
             raw = llm.generate(prompt=prompt, temperature=0.5)
 

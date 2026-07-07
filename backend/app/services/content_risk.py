@@ -143,7 +143,7 @@ class ContentRiskService:
         80/20 blend.
         """
         try:
-            from app.core.llm import LLMClient
+            from app.core.llm import LLMClient, wrap_user_input
         except Exception as e:
             logger.warning(f"risk: LLMClient unavailable: {e}")
             return None
@@ -156,7 +156,7 @@ class ContentRiskService:
                 "{\"category\":\"...\",\"description\":\"...\","
                 "\"severity\":\"low|medium|high\",\"suggestion\":\"...\"}"
                 "],\"overall_risk_score\":0.0~1.0}。\n\n内容："
-                + content[:2000]
+                + wrap_user_input(content[:2000])
             )
             raw = llm.generate(prompt=prompt, temperature=0.1)
         except Exception as e:

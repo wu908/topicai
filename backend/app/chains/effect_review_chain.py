@@ -247,9 +247,11 @@ class EffectReviewChain:
 
 
 def _build_predict_prompt(topic_title: str, content_outline: str | None) -> str:
-    parts = [f"Topic: {topic_title.strip()}"]
+    from app.core.llm import wrap_user_input
+
+    parts = [f"Topic: {wrap_user_input(topic_title.strip())}"]
     if content_outline:
-        parts.append(f"Outline: {content_outline.strip()[:2000]}")
+        parts.append(f"Outline: {wrap_user_input(content_outline.strip()[:2000])}")
     parts.append(
         "Return a JSON object with estimated_views, estimated_likes, "
         "estimated_comments (all non-negative integers), engagement_rate "
@@ -261,11 +263,13 @@ def _build_predict_prompt(topic_title: str, content_outline: str | None) -> str:
 def _build_attribute_prompt(
     prediction: dict[str, Any], actual: dict[str, Any]
 ) -> str:
+    from app.core.llm import wrap_user_input
+
     return (
         "Blind prediction:\n"
-        f"{json.dumps(prediction, ensure_ascii=False, default=str)}\n\n"
+        f"{wrap_user_input(json.dumps(prediction, ensure_ascii=False, default=str))}\n\n"
         "Actual post-publish metrics:\n"
-        f"{json.dumps(actual, ensure_ascii=False, default=str)}\n\n"
+        f"{wrap_user_input(json.dumps(actual, ensure_ascii=False, default=str))}\n\n"
         "Return a JSON AttributionPayload with 3..5 DimensionalConclusion "
         "items. Each item must include dimension, conclusion, relevance "
         "(0..1), and evidence (cite actual numbers)."
