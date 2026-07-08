@@ -111,12 +111,6 @@ const SAMPLE_STORAGE_GB = {
   used_ratio: 0.5,
 };
 
-const SAMPLE_STORAGE_B = {
-  used_bytes: 500, // 500 B
-  total_bytes: 1_000, // 1000 B
-  used_ratio: 0.5,
-};
-
 function renderPage() {
   return render(
     <MemoryRouter>
