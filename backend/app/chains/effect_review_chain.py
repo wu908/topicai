@@ -106,7 +106,10 @@ class EffectReviewChain:
             from app.core.llm import LLMClient
 
             client = self.llm or LLMClient()
-            return await client.generate_structured(
+            # generate_structured is synchronous (returns a validated model,
+            # not a coroutine). await'ing it raises TypeError at runtime and
+            # is the sole mypy error blocking the foundation quality gate.
+            return client.generate_structured(
                 prompt=prompt,
                 schema=PredictionPayload,
                 system_prompt=system_prompt,
@@ -144,7 +147,7 @@ class EffectReviewChain:
             from app.core.llm import LLMClient
 
             client = self.llm or LLMClient()
-            payload = await client.generate_structured(
+            payload = client.generate_structured(
                 prompt=prompt,
                 schema=AttributionPayload,
                 system_prompt=system_prompt,

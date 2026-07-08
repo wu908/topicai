@@ -16,12 +16,16 @@ async def test_predict_returns_predicted_payload(monkeypatch):
     """T058: chain.predict() returns a PredictionPayload with the
     4 spec-007 numeric fields + caveat populated.
 
-    Mirrors the US1 idea_booster mock pattern.
+    ``LLMClient.generate_structured`` is a *synchronous* method (it returns
+    a validated Pydantic model, not a coroutine). The mock here mirrors
+    that real signature: a plain ``def`` returning the model. Asserting
+    against a sync contract prevents regression of the await-on-sync bug
+    that silently routed predict/attribute to the heuristic fallback.
     """
     from app.chains.effect_review_chain import EffectReviewChain
     from app.models.effect_review import PredictionPayload
 
-    async def fake_generate_structured(self, prompt, schema, system_prompt=None, **kwargs):
+    def fake_generate_structured(self, prompt, schema, system_prompt=None, **kwargs):
         return schema.model_validate({
             "estimated_views": 800,
             "estimated_likes": 40,
@@ -55,7 +59,7 @@ async def test_predict_heuristic_fallback(monkeypatch):
     from app.chains.effect_review_chain import EffectReviewChain
     from app.models.effect_review import PredictionPayload
 
-    async def boom(self, *args, **kwargs):
+    def boom(self, *args, **kwargs):
         raise RuntimeError("LLM unavailable")
 
     monkeypatch.setattr(
@@ -84,7 +88,7 @@ async def test_attribute_returns_3_to_5_dimensional_conclusions(monkeypatch):
     from app.chains.effect_review_chain import EffectReviewChain
     from app.models.effect_review import AttributionPayload
 
-    async def fake_generate_structured(self, prompt, schema, system_prompt=None, **kwargs):
+    def fake_generate_structured(self, prompt, schema, system_prompt=None, **kwargs):
         return schema.model_validate({
             "conclusions": [
                 {
@@ -130,6 +134,13 @@ async def test_attribute_returns_3_to_5_dimensional_conclusions(monkeypatch):
     result = await chain.attribute(prediction, actual)
     assert isinstance(result, AttributionPayload)
     assert 3 <= len(result.conclusions) <= 5
+    # Pin one distinctive mock-only conclusion so a silent heuristic-fallback
+    # regression (where the LLM path raises) is caught, not masked.
+    dimensions = {c.dimension for c in result.conclusions}
+    assert "share_rate" in dimensions
+    assert "实际播放量比预期高 35%" in result.conclusions[0].evidence or any(
+        "比预期高 35%" in c.evidence for c in result.conclusions
+    )
     for c in result.conclusions:
         assert c.dimension
         assert c.conclusion
@@ -144,7 +155,7 @@ async def test_attribute_heuristic_fallback(monkeypatch):
     """
     from app.chains.effect_review_chain import EffectReviewChain
 
-    async def boom(self, *args, **kwargs):
+    def boom(self, *args, **kwargs):
         raise RuntimeError("LLM unavailable")
 
     monkeypatch.setattr(
