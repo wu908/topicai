@@ -266,9 +266,9 @@ def setup_exception_handlers(app: FastAPI) -> None:
         app: The FastAPI application instance.
     """
     from fastapi import Request
-    from fastapi.responses import JSONResponse
-    from fastapi.exceptions import RequestValidationError
     from fastapi.encoders import jsonable_encoder
+    from fastapi.exceptions import RequestValidationError
+    from fastapi.responses import JSONResponse
 
     @app.exception_handler(RequestValidationError)
     async def request_validation_error_handler(

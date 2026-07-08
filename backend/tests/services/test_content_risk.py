@@ -13,7 +13,6 @@ import json
 
 import pytest
 
-
 # ========== T069: financial inducement ==========
 
 @pytest.mark.asyncio

@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import pytest
 
-
 # ========== T058: predict returns PredictionPayload ==========
 
 @pytest.mark.asyncio

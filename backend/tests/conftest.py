@@ -54,8 +54,9 @@ async def test_db():
     columns, ``004_risk_keywords``) so test data matches production
     reality for the Spec-007 US7 endpoints.
     """
-    from app.core.database import Database
     from sqlalchemy import text
+
+    from app.core.database import Database
 
     db = Database("sqlite+aiosqlite:///:memory:")
     await db.init_db()

@@ -1,7 +1,7 @@
 """Final push: tianapi full method paths + preloaded_source + creator_profile.
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 

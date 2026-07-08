@@ -17,7 +17,6 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from sqlalchemy import text
 
-
 # -------- helpers --------
 
 def _now_iso() -> str:

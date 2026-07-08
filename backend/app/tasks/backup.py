@@ -5,7 +5,7 @@ Daily SQLite and ChromaDB backup with 30-day retention.
 
 import logging
 import shutil
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 logger = logging.getLogger(__name__)

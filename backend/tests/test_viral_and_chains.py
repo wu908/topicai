@@ -13,7 +13,6 @@ import pytest
 
 from app.services.viral_analysis import ViralAnalysisService
 
-
 # ─── ViralAnalysisService ────────────────────────────────────────────────
 
 

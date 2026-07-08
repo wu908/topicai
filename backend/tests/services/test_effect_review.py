@@ -239,6 +239,7 @@ async def _seed_effect_review(
     users; api tests do, in tests/api/conftest.py).
     """
     import uuid
+
     from sqlalchemy import text
 
     await _seed_user(db, user_id, days_old=30)
