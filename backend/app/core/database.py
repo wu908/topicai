@@ -4,6 +4,7 @@ Provides WAL mode SQLite connection via aiosqlite with SQLAlchemy async engine.
 All database operations go through this module — no raw SQL elsewhere.
 """
 
+import asyncio
 import logging
 from typing import Any
 
@@ -310,6 +311,50 @@ CREATE INDEX IF NOT EXISTS idx_team_members_owner_id ON team_members(owner_id);
 # ==================== Database Manager ====================
 
 
+def _split_sql_statements(sql: str) -> list[str]:
+    """Split a multi-statement SQL blob into individual executable statements.
+
+    Strips SQL comments FIRST (whole-file), then splits on ``;``:
+
+    * Whole-line ``--`` comments are dropped.
+    * Inline ``-- ...`` tails are stripped, but only when the ``--`` is NOT
+      inside a single-quoted string literal (so a default value like
+      ``'a--b'`` survives). The migration files are pure DDL with no such
+      literals, but the guard keeps this safe for future use.
+
+    Splitting before comment-stripping would mis-split on a ``;`` inside a
+    comment (e.g. ``-- ... lacked; effect_reviews`` leaked the bare token
+    ``effect_reviews`` as a statement; ``-- UTC;]`` truncated a CREATE
+    TABLE with "incomplete input"). Comment-only and empty blocks drop out.
+    """
+    without_comments_lines: list[str] = []
+    for line in sql.split("\n"):
+        stripped = line.strip()
+        if stripped.startswith("--"):
+            continue  # whole-line comment
+        # Strip an inline -- comment that is outside a string literal.
+        in_string = False
+        cut = len(line)
+        i = 0
+        while i < len(line) - 1:
+            ch = line[i]
+            if ch == "'":
+                in_string = not in_string
+            elif not in_string and ch == "-" and line[i + 1] == "-":
+                cut = i
+                break
+            i += 1
+        without_comments_lines.append(line[:cut])
+    without_comments = "\n".join(without_comments_lines)
+
+    statements: list[str] = []
+    for block in without_comments.split(";"):
+        stmt = block.strip()
+        if stmt:
+            statements.append(stmt + ";")
+    return statements
+
+
 class Database:
     """Async SQLite database manager with WAL mode.
 
@@ -373,6 +418,119 @@ class Database:
         )
 
         logger.info("Database initialized (14 tables) with WAL mode")
+
+    # ==================== Migration bridge (T102) ====================
+
+    def _raw_path(self) -> str | None:
+        """Strip the SQLAlchemy driver prefix to a raw sqlite3 file path.
+
+        ``sqlite+aiosqlite:///./data/topicai.db`` -> ``./data/topicai.db``.
+        ``sqlite+aiosqlite:///:memory:`` -> ``None`` (signals the memory
+        branch of :meth:`apply_migrations`, because a sync
+        ``sqlite3.connect(":memory:")`` would open a *different* in-memory DB
+        than this instance's aiosqlite engine).
+
+        Returns:
+            The raw file path, or ``None`` for in-memory URLs.
+        """
+        if "///" in self.database_url:
+            raw = self.database_url.split("///", 1)[-1]
+            # ``sqlite+aiosqlite:///:memory:`` splits to ``:memory:``; treat
+            # that as memory too (sync sqlite3 would diverge from aiosqlite).
+            if raw == ":memory:":
+                return None
+            return raw
+        return None
+
+    async def apply_migrations(self) -> None:
+        """Apply pending migrations through this instance's database.
+
+        Two paths converge on the migration runner's idempotent + checksum +
+        post-step machinery:
+
+        * **File DB** (``_raw_path()`` is a real path): the sync runner is
+          invoked via ``asyncio.to_thread`` against the SAME sqlite file the
+          async engine uses. Reuses the runner's full power unchanged.
+        * **In-memory DB** (``_raw_path()`` returns ``None``): a sync
+          ``sqlite3.connect(":memory:")`` would be a different DB than this
+          aiosqlite engine, so the runner is NOT used directly. Instead each
+          migration file is executed through the aiosqlite engine. Post-steps
+          are skipped on the memory path — ``000_initial_schema.sql`` already
+          ships the full-column baseline, so the additive-column back-fill
+          that ``_ensure_columns`` provides for *legacy* DBs is redundant on a
+          fresh memory DB (and porting ``_ensure_columns``' sqlite3 API to
+          aiosqlite would add a new bug surface for no gain).
+
+        Must be called after :meth:`init_db` has created the engine (or the
+        caller creates the engine itself for the memory path). ``init_db``
+        itself calls this once the pragmas + session factory are set up.
+        """
+        from app.data.migrations.runner import (
+            DEFAULT_MIGRATIONS_DIR,
+            _list_migration_files,
+            _sha256,
+        )
+
+        raw_path = self._raw_path()
+        if raw_path is not None:
+            # File DB: delegate to the sync runner on a worker thread so the
+            # event loop is not blocked by stdlib sqlite3 I/O.
+            from app.data.migrations.runner import apply as _runner_apply
+
+            await asyncio.to_thread(_runner_apply, raw_path, DEFAULT_MIGRATIONS_DIR)
+            return
+
+        # In-memory DB: replay migrations through the aiosqlite engine so the
+        # schema lands on the SAME in-memory database the app/tests use.
+        files = _list_migration_files(DEFAULT_MIGRATIONS_DIR)
+        if not files:
+            return
+
+        applied_any = False
+        # SQLAlchemy's async ``conn.execute(text(script))`` rejects multi-
+        # statement scripts (ObjectNotExecutableError), and the aiosqlite
+        # DBAPI connection exposes an *async* ``executescript`` that can't be
+        # driven from ``run_sync`` (its calls return coroutines). So the
+        # memory path splits each migration file into statements — the same
+        # ``split(';')`` + comment-strip idiom ``init_db`` uses for
+        # SQL_SCHEMA — and runs them one-by-one via the async connection.
+        # Post-steps are skipped on the memory path: ``000_initial_schema``
+        # ships the full-column baseline, so the legacy-DB back-fill the
+        # post-steps provide is redundant on a fresh memory DB.
+        async with self.engine.begin() as conn:  # type: ignore[union-attr]
+            await conn.execute(
+                text(
+                    "CREATE TABLE IF NOT EXISTS schema_migrations ("
+                    "version TEXT PRIMARY KEY, applied_at TEXT NOT NULL, "
+                    "checksum TEXT NOT NULL)"
+                )
+            )
+            known = {
+                row[0]
+                for row in (
+                    await conn.execute(
+                        text("SELECT version FROM schema_migrations")
+                    )
+                ).fetchall()
+            }
+            for path in files:
+                version = path.stem
+                if version in known:
+                    continue
+                sql = path.read_text(encoding="utf-8")
+                for stmt in _split_sql_statements(sql):
+                    await conn.execute(text(stmt))
+                await conn.execute(
+                    text(
+                        "INSERT INTO schema_migrations(version, applied_at, "
+                        "checksum) VALUES (:v, datetime('now'), :c)"
+                    ),
+                    {"v": version, "c": _sha256(sql)},
+                )
+                applied_any = True
+                logger.info("Applied migration %s (memory path)", version)
+        if applied_any:
+            logger.info("Migration run complete (memory path)")
 
     async def get_session(self) -> AsyncSession:
         """Get a new async database session.

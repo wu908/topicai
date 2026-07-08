@@ -200,6 +200,13 @@ def apply(
 
     applied: list[AppliedMigration] = []
     with sqlite3.connect(db_path) as conn:
+        # Align this connection's pragmas with the async engine (init_db sets
+        # the same pair on aiosqlite). foreign_keys=ON so the migration's
+        # FK-bearing CREATE/ALTER respects constraints; busy_timeout=5000 so
+        # a concurrent async-engine write doesn't immediately error the
+        # runner's sync connection with "database is locked".
+        conn.execute("PRAGMA foreign_keys=ON")
+        conn.execute("PRAGMA busy_timeout=5000")
         _ensure_schema_migrations_table(conn)
         known = _already_applied(conn)
 

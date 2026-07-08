@@ -17,11 +17,13 @@ migrations + conftest inline SQL) and go GREEN as the consolidation lands
 
 from __future__ import annotations
 
+import asyncio
 import re
 import sqlite3
 from pathlib import Path
 
 import pytest
+from sqlalchemy import text
 
 from app.data.migrations.runner import DEFAULT_MIGRATIONS_DIR, apply
 
@@ -236,3 +238,87 @@ class TestSingleSourceOfTruth:
             "service/chains reference tables with no migration creating "
             f"them — retiring SQL_SCHEMA would break these: {sorted(missing)}"
         )
+
+
+# ==================== T102 (async/sync bridge) ====================
+
+
+def _async_table_names(db) -> set[str]:
+    """Reflect the table names on a Database instance's async engine."""
+    async def _collect() -> set[str]:
+        async with db.engine.begin() as conn:
+            rows = await conn.execute(
+                text("SELECT name FROM sqlite_master WHERE type='table'")
+            )
+            return {r[0] for r in rows.fetchall()}
+
+    return asyncio.get_event_loop().run_until_complete(_collect())
+
+
+class TestDatabaseApplyMigrations:
+    """T102: ``Database.apply_migrations()`` runs the migration runner
+    through the SAME engine ``init_db`` will use, so a memory test DB and
+    a file DB both end up with the full schema — no second, divergent
+    sqlite3 :memory: database.
+
+    These go RED before the bridge exists (``apply_migrations`` is not yet
+    a method) and GREEN once T102 lands.
+    """
+
+    @pytest.mark.asyncio
+    async def test_database_apply_migrations_creates_tables_on_memory(self):
+        from app.core.database import Database
+
+        db = Database("sqlite+aiosqlite:///:memory:")
+        # init_db creates the engine, sets pragmas, and (once T104 lands)
+        # calls apply_migrations. During T102 init_db still also runs
+        # SQL_SCHEMA, so we exercise the bridge directly here.
+        await db.init_db()
+        await db.apply_migrations()
+        try:
+            async with db.engine.begin() as conn:  # type: ignore[union-attr]
+                rows = await conn.execute(
+                    text("SELECT name FROM sqlite_master WHERE type='table'")
+                )
+                tables = {r[0] for r in rows.fetchall()}
+        finally:
+            await db.close()
+
+        missing = _EXPECTED_TABLES - tables
+        assert not missing, f"apply_migrations (memory) missing: {sorted(missing)}"
+
+    @pytest.mark.asyncio
+    async def test_database_apply_migrations_applies_to_file_db(self, tmp_path):
+        from app.core.database import Database
+
+        file_url = f"sqlite+aiosqlite:///{tmp_path / 'bridge.db'}"
+        db = Database(file_url)
+        await db.init_db()
+        await db.apply_migrations()
+        try:
+            async with db.engine.begin() as conn:  # type: ignore[union-attr]
+                rows = await conn.execute(
+                    text("SELECT name FROM sqlite_master WHERE type='table'")
+                )
+                tables = {r[0] for r in rows.fetchall()}
+        finally:
+            await db.close()
+
+        missing = _EXPECTED_TABLES - tables
+        assert not missing, f"apply_migrations (file) missing: {sorted(missing)}"
+
+    @pytest.mark.asyncio
+    async def test_database_raw_path_memory_returns_none(self):
+        """``_raw_path`` returns ``None`` for ``:memory:`` URLs so the
+        bridge routes to the aiosqlite executescript branch (the sync
+        sqlite3 :memory: would be a different DB)."""
+        from app.core.database import Database
+
+        assert Database("sqlite+aiosqlite:///:memory:")._raw_path() is None
+
+    @pytest.mark.asyncio
+    async def test_database_raw_path_file_returns_path(self, tmp_path):
+        from app.core.database import Database
+
+        file_url = f"sqlite+aiosqlite:///{tmp_path / 'bridge.db'}"
+        assert Database(file_url)._raw_path() == str(tmp_path / "bridge.db")
