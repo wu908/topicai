@@ -185,11 +185,6 @@ class TestSingleSourceOfTruth:
     dual-source world and serve as the permanent drift guard.
     """
 
-    @pytest.mark.xfail(
-        reason="T104 has not retired SQL_SCHEMA yet; this goes GREEN (and "
-        "the xfail is removed) once init_db stops executing SQL_SCHEMA.",
-        strict=False,
-    )
     def test_no_create_table_in_sql_schema(self):
         from app.core import database as database_module
 
@@ -355,4 +350,64 @@ class TestConftestFixtureRoutedThroughBridge:
         assert not missing, (
             f"test_db fixture missing migration-only tables {sorted(missing)} "
             "— the fixture is not routed through Database.apply_migrations()"
+        )
+
+
+# ==================== T104 (retire SQL_SCHEMA) ====================
+
+
+class TestInitDbRetiresSqlSchema:
+    """T104: ``init_db`` must no longer execute ``SQL_SCHEMA`` — the
+    migration runner (called via :meth:`apply_migrations`) is the sole
+    schema authority. Two facets:
+
+    * ``SQL_SCHEMA`` as a module attribute is empty / removed.
+    * ``init_db`` creates ZERO tables when migrations are suppressed.
+
+    Both go RED in the dual-source world (SQL_SCHEMA still defines and
+    runs ~20 tables) and GREEN once T104 deletes the SQL_SCHEMA body from
+    ``init_db``.
+    """
+
+    def test_sql_schema_constant_is_empty_or_absent(self):
+        from app.core import database as database_module
+
+        schema = getattr(database_module, "SQL_SCHEMA", "") or ""
+        tables = _collect_table_names_in_sql(schema)
+        assert not tables, (
+            "SQL_SCHEMA still defines tables; it must be retired. Found: "
+            f"{sorted(tables)}"
+        )
+
+    @pytest.mark.asyncio
+    async def test_init_db_creates_no_tables_when_migrations_suppressed(
+        self, monkeypatch
+    ):
+        from app.core.database import Database
+
+        # Suppress the bridge so init_db's only schema source is whatever
+        # init_db itself runs. If SQL_SCHEMA is retired, init_db creates
+        # zero tables (only pragmas + session factory).
+        async def _no_op(self):  # noqa: ANN001
+            return None
+
+        monkeypatch.setattr(Database, "apply_migrations", _no_op)
+
+        db = Database("sqlite+aiosqlite:///:memory:")
+        await db.init_db()
+        try:
+            async with db.engine.begin() as conn:  # type: ignore[union-attr]
+                rows = await conn.execute(
+                    text(
+                        "SELECT name FROM sqlite_master "
+                        "WHERE type='table' AND name != 'sqlite_sequence'"
+                    )
+                )
+                tables = {r[0] for r in rows.fetchall()}
+        finally:
+            await db.close()
+
+        assert not tables, (
+            f"init_db created {sorted(tables)} without migrations — SQL_SCHEMA "
+            "is still the schema authority inside init_db."
         )

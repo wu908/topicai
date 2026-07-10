@@ -27,7 +27,14 @@ def utc_now() -> str:
 
 
 async def _seed_user(db, user_id: str, days_old: int = 30) -> None:
-    """Insert a user row so effect_reviews FK constraints are satisfied.
+    """Idempotently seed a user row so effect_reviews FK constraints are met.
+
+    Uses ``INSERT OR IGNORE`` rather than ``INSERT OR REPLACE``: under the
+    migration-managed schema (T104) ``effect_reviews.user_id`` is
+    ``ON DELETE CASCADE``, so an OR REPLACE on the user would DELETE the
+    existing ``u1`` and cascade-wipe every review row seeded before it —
+    leaving only the last review. OR IGNORE is idempotent on an existing
+    user without touching child rows.
 
     The api conftest auto-inserts 'u1'/'u2' for router tests; the
     services test directory has no autouse, so we do it explicitly.
@@ -40,7 +47,7 @@ async def _seed_user(db, user_id: str, days_old: int = 30) -> None:
     try:
         await s.execute(
             text(
-                "INSERT OR REPLACE INTO users "
+                "INSERT OR IGNORE INTO users "
                 "(id, email, username, password_hash, ai_calls_today, "
                 " ai_calls_reset_at, created_at) "
                 "VALUES (:id, :email, :uname, 'hash', 0, '', :ca)"
