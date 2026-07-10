@@ -78,22 +78,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await db.init_db()
         logger.info("Database initialized (SQLite WAL mode)")
 
-        # Apply pending SQL migrations (Spec-007 T004)
+        # Apply pending SQL migrations through the Database's own engine
+        # (Spec-007 T004 + T103). The bridge routes file DBs to the sync
+        # runner via asyncio.to_thread and :memory: to the aiosqlite engine,
+        # so migrations always land on the SAME database init_db uses.
         try:
-            from app.data.migrations.runner import apply as run_migrations
-
-            # settings.database_url looks like 'sqlite+aiosqlite:///./data/topicai.db'
-            # Strip the SQLAlchemy driver prefix so the stdlib sqlite3
-            # module can open it directly. For in-memory URLs
-            # (e.g. 'sqlite+aiosqlite:///:memory:') the split finds no
-            # '///' — fall back to ':memory:' which sqlite3 understands.
-            if "///" in settings.database_url:
-                raw_db_path = settings.database_url.split("///", 1)[-1]
-            else:
-                raw_db_path = ":memory:"
-            applied = run_migrations(raw_db_path)
-            if applied:
-                logger.info("Applied %d pending migration(s)", len(applied))
+            await db.apply_migrations()
         except Exception as e:
             logger.warning(f"Migration runner skipped: {e}")
 

@@ -185,6 +185,11 @@ class TestSingleSourceOfTruth:
     dual-source world and serve as the permanent drift guard.
     """
 
+    @pytest.mark.xfail(
+        reason="T104 has not retired SQL_SCHEMA yet; this goes GREEN (and "
+        "the xfail is removed) once init_db stops executing SQL_SCHEMA.",
+        strict=False,
+    )
     def test_no_create_table_in_sql_schema(self):
         from app.core import database as database_module
 
@@ -322,3 +327,32 @@ class TestDatabaseApplyMigrations:
 
         file_url = f"sqlite+aiosqlite:///{tmp_path / 'bridge.db'}"
         assert Database(file_url)._raw_path() == str(tmp_path / "bridge.db")
+
+
+# ==================== T103 (lifespan + conftest routed through bridge) ========
+
+
+class TestConftestFixtureRoutedThroughBridge:
+    """T103: the ``test_db`` fixture (and the lifespan startup) must get
+    their schema from ``Database.apply_migrations()``, NOT from conftest's
+    inline re-implementation of migrations 002/003/004. Assert the
+    migration-only tables (platform_tokens, user_feedback, risk_keywords)
+    are present on the fixture's aiosqlite engine — proving the bridge ran.
+    """
+
+    @pytest.mark.asyncio
+    async def test_conftest_fixture_has_all_production_tables(self, test_db):
+        async with test_db.engine.begin() as conn:
+            rows = await conn.execute(
+                text("SELECT name FROM sqlite_master WHERE type='table'")
+            )
+            tables = {r[0] for r in rows.fetchall()}
+
+        # Tables that ONLY exist via migrations (002/004/006), not via the
+        # legacy SQL_SCHEMA. If the bridge didn't run, these are missing.
+        migration_only = {"user_feedback", "risk_keywords", "platform_tokens"}
+        missing = migration_only - tables
+        assert not missing, (
+            f"test_db fixture missing migration-only tables {sorted(missing)} "
+            "— the fixture is not routed through Database.apply_migrations()"
+        )

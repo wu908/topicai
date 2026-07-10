@@ -49,71 +49,18 @@ def override_test_env(monkeypatch):
 async def test_db():
     """SQLite :memory: mode database, isolated per test.
 
-    Initializes the bootstrap schema, then applies the Phase-2 additive
-    migrations (``002_user_feedback``, ``003_effect_reviews`` extended
-    columns, ``004_risk_keywords``) so test data matches production
-    reality for the Spec-007 US7 endpoints.
+    Schema comes from ``Database.apply_migrations()`` (the migration runner
+    routed through the aiosqlite engine — T103), NOT from an inline
+    re-implementation of migrations 002/003/004. ``init_db`` still also runs
+    the legacy SQL_SCHEMA until T104 retires it; the bridge then makes the
+    migration-only tables (user_feedback / risk_keywords / platform_tokens)
+    available on the SAME in-memory engine the tests use.
     """
-    from sqlalchemy import text
-
     from app.core.database import Database
 
     db = Database("sqlite+aiosqlite:///:memory:")
     await db.init_db()
-
-    async with db.engine.begin() as conn:  # type: ignore[attr-defined]
-        # 002_user_feedback — Spec-007 T011 (US3 / US7 T057)
-        await conn.execute(text(
-            """
-            CREATE TABLE IF NOT EXISTS user_feedback (
-                id              CHAR(36) PRIMARY KEY,
-                user_id         CHAR(36) NOT NULL,
-                source_type     TEXT     NOT NULL,
-                source_id       CHAR(36) NOT NULL,
-                feedback_type   TEXT     NOT NULL,
-                feedback_value  TEXT,
-                reason          TEXT,
-                created_at      TEXT     NOT NULL,
-                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-            )
-            """
-        ))
-        await conn.execute(text(
-            "CREATE INDEX IF NOT EXISTS idx_user_feedback_user_id_created_at "
-            "ON user_feedback (user_id, created_at DESC)"
-        ))
-        await conn.execute(text(
-            "CREATE INDEX IF NOT EXISTS idx_user_feedback_source "
-            "ON user_feedback (source_type, source_id)"
-        ))
-
-        # 003_effect_reviews — Spec-007 T012: extended columns not in
-        # the bootstrap SQL_SCHEMA. Idempotent: skip if already present.
-        for stmt in [
-            "ALTER TABLE effect_reviews ADD COLUMN content_outline TEXT",
-            "ALTER TABLE effect_reviews ADD COLUMN status TEXT NOT NULL DEFAULT 'awaiting_actuals'",
-            "ALTER TABLE effect_reviews ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''",
-        ]:
-            try:
-                await conn.execute(text(stmt))
-            except Exception:
-                # Column already exists (SQLite raises on duplicate).
-                pass
-
-        # 004_risk_keywords — Spec-007 T013 (US5 / US7 T074)
-        await conn.execute(text(
-            """
-            CREATE TABLE IF NOT EXISTS risk_keywords (
-                id          CHAR(36) PRIMARY KEY,
-                user_id     CHAR(36),
-                keyword     TEXT     NOT NULL,
-                severity    TEXT     NOT NULL,
-                category    TEXT     NOT NULL,
-                created_at  TEXT     NOT NULL,
-                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-            )
-            """
-        ))
+    await db.apply_migrations()
 
     yield db
     await db.close()
