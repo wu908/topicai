@@ -19,7 +19,7 @@ class AIQualityMeta(BaseModel):
 
     Attributes:
         confidence: Confidence score (0.0 to 1.0).
-        data_source: Data source identifier (e.g., 'tianapi', 'ai_inference').
+        data_source: Data source identifier (e.g., 'tianapi', 'llm_simulation').
         model_version: Specific model version used (e.g., 'deepseek-v4-flash').
         caveat: Optional caveat/warning about the data quality.
         generated_at: ISO 8601 UTC timestamp of generation.
@@ -43,6 +43,35 @@ class AIQualityMeta(BaseModel):
         description="ISO 8601 UTC generation timestamp",
     )
 
+
+def _build_ai_quality(
+    result: Any,
+    *,
+    default_source: str = "llm_simulation",
+) -> dict:
+    """Build ``ai_quality`` meta dict from a service result (Pydantic or dict).
+
+    Reads provenance fields from the result when available, falling back
+    to ``default_source`` for absent ``data_source`` / ``model_version``.
+    Returns a plain dict (``generated_at`` excluded) so request meta
+    stays deterministic across calls.
+
+    Foundation batch B2: replaces per-endpoint ``_ai_meta`` helpers.
+    """
+
+    def _get(field: str, default: Any) -> Any:
+        if isinstance(result, dict):
+            return result.get(field, default)
+        return getattr(result, field, default)
+
+    return AIQualityMeta(
+        confidence=float(_get("confidence", 0.75)),
+        data_source=str(_get("data_source", default_source)),
+        model_version=str(_get("model_version", default_source)),
+        caveat=_get("caveat", "基于AI推断"),
+    ).model_dump(exclude={"generated_at"})
+
+
 T = TypeVar("T")
 
 class PaginatedResponse(BaseModel, Generic[T]):
@@ -60,11 +89,16 @@ class PaginatedResponse(BaseModel, Generic[T]):
     page: int = Field(..., ge=1, description="Current page number")
     page_size: int = Field(..., ge=1, le=100, description="Items per page")
 
-class ApiResponse(BaseModel):
+class ApiResponse(BaseModel, Generic[T]):
     """Unified API response format.
 
     All TopicAI API responses use this format:
     {code, data, message, meta}
+
+    Generic over the data payload type T. Use ``response_model=ApiResponse[Foo]``
+    on endpoints so FastAPI emits a typed OpenAPI schema instead of an untyped
+    Any blob. ``data: Any | None`` is kept as the runtime fallback for endpoints
+    that have not yet been migrated to a concrete T.
 
     Attributes:
         code: HTTP status code.
@@ -74,6 +108,6 @@ class ApiResponse(BaseModel):
     """
 
     code: int = Field(default=200, description="HTTP status code")
-    data: Any | None = Field(default=None, description="Response payload")
+    data: T | Any | None = Field(default=None, description="Response payload")
     message: str = Field(default="success", description="Human-readable message")
     meta: dict = Field(default_factory=dict, description="Additional metadata")

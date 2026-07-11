@@ -185,16 +185,21 @@ class OnboardingService:
             rubric_weights: dict[str, float] = Field(...)
             model_version: str = Field(default="onboarding_rubric.v1")
 
-        prompt = (
-            f"Generate initial 5-dimension rubric_weights for a creator "
-            f"with these attributes: track={request.track}, "
+        from app.core.llm import wrap_user_input
+
+        attributes = wrap_user_input(
+            f"track={request.track}, "
             f"content_formats={request.content_formats}, "
             f"production_complexity={request.production_complexity}, "
             f"content_depth={request.content_depth}, "
-            f"hotspot_preference={request.hotspot_preference}. "
-            f"Return JSON with keys: rubric_weights (object with "
-            f"track_match, format_match, hotspot_relevance, timeliness, "
-            f"data_quality summing to 1.0) and model_version."
+            f"hotspot_preference={request.hotspot_preference}"
+        )
+        prompt = (
+            "Generate initial 5-dimension rubric_weights for a creator "
+            f"with these attributes: {attributes}. "
+            "Return JSON with keys: rubric_weights (object with "
+            "track_match, format_match, hotspot_relevance, timeliness, "
+            "data_quality summing to 1.0) and model_version."
         )
 
         try:

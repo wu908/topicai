@@ -5,9 +5,10 @@ Provides topic recommendation, refresh, and explanation endpoints.
 
 import logging
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Query, Request
 
-from app.models.topic import TopicRecommendRequest
+from app.models.common import ApiResponse
+from app.models.topic import TopicHistoryResponse, TopicRecommendRequest
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Topics"])
@@ -79,29 +80,30 @@ async def explain_recommendation(request: Request, topic_id: str):
     }
 
 
-@router.get("/topics/history")
-async def topics_history(request: Request, limit: int = 20):
+@router.get(
+    "/topics/history",
+    response_model=ApiResponse[TopicHistoryResponse],
+)
+async def topics_history(request: Request, limit: int = Query(20, ge=1, le=100)):
     """Return recently recommended topics (Spec-007 US2 T046).
 
-    Spec-007 marks /topics/history as future-接入; this implementation
-    serves the cached output of the most recent /topics/recommend call
-    (DataManager.cache_recent_topics). When nothing has been cached
-    yet, returns an empty list with a meta marker.
+    Foundation batch C1: route now delegates to ``TopicHistoryService``
+    instead of importing ``DataManager`` directly (Constitution I —
+    service-layer architecture). The service wraps the recent-cache read
+    and returns provenance metadata so downstream AI-transparency audits
+    can trace this read path (Constitution III).
     """
-    from app.data_sources.data_manager import DataManager
+    from app.services.topic_history import TopicHistoryService
 
-    dm = DataManager()
-    recent = dm.get_recent_topics(limit=limit)
-    return {
-        "code": 200,
-        "data": {
-            "topics": recent,
-            "count": len(recent),
-        },
-        "message": "success",
-        "meta": {
-            "data_source": "recent_cache",
-            "model_version": "history-v1",
-            "note": "近期推荐的topic缓存；待后续接入持久化",
-        },
-    }
+    svc = TopicHistoryService()
+    payload = svc.get_recent(limit=limit)
+
+    return ApiResponse[TopicHistoryResponse](
+        code=200,
+        data=TopicHistoryResponse(
+            topics=payload["topics"],
+            count=payload["count"],
+        ),
+        message="success",
+        meta=payload["meta"],
+    )

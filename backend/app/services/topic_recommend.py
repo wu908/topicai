@@ -49,7 +49,12 @@ class TopicRecommendService:
         mode: str = "hotspot_fusion",
         count: int = 5,
     ) -> dict[str, Any]:
-        """Synchronous wrapper that calls recommend_async internally."""
+        """Synchronous wrapper intended for non-async call sites (REPL, scripts).
+
+        Raises ``RuntimeError`` if invoked from inside a running event loop
+        — callers in async contexts must use ``recommend_async`` instead.
+        This wrapper is retained for back-compat; new code should be async.
+        """
         import asyncio
 
         try:
@@ -93,7 +98,7 @@ class TopicRecommendService:
                 },
             }
 
-        rubric_weights = self._load_rubric_weights(user_id)
+        rubric_weights = await self._load_rubric_weights(user_id)
 
         ranked = self._rank_topics(topics, rubric_weights)
         top_k = self._top_k(ranked, count)
@@ -109,25 +114,24 @@ class TopicRecommendService:
             },
         }
 
-    def _load_rubric_weights(self, user_id: str) -> dict[str, float]:
-        """Load user rubric_weights from creator_profiles (or default)."""
+    async def _load_rubric_weights(self, user_id: str) -> dict[str, float]:
+        """Load user rubric_weights from creator_profiles (or default).
+
+        Awaits ``CreatorProfileService.get`` directly — no ``run_until_complete``
+        / ``asyncio.run`` sync bridge. Returns ``DEFAULT_RUBRIC_WEIGHTS`` for
+        anonymous users, missing profiles, or any error ( Constitution VI:
+        heuristic fallback with structured logging).
+        """
         if user_id == "anonymous" or not user_id:
             return dict(DEFAULT_RUBRIC_WEIGHTS)
 
         try:
             from app.core.database import get_db
             from app.services.creator_profile import CreatorProfileService
-            import asyncio
 
             db = get_db()
             svc = CreatorProfileService(db)
-            try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    return dict(DEFAULT_RUBRIC_WEIGHTS)
-                profile = loop.run_until_complete(svc.get(user_id))
-            except RuntimeError:
-                profile = asyncio.run(svc.get(user_id))
+            profile = await svc.get(user_id)
 
             if not profile:
                 return dict(DEFAULT_RUBRIC_WEIGHTS)

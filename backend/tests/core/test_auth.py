@@ -111,6 +111,106 @@ class TestJWTToken:
         assert payload["type"] == "access"
 
 
+class TestJWTIssuerAudience:
+    """D1: JWT iss/aud validation."""
+
+    def test_decode_accepts_valid_iss_aud(self):
+        """Given token signed with configured iss/aud, When verifying,
+        Then payload is returned with iss/aud claims."""
+        from app.core.auth import AuthManager
+
+        auth = AuthManager()
+        token = auth.create_access_token("user-iss-ok")
+        payload = auth.verify_token(token)
+        assert payload["sub"] == "user-iss-ok"
+        assert payload["iss"] == auth.settings.jwt_iss
+        assert payload["aud"] == auth.settings.jwt_aud
+
+    def test_decode_rejects_wrong_iss(self):
+        """Given token signed with wrong iss, When verifying,
+        Then InvalidTokenException is raised."""
+        import jwt as pyjwt
+
+        from app.core.auth import AuthManager
+        from app.core.exceptions import InvalidTokenException
+
+        auth = AuthManager()
+        # Forge a token with a bogus iss but correct secret/aud.
+        from datetime import UTC, datetime, timedelta
+
+        now = datetime.now(UTC)
+        payload = {
+            "sub": "user-bad-iss",
+            "iat": now,
+            "exp": now + timedelta(minutes=5),
+            "type": "access",
+            "iss": "evil-issuer",
+            "aud": auth.settings.jwt_aud,
+        }
+        token = pyjwt.encode(
+            payload,
+            auth.settings.jwt_secret_key,
+            algorithm=auth.settings.jwt_algorithm,
+        )
+        with pytest.raises(InvalidTokenException):
+            auth.verify_token(token)
+
+    def test_decode_rejects_wrong_aud(self):
+        """Given token signed with wrong aud, When verifying,
+        Then InvalidTokenException is raised."""
+        import jwt as pyjwt
+
+        from app.core.auth import AuthManager
+        from app.core.exceptions import InvalidTokenException
+
+        auth = AuthManager()
+        from datetime import UTC, datetime, timedelta
+
+        now = datetime.now(UTC)
+        payload = {
+            "sub": "user-bad-aud",
+            "iat": now,
+            "exp": now + timedelta(minutes=5),
+            "type": "access",
+            "iss": auth.settings.jwt_iss,
+            "aud": "evil-audience",
+        }
+        token = pyjwt.encode(
+            payload,
+            auth.settings.jwt_secret_key,
+            algorithm=auth.settings.jwt_algorithm,
+        )
+        with pytest.raises(InvalidTokenException):
+            auth.verify_token(token)
+
+    def test_decode_rejects_missing_iss_aud(self):
+        """Given token lacking iss/aud claims, When verifying,
+        Then InvalidTokenException is raised (D1 contract)."""
+        import jwt as pyjwt
+
+        from app.core.auth import AuthManager
+        from app.core.exceptions import InvalidTokenException
+
+        auth = AuthManager()
+        from datetime import UTC, datetime, timedelta
+
+        now = datetime.now(UTC)
+        payload = {
+            "sub": "user-no-claims",
+            "iat": now,
+            "exp": now + timedelta(minutes=5),
+            "type": "access",
+            # NOTE: no iss/aud — must be rejected
+        }
+        token = pyjwt.encode(
+            payload,
+            auth.settings.jwt_secret_key,
+            algorithm=auth.settings.jwt_algorithm,
+        )
+        with pytest.raises(InvalidTokenException):
+            auth.verify_token(token)
+
+
 class TestRateLimiter:
     """TC05-10/11/12: Rate limiting."""
 

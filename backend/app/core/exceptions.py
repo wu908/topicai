@@ -266,9 +266,9 @@ def setup_exception_handlers(app: FastAPI) -> None:
         app: The FastAPI application instance.
     """
     from fastapi import Request
-    from fastapi.responses import JSONResponse
-    from fastapi.exceptions import RequestValidationError
     from fastapi.encoders import jsonable_encoder
+    from fastapi.exceptions import RequestValidationError
+    from fastapi.responses import JSONResponse
 
     @app.exception_handler(RequestValidationError)
     async def request_validation_error_handler(
@@ -277,19 +277,34 @@ def setup_exception_handlers(app: FastAPI) -> None:
         """Surface real Pydantic / body-parse errors instead of the generic
         400 'There was an error parsing the body' returned by FastAPI's
         default routing layer.
+
+        Environment-aware sanitization (D5):
+        - In production, Pydantic's internal ``errors()`` (field paths
+          ``loc``, ``type``, ``ctx``, ``input``) is NOT echoed back to
+          the client — that leaks internal schema structure which an
+          attacker could use to infer field constraints and types. Only
+          ``error_code`` + a generic message are returned.
+        - In development, the detailed ``errors`` array is kept so devs
+          can debug schema mismatches.
         """
-        errors = jsonable_encoder(exc.errors())
+        from config.settings import get_settings
+
+        settings = get_settings()
+
+        meta: dict = {
+            "error_code": "VALIDATION_ERROR",
+            "timestamp": utc_now(),
+        }
+        if not settings.is_production:
+            meta["errors"] = jsonable_encoder(exc.errors())
+
         return JSONResponse(
             status_code=422,
             content={
                 "code": 422,
                 "data": None,
                 "message": "请求参数校验失败",
-                "meta": {
-                    "error_code": "VALIDATION_ERROR",
-                    "errors": errors,
-                    "timestamp": utc_now(),
-                },
+                "meta": meta,
             },
         )
 

@@ -14,7 +14,6 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-
 # --- Spec-007 T015: typed payload models (US4, FR-007) -------------------
 
 

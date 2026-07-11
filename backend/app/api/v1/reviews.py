@@ -15,8 +15,10 @@ Spec-007:
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from pydantic import BaseModel, Field
 
 from app.api.v1.deps import get_current_user, get_db
+from app.models.common import ApiResponse, _build_ai_quality
 from app.models.effect_review import (
     EffectAttributeRequest,
     EffectPredictRequest,
@@ -29,38 +31,44 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Reviews"])
 
 
-def _ai_meta(confidence: float = 0.7, data_source: str = "llm_simulation") -> dict:
-    """Generate AI quality metadata for review responses.
+class ReviewListResponse(BaseModel):
+    """List response envelope for GET /api/v1/reviews/list (Spec-007 T066).
 
-    Args:
-        confidence: AI confidence score (0-1).
-        data_source: One of 'llm_simulation' | 'template_fallback'.
-
-    Returns:
-        Dict with AI quality metadata.
+    Wraps the paginated review rows so the endpoint can carry a
+    ``response_model=ApiResponse[ReviewListResponse]`` and emit a typed
+    OpenAPI schema instead of an untyped ``dict`` blob.
     """
-    return {
-        "confidence": confidence,
-        "data_source": data_source,
-        "model_version": "deepseek-v4-flash",
-        "caveat": "基于AI分析，供参考",
-    }
+
+    items: list[EffectReview] = Field(
+        default_factory=list, description="Review rows, newest first"
+    )
+    total: int = Field(..., ge=0, description="Total items returned")
+    limit: int = Field(..., ge=1, le=100, description="Requested page size")
+    status: str | None = Field(
+        default=None, description="Status filter echo (if any)"
+    )
 
 
-@router.post("/reviews/predict", status_code=201)
+@router.post(
+    "/reviews/predict",
+    status_code=201,
+    response_model=ApiResponse[EffectReview],
+)
 async def predict_effect(
     request: Request,
     data: EffectPredictRequest,
     user: dict = Depends(get_current_user),
     db=Depends(get_db),
-):
+) -> ApiResponse[EffectReview]:
     """Create a blind prediction for content performance before publishing.
 
     Spec-007 US4 (T062): delegates to ``EffectReviewService.create_prediction``
     which calls ``EffectReviewChain.predict`` and INSERTs into
     ``effect_reviews`` (status='awaiting_actuals').
 
-    Returns 201 Created per the spec-007 contract.
+    Returns 201 Created per the spec-007 contract. The ``data`` payload
+    is a Pydantic ``EffectReview`` instance (not a raw dict) so the
+    ``response_model`` emits a typed OpenAPI schema.
     """
     from app.services.effect_review import EffectReviewService
 
@@ -76,21 +84,25 @@ async def predict_effect(
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
 
-    return {
-        "code": 201,
-        "data": result,
-        "message": "效果预测完成",
-        "meta": {"ai_quality": _ai_meta(confidence=0.7, data_source="llm_simulation")},
-    }
+    return ApiResponse[EffectReview](
+        code=201,
+        data=EffectReview(**result),
+        message="效果预测完成",
+        meta={"ai_quality": _build_ai_quality(result)},
+    )
 
 
-@router.post("/reviews/attribute", status_code=201)
+@router.post(
+    "/reviews/attribute",
+    status_code=201,
+    response_model=ApiResponse[EffectReview],
+)
 async def attribute_effect(
     request: Request,
     data: EffectAttributeRequest,
     user: dict = Depends(get_current_user),
     db=Depends(get_db),
-):
+) -> ApiResponse[EffectReview]:
     """Analyze the attribution of content performance after publishing.
 
     Spec-007 US4 (T063): delegates to ``EffectReviewService.attribute``
@@ -98,7 +110,12 @@ async def attribute_effect(
     ``effect_reviews`` row with actual_result / attribution / learnings
     (status='attributed').
 
-    Returns 201 Created.
+    Returns 201 Created. The service returns ``attribution`` as a
+    dict (the ``AttributionPayload`` shape), but ``EffectReview.attribution``
+    is typed as ``str | None`` — so we pass the service dict through
+    directly. ``ApiResponse.data`` is ``T | Any | None`` so the ``Any``
+    fallback accepts the dict while the ``response_model`` still
+    advertises ``EffectReview`` in the OpenAPI schema.
     """
     from app.services.effect_review import EffectReviewService
 
@@ -113,25 +130,29 @@ async def attribute_effect(
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
 
-    return {
-        "code": 201,
-        "data": result,
-        "message": "归因分析完成",
-        "meta": {"ai_quality": _ai_meta(confidence=0.7, data_source="llm_simulation")},
-    }
+    return ApiResponse[EffectReview](
+        code=201,
+        data=result,
+        message="归因分析完成",
+        meta={"ai_quality": _build_ai_quality(result)},
+    )
 
 
-@router.get("/reviews/learnings")
+@router.get(
+    "/reviews/learnings",
+    response_model=ApiResponse[LearningsPayload],
+)
 async def reviews_learnings(
     window_days: int = Query(30, ge=1, le=365, description="Rolling window size"),
     user: dict = Depends(get_current_user),
     db=Depends(get_db),
-):
+) -> ApiResponse[LearningsPayload]:
     """Aggregate the user's recent learnings (Spec-007 T066 + US4 T060).
 
     Scans the user's ``effect_reviews`` within ``window_days`` and
-    surfaces the top recurring strengths and weaknesses. Returns a
-    ``LearningsPayload`` shape, validated at the boundary.
+    surfaces the top recurring strengths and weaknesses. The
+    ``LearningsPayload`` is constructed at the boundary so the
+    ``response_model`` validates the contract.
     """
     from app.services.effect_review import EffectReviewService
 
@@ -143,19 +164,22 @@ async def reviews_learnings(
     # Pydantic validation at the boundary (Constitution VII).
     parsed = LearningsPayload(**payload)
 
-    return {
-        "code": 200,
-        "data": parsed.model_dump(),
-        "message": "success",
-        "meta": {
+    return ApiResponse[LearningsPayload](
+        code=200,
+        data=parsed,
+        message="success",
+        meta={
             "data_source": "effect_reviews_table",
             "model_version": "learnings-v1",
             "note": "Spec-007 T066: aggregated learnings over rolling window",
         },
-    }
+    )
 
 
-@router.get("/reviews/list")
+@router.get(
+    "/reviews/list",
+    response_model=ApiResponse[ReviewListResponse],
+)
 async def reviews_list(
     status: str | None = Query(
         None,
@@ -165,12 +189,13 @@ async def reviews_list(
     limit: int = Query(20, ge=1, le=100, description="Max records to return"),
     user: dict = Depends(get_current_user),
     db=Depends(get_db),
-):
+) -> ApiResponse[ReviewListResponse]:
     """List effect reviews for the current user (Spec-007 T066).
 
     Returns persisted reviews from the ``effect_reviews`` table,
-    newest first. The Pydantic ``EffectReview`` model validates each
-    row at the boundary.
+    newest first. Each row is validated against the Pydantic
+    ``EffectReview`` model and wrapped in ``ReviewListResponse`` so
+    the ``response_model`` emits a typed OpenAPI schema.
     """
     from app.services.effect_review import EffectReviewService
 
@@ -182,18 +207,18 @@ async def reviews_list(
     # Pydantic-validate every row.
     items = [EffectReview(**r) for r in rows]
 
-    return {
-        "code": 200,
-        "data": {
-            "items": [item.model_dump() for item in items],
-            "total": len(items),
-            "limit": limit,
-            "status": status,
-        },
-        "message": "success",
-        "meta": {
+    return ApiResponse[ReviewListResponse](
+        code=200,
+        data=ReviewListResponse(
+            items=items,
+            total=len(items),
+            limit=limit,
+            status=status,
+        ),
+        message="success",
+        meta={
             "data_source": "effect_reviews_table",
             "model_version": "list-v1",
             "note": "Spec-007 T066: persisted review list endpoint",
         },
-    }
+    )

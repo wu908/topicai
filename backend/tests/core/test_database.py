@@ -56,8 +56,10 @@ class TestDatabaseInitialization:
 
     @pytest.mark.asyncio
     async def test_all_14_tables_created(self):
-        """TC02-05: Given database initialized, When querying sqlite_master,
-        Then all 14 tables exist."""
+        """TC02-05: init_db (now migration-managed) yields the full app
+        schema. The test name is retained for traceability but the set is
+        the migration-driven table union (000_initial + 001-006), not the
+        legacy 14-table SQL_SCHEMA memory, which was retired in T104."""
         from app.core.database import Database
 
         db = Database("sqlite+aiosqlite:///:memory:")
@@ -66,28 +68,41 @@ class TestDatabaseInitialization:
         rows = await db.fetch_all(
             "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
         )
-        table_names = [r["name"] for r in rows]
+        actual = {r["name"] for r in rows}
 
-        expected_tables = [
-            "content_risks",
-            "creator_profiles",
-            "effect_reviews",
-            "feedback_analyses",
-            "feedback_records",
-            "idea_boosters",
-            "llm_call_logs",
-            "publish_suggestions",
-            "title_optimizations",
-            "topic_recommendations",
-            "track_diagnoses",
-            "upgrade_signals",
-            "user_events",
+        # Migration-driven schema union (avoid importing the single-source
+        # lock-down module here to keep this a standalone init_db check).
+        expected_tables = {
+            "schema_migrations",
             "users",
+            "creator_profiles",
+            "topic_recommendations",
             "viral_analyses",
-        ]
+            "idea_boosters",
+            "title_optimizations",
+            "track_diagnoses",
+            # feedback_records / feedback_analyses intentionally omitted —
+            # retired by migration 007 (T201-T204). Production writes
+            # user_feedback (002).
+            "effect_reviews",
+            "content_risks",
+            "publish_suggestions",
+            "user_events",
+            "llm_call_logs",
+            "upgrade_signals",
+            "assets",
+            "asset_tags",
+            "asset_tag_links",
+            "asset_usages",
+            "platform_accounts",
+            "team_members",
+            "user_feedback",
+            "risk_keywords",
+            "platform_tokens",
+        }
 
-        for table in expected_tables:
-            assert table in table_names, f"Table '{table}' not found"
+        missing = expected_tables - actual
+        assert not missing, f"init_db (migration-managed) missing tables: {sorted(missing)}"
 
         await db.close()
 

@@ -99,6 +99,8 @@ class AuthManager:
             "iat": now,
             "exp": expire,
             "type": "access",
+            "iss": self.settings.jwt_iss,
+            "aud": self.settings.jwt_aud,
         }
 
         return jwt.encode(
@@ -132,6 +134,8 @@ class AuthManager:
             "iat": now,
             "exp": expire,
             "type": "refresh",
+            "iss": self.settings.jwt_iss,
+            "aud": self.settings.jwt_aud,
         }
 
         return jwt.encode(
@@ -160,11 +164,15 @@ class AuthManager:
                 token,
                 self.settings.jwt_secret_key,
                 algorithms=[self.settings.jwt_algorithm],
+                issuer=self.settings.jwt_iss,
+                audience=self.settings.jwt_aud,
+                options={"verify_iss": True, "verify_aud": True},
             )
         except ExpiredSignatureError:
             raise TokenExpiredException("Token has expired") from None
         except InvalidTokenError as e:
-            raise InvalidTokenException(f"Invalid token: {str(e)}") from e
+            logger.debug("JWT decode rejected: %s", e)
+            raise InvalidTokenException("Invalid token") from e
 
     def verify_token(self, token: str) -> dict[str, Any]:
         """Verify and decode a JWT access token.

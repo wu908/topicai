@@ -4,17 +4,14 @@ import logging
 
 from fastapi import APIRouter, HTTPException, Request
 
-from app.models.title import TitleOptimizeRequest
+from app.models.common import ApiResponse, _build_ai_quality
+from app.models.title import TitleOptimization, TitleOptimizeRequest
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Titles"])
 
 
-def _ai_meta() -> dict:
-    return {"confidence": 0.75, "data_source": "deepseek-v4-flash", "model_version": "deepseek-v4-flash", "caveat": "基于AI生成"}
-
-
-@router.post("/titles/optimize")
+@router.post("/titles/optimize", response_model=ApiResponse[TitleOptimization])
 async def optimize_title(request: Request, data: TitleOptimizeRequest):
     """Generate optimized title variations."""
     user_id = getattr(request.state, "user_id", "anonymous")
@@ -28,4 +25,9 @@ async def optimize_title(request: Request, data: TitleOptimizeRequest):
     svc = TitleOptimizerService()
     result = svc.optimize(user_id, title, summary)
 
-    return {"code": 200, "data": result, "message": "标题优化完成", "meta": {"ai_quality": _ai_meta()}}
+    return ApiResponse[TitleOptimization](
+        code=200,
+        data=result,
+        message="标题优化完成",
+        meta={"ai_quality": _build_ai_quality(result)},
+    )

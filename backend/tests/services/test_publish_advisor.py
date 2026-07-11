@@ -122,6 +122,7 @@ class TestPublishAdvisorLLMPath:
     def test_load_prompt_file_not_found_uses_fallback(self, monkeypatch):
         """Defensive: prompts/publish_suggest.v1.md missing -> hardcoded fallback prompt."""
         from pathlib import Path
+
         from app.services import publish_advisor
 
         monkeypatch.setattr(

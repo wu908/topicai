@@ -4,6 +4,7 @@ Provides WAL mode SQLite connection via aiosqlite with SQLAlchemy async engine.
 All database operations go through this module — no raw SQL elsewhere.
 """
 
+import asyncio
 import logging
 from typing import Any
 
@@ -16,298 +17,60 @@ from sqlalchemy.ext.asyncio import (
 
 logger = logging.getLogger(__name__)
 
-# ==================== SQL Schema ====================
+# ==================== Schema (retired in T104) ====================
+# The SQL_SCHEMA big-string that lived here has been removed: schema
+# creation is now the migration runner's sole responsibility, invoked
+# via Database.apply_migrations() from init_db. Keeping the CREATE
+# TABLEs here was the other half of the dual source-of-truth debt
+# (the NNN_*.sql migrations were the other) and caused Bug 3. See
+# tests/data/test_schema_single_source_of_truth.py for the lock-down.
 
-SQL_SCHEMA = """
--- Users table
-CREATE TABLE IF NOT EXISTS users (
-    id TEXT PRIMARY KEY,
-    email TEXT UNIQUE NOT NULL,
-    username TEXT UNIQUE NOT NULL,
-    password_hash TEXT NOT NULL,
-    ai_calls_today INTEGER NOT NULL DEFAULT 0,
-    ai_calls_reset_at TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    last_login TEXT
-);
-
--- Creator profiles table
-CREATE TABLE IF NOT EXISTS creator_profiles (
-    id TEXT PRIMARY KEY,
-    user_id TEXT UNIQUE NOT NULL REFERENCES users(id),
-    track TEXT NOT NULL,
-    content_formats TEXT NOT NULL,
-    production_complexity TEXT NOT NULL,
-    content_depth TEXT NOT NULL,
-    hotspot_preference TEXT NOT NULL,
-    recommendation_mode TEXT NOT NULL,
-    rubric_weights TEXT NOT NULL DEFAULT '{}',
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-);
-
--- Topic recommendations table
-CREATE TABLE IF NOT EXISTS topic_recommendations (
-    id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL,
-    topics TEXT NOT NULL,
-    recommendation_mode TEXT NOT NULL,
-    data_source_used TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    FOREIGN KEY (user_id) REFERENCES users(id)
-);
-
--- Viral analyses table
-CREATE TABLE IF NOT EXISTS viral_analyses (
-    id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL,
-    input_type TEXT NOT NULL DEFAULT 'text',
-    input_text TEXT NOT NULL,
-    input_text_expires_at TEXT,
-    viral_score REAL NOT NULL,
-    structural_analysis TEXT NOT NULL,
-    attributions TEXT NOT NULL,
-    transferable_template TEXT NOT NULL,
-    rewrite_suggestions TEXT NOT NULL,
-    risk_warnings TEXT NOT NULL,
-    confidence REAL NOT NULL,
-    data_source TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    FOREIGN KEY (user_id) REFERENCES users(id)
-);
-
--- Idea boosters table
-CREATE TABLE IF NOT EXISTS idea_boosters (
-    id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL,
-    input_idea TEXT NOT NULL,
-    input_idea_expires_at TEXT,
-    key_assumptions TEXT NOT NULL,
-    feasibility_assessment TEXT NOT NULL,
-    title_candidates TEXT NOT NULL,
-    content_outline TEXT NOT NULL,
-    publish_schedule TEXT NOT NULL,
-    confidence REAL NOT NULL,
-    created_at TEXT NOT NULL,
-    FOREIGN KEY (user_id) REFERENCES users(id)
-);
-
--- Title optimizations table
-CREATE TABLE IF NOT EXISTS title_optimizations (
-    id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL,
-    original_title TEXT NOT NULL,
-    content_summary TEXT,
-    optimized_titles TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    FOREIGN KEY (user_id) REFERENCES users(id)
-);
-
--- Track diagnoses table
-CREATE TABLE IF NOT EXISTS track_diagnoses (
-    id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL,
-    track_keyword TEXT NOT NULL,
-    health_score REAL NOT NULL,
-    competitiveness_score REAL NOT NULL,
-    direction_advice TEXT NOT NULL,
-    sub_tracks TEXT NOT NULL,
-    confidence REAL NOT NULL,
-    data_source TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    FOREIGN KEY (user_id) REFERENCES users(id)
-);
-
--- Feedback records table
-CREATE TABLE IF NOT EXISTS feedback_records (
-    id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL,
-    source_type TEXT NOT NULL,
-    source_id TEXT NOT NULL,
-    feedback_type TEXT NOT NULL,
-    feedback_value TEXT,
-    reason TEXT,
-    created_at TEXT NOT NULL,
-    FOREIGN KEY (user_id) REFERENCES users(id)
-);
-
--- Feedback analyses table
-CREATE TABLE IF NOT EXISTS feedback_analyses (
-    id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL,
-    feedback_record_id TEXT NOT NULL,
-    success_factors TEXT,
-    failure_factors TEXT,
-    weight_adjustments TEXT NOT NULL,
-    excluded_patterns TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    FOREIGN KEY (user_id) REFERENCES users(id),
-    FOREIGN KEY (feedback_record_id) REFERENCES feedback_records(id)
-);
-
--- Effect reviews table (Spec-007 T012 lifecycle: predict/attribute/derive_learnings)
-CREATE TABLE IF NOT EXISTS effect_reviews (
-    id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL,
-    topic_title TEXT NOT NULL,
-    content_outline TEXT NOT NULL DEFAULT '',
-    prediction TEXT NOT NULL,
-    actual_result TEXT,
-    attribution TEXT,
-    learnings TEXT,
-    status TEXT NOT NULL DEFAULT 'awaiting_actuals',
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL DEFAULT '',
-    FOREIGN KEY (user_id) REFERENCES users(id)
-);
-CREATE INDEX IF NOT EXISTS idx_effect_reviews_user_id_created_at ON effect_reviews(user_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_effect_reviews_status ON effect_reviews(status);
-
--- Content risks table
-CREATE TABLE IF NOT EXISTS content_risks (
-    id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL,
-    content_text TEXT NOT NULL,
-    content_text_expires_at TEXT,
-    risks TEXT NOT NULL,
-    overall_risk_score REAL NOT NULL,
-    created_at TEXT NOT NULL,
-    FOREIGN KEY (user_id) REFERENCES users(id)
-);
-
--- Publish suggestions table
-CREATE TABLE IF NOT EXISTS publish_suggestions (
-    id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL,
-    platform TEXT NOT NULL,
-    content_type TEXT NOT NULL,
-    suggested_times TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    FOREIGN KEY (user_id) REFERENCES users(id)
-);
-
--- User events table (PostHog)
-CREATE TABLE IF NOT EXISTS user_events (
-    id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL,
-    event_type TEXT NOT NULL,
-    event_data TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    FOREIGN KEY (user_id) REFERENCES users(id)
-);
-
--- LLM call logs table (LangFuse)
-CREATE TABLE IF NOT EXISTS llm_call_logs (
-    id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL,
-    provider TEXT NOT NULL,
-    model_version TEXT NOT NULL,
-    prompt_version TEXT NOT NULL,
-    chain_name TEXT NOT NULL,
-    input_tokens INTEGER,
-    output_tokens INTEGER,
-    latency_ms INTEGER,
-    success INTEGER NOT NULL DEFAULT 1,
-    error_message TEXT,
-    created_at TEXT NOT NULL,
-    FOREIGN KEY (user_id) REFERENCES users(id)
-);
-
--- Upgrade signals table
-CREATE TABLE IF NOT EXISTS upgrade_signals (
-    id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL,
-    feature_name TEXT NOT NULL,
-    action TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    FOREIGN KEY (user_id) REFERENCES users(id)
-);
-
--- ── Phase 6/7 contract: assets ──────────────────────────────────
-CREATE TABLE IF NOT EXISTS assets (
-    id TEXT PRIMARY KEY,
-    owner_id TEXT NOT NULL,
-    filename TEXT NOT NULL,
-    mime_type TEXT NOT NULL,
-    type TEXT NOT NULL CHECK (type IN ('image','document','audio','video','template')),
-    size INTEGER NOT NULL,
-    url TEXT NOT NULL,
-    thumbnail_url TEXT,
-    used_count INTEGER NOT NULL DEFAULT 0,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    FOREIGN KEY (owner_id) REFERENCES users(id)
-);
-CREATE INDEX IF NOT EXISTS idx_assets_owner_id ON assets(owner_id);
-CREATE INDEX IF NOT EXISTS idx_assets_type ON assets(type);
-
-CREATE TABLE IF NOT EXISTS asset_tags (
-    id TEXT PRIMARY KEY,
-    owner_id TEXT NOT NULL,
-    name TEXT NOT NULL,
-    color TEXT,
-    created_at TEXT NOT NULL,
-    UNIQUE (owner_id, name),
-    FOREIGN KEY (owner_id) REFERENCES users(id)
-);
-CREATE INDEX IF NOT EXISTS idx_asset_tags_owner_id ON asset_tags(owner_id);
-
-CREATE TABLE IF NOT EXISTS asset_tag_links (
-    asset_id TEXT NOT NULL,
-    tag_id TEXT NOT NULL,
-    PRIMARY KEY (asset_id, tag_id),
-    FOREIGN KEY (asset_id) REFERENCES assets(id) ON DELETE CASCADE,
-    FOREIGN KEY (tag_id) REFERENCES asset_tags(id) ON DELETE CASCADE
-);
-
-CREATE TABLE IF NOT EXISTS asset_usages (
-    id TEXT PRIMARY KEY,
-    asset_id TEXT NOT NULL,
-    article_id TEXT NOT NULL,
-    used_at TEXT NOT NULL,
-    FOREIGN KEY (asset_id) REFERENCES assets(id) ON DELETE CASCADE
-);
-CREATE INDEX IF NOT EXISTS idx_asset_usages_asset_id ON asset_usages(asset_id);
-
--- ── Phase 6/7 contract: platform_accounts ───────────────────────
-CREATE TABLE IF NOT EXISTS platform_accounts (
-    id TEXT PRIMARY KEY,
-    owner_id TEXT NOT NULL,
-    platform TEXT NOT NULL CHECK (platform IN ('wechat_mp','wechat_video','xhs','bilibili','douyin','zhihu')),
-    display_name TEXT NOT NULL,
-    is_primary INTEGER NOT NULL DEFAULT 0,
-    status TEXT NOT NULL CHECK (status IN ('connected','expired','disconnected')) DEFAULT 'disconnected',
-    token_expires_at TEXT,
-    last_sync_at TEXT,
-    stats_json TEXT,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    UNIQUE (owner_id, platform, display_name),
-    FOREIGN KEY (owner_id) REFERENCES users(id)
-);
-CREATE INDEX IF NOT EXISTS idx_platform_accounts_owner_id ON platform_accounts(owner_id);
--- Per-user, per-platform primary uniqueness: only one is_primary=1 row.
-CREATE UNIQUE INDEX IF NOT EXISTS uq_platform_accounts_primary
-    ON platform_accounts(owner_id, platform)
-    WHERE is_primary = 1;
-
--- ── Phase 6/7 contract: team_members ───────────────────────────
-CREATE TABLE IF NOT EXISTS team_members (
-    id TEXT PRIMARY KEY,
-    owner_id TEXT NOT NULL,
-    email TEXT NOT NULL,
-    username TEXT NOT NULL,
-    initial TEXT NOT NULL,
-    role TEXT NOT NULL CHECK (role IN ('admin','editor','viewer')),
-    joined_at TEXT NOT NULL,
-    last_active_at TEXT,
-    UNIQUE (owner_id, email),
-    FOREIGN KEY (owner_id) REFERENCES users(id)
-);
-CREATE INDEX IF NOT EXISTS idx_team_members_owner_id ON team_members(owner_id);
-"""
 
 # ==================== Database Manager ====================
+
+
+def _split_sql_statements(sql: str) -> list[str]:
+    """Split a multi-statement SQL blob into individual executable statements.
+
+    Strips SQL comments FIRST (whole-file), then splits on ``;``:
+
+    * Whole-line ``--`` comments are dropped.
+    * Inline ``-- ...`` tails are stripped, but only when the ``--`` is NOT
+      inside a single-quoted string literal (so a default value like
+      ``'a--b'`` survives). The migration files are pure DDL with no such
+      literals, but the guard keeps this safe for future use.
+
+    Splitting before comment-stripping would mis-split on a ``;`` inside a
+    comment (e.g. ``-- ... lacked; effect_reviews`` leaked the bare token
+    ``effect_reviews`` as a statement; ``-- UTC;]`` truncated a CREATE
+    TABLE with "incomplete input"). Comment-only and empty blocks drop out.
+    """
+    without_comments_lines: list[str] = []
+    for line in sql.split("\n"):
+        stripped = line.strip()
+        if stripped.startswith("--"):
+            continue  # whole-line comment
+        # Strip an inline -- comment that is outside a string literal.
+        in_string = False
+        cut = len(line)
+        i = 0
+        while i < len(line) - 1:
+            ch = line[i]
+            if ch == "'":
+                in_string = not in_string
+            elif not in_string and ch == "-" and line[i + 1] == "-":
+                cut = i
+                break
+            i += 1
+        without_comments_lines.append(line[:cut])
+    without_comments = "\n".join(without_comments_lines)
+
+    statements: list[str] = []
+    for block in without_comments.split(";"):
+        stmt = block.strip()
+        if stmt:
+            statements.append(stmt + ";")
+    return statements
 
 
 class Database:
@@ -328,10 +91,14 @@ class Database:
         self.session_factory = None
 
     async def init_db(self) -> None:
-        """Initialize the database engine and create all tables.
+        """Initialize the database engine and apply the migration-managed schema.
 
-        Enables WAL mode for better concurrent read/write performance.
-        Creates all 14 tables if they don't exist.
+        Enables WAL mode, per-connection pragmas, then delegates ALL table
+        creation to :meth:`apply_migrations` (the migration runner). The
+        legacy ``SQL_SCHEMA`` big-string has been retired (Spec-007 dual-
+        schema-debt consolidation, T104) so the migration runner is the
+        sole schema authority — drift between SQL_SCHEMA and the
+        ``NNN_*.sql`` migrations can no longer occur.
         """
         # Create engine with SQLite optimizations
         self.engine = create_async_engine(
@@ -343,27 +110,15 @@ class Database:
             pool_pre_ping=True,
         )
 
-        # Enable WAL mode + create tables (MUST be in same connection for :memory:)
+        # Enable WAL mode + per-connection pragmas (MUST be in same
+        # connection for :memory:). These are runtime behavior, not schema.
         async with self.engine.begin() as conn:
-            # Configure SQLite pragmas
             await conn.execute(text("PRAGMA journal_mode=WAL"))
             await conn.execute(text("PRAGMA foreign_keys=ON"))
             await conn.execute(text("PRAGMA busy_timeout=5000"))
 
-            # Create all 14 tables
-            for block in SQL_SCHEMA.split(";"):
-                block = block.strip()
-                if not block:
-                    continue
-                # Strip comment lines (lines starting with --)
-                clean_lines = [
-                    line
-                    for line in block.split("\n")
-                    if not line.strip().startswith("--")
-                ]
-                clean_stmt = "\n".join(clean_lines).strip()
-                if clean_stmt:
-                    await conn.execute(text(clean_stmt + ";"))
+        # The migration runner creates every table (000_initial + 001-006).
+        await self.apply_migrations()
 
         # Create session factory
         self.session_factory = async_sessionmaker(
@@ -372,7 +127,120 @@ class Database:
             expire_on_commit=False,
         )
 
-        logger.info("Database initialized (14 tables) with WAL mode")
+        logger.info("Database initialized (migration-managed) with WAL mode")
+
+    # ==================== Migration bridge (T102) ====================
+
+    def _raw_path(self) -> str | None:
+        """Strip the SQLAlchemy driver prefix to a raw sqlite3 file path.
+
+        ``sqlite+aiosqlite:///./data/topicai.db`` -> ``./data/topicai.db``.
+        ``sqlite+aiosqlite:///:memory:`` -> ``None`` (signals the memory
+        branch of :meth:`apply_migrations`, because a sync
+        ``sqlite3.connect(":memory:")`` would open a *different* in-memory DB
+        than this instance's aiosqlite engine).
+
+        Returns:
+            The raw file path, or ``None`` for in-memory URLs.
+        """
+        if "///" in self.database_url:
+            raw = self.database_url.split("///", 1)[-1]
+            # ``sqlite+aiosqlite:///:memory:`` splits to ``:memory:``; treat
+            # that as memory too (sync sqlite3 would diverge from aiosqlite).
+            if raw == ":memory:":
+                return None
+            return raw
+        return None
+
+    async def apply_migrations(self) -> None:
+        """Apply pending migrations through this instance's database.
+
+        Two paths converge on the migration runner's idempotent + checksum +
+        post-step machinery:
+
+        * **File DB** (``_raw_path()`` is a real path): the sync runner is
+          invoked via ``asyncio.to_thread`` against the SAME sqlite file the
+          async engine uses. Reuses the runner's full power unchanged.
+        * **In-memory DB** (``_raw_path()`` returns ``None``): a sync
+          ``sqlite3.connect(":memory:")`` would be a different DB than this
+          aiosqlite engine, so the runner is NOT used directly. Instead each
+          migration file is executed through the aiosqlite engine. Post-steps
+          are skipped on the memory path — ``000_initial_schema.sql`` already
+          ships the full-column baseline, so the additive-column back-fill
+          that ``_ensure_columns`` provides for *legacy* DBs is redundant on a
+          fresh memory DB (and porting ``_ensure_columns``' sqlite3 API to
+          aiosqlite would add a new bug surface for no gain).
+
+        Must be called after :meth:`init_db` has created the engine (or the
+        caller creates the engine itself for the memory path). ``init_db``
+        itself calls this once the pragmas + session factory are set up.
+        """
+        from app.data.migrations.runner import (
+            DEFAULT_MIGRATIONS_DIR,
+            _list_migration_files,
+            _sha256,
+        )
+
+        raw_path = self._raw_path()
+        if raw_path is not None:
+            # File DB: delegate to the sync runner on a worker thread so the
+            # event loop is not blocked by stdlib sqlite3 I/O.
+            from app.data.migrations.runner import apply as _runner_apply
+
+            await asyncio.to_thread(_runner_apply, raw_path, DEFAULT_MIGRATIONS_DIR)
+            return
+
+        # In-memory DB: replay migrations through the aiosqlite engine so the
+        # schema lands on the SAME in-memory database the app/tests use.
+        files = _list_migration_files(DEFAULT_MIGRATIONS_DIR)
+        if not files:
+            return
+
+        applied_any = False
+        # SQLAlchemy's async ``conn.execute(text(script))`` rejects multi-
+        # statement scripts (ObjectNotExecutableError), and the aiosqlite
+        # DBAPI connection exposes an *async* ``executescript`` that can't be
+        # driven from ``run_sync`` (its calls return coroutines). So the
+        # memory path splits each migration file into statements — the same
+        # ``split(';')`` + comment-strip idiom ``init_db`` uses for
+        # SQL_SCHEMA — and runs them one-by-one via the async connection.
+        # Post-steps are skipped on the memory path: ``000_initial_schema``
+        # ships the full-column baseline, so the legacy-DB back-fill the
+        # post-steps provide is redundant on a fresh memory DB.
+        async with self.engine.begin() as conn:  # type: ignore[union-attr]
+            await conn.execute(
+                text(
+                    "CREATE TABLE IF NOT EXISTS schema_migrations ("
+                    "version TEXT PRIMARY KEY, applied_at TEXT NOT NULL, "
+                    "checksum TEXT NOT NULL)"
+                )
+            )
+            known = {
+                row[0]
+                for row in (
+                    await conn.execute(
+                        text("SELECT version FROM schema_migrations")
+                    )
+                ).fetchall()
+            }
+            for path in files:
+                version = path.stem
+                if version in known:
+                    continue
+                sql = path.read_text(encoding="utf-8")
+                for stmt in _split_sql_statements(sql):
+                    await conn.execute(text(stmt))
+                await conn.execute(
+                    text(
+                        "INSERT INTO schema_migrations(version, applied_at, "
+                        "checksum) VALUES (:v, datetime('now'), :c)"
+                    ),
+                    {"v": version, "c": _sha256(sql)},
+                )
+                applied_any = True
+                logger.info("Applied migration %s (memory path)", version)
+        if applied_any:
+            logger.info("Migration run complete (memory path)")
 
     async def get_session(self) -> AsyncSession:
         """Get a new async database session.

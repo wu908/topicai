@@ -43,7 +43,7 @@ class TestCommonModels:
 
         meta = AIQualityMeta(
             confidence=0.65,
-            data_source="ai_inference",
+            data_source="llm_simulation",
             model_version="deepseek-v4-flash",
             caveat="基于AI推断，非实时数据",
         )

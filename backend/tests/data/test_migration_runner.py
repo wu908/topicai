@@ -91,6 +91,31 @@ class TestMigrationRunner:
         empty_dir.mkdir()
         assert apply(tmp_path / "app.db", empty_dir) == []
 
+    def test_no_duplicate_numeric_prefix_in_default_dir(self):
+        """Regression for the 2026-07-03 dual-005 incident.
+
+        Two migrations (005_creator_profiles.sql and 005_platform_tokens.sql)
+        once shared the NNN=005 prefix. The runner keys schema_migrations by
+        path.stem so they never collided at runtime, but the duplicate prefix
+        broke the monotonic version invariant and made status() ambiguous.
+        Lock down that no two shipped migrations share the same 3-digit prefix.
+        """
+        import re
+
+        from app.data.migrations.runner import _list_migration_files
+
+        files = _list_migration_files(DEFAULT_MIGRATIONS_DIR)
+        assert files, "expected migrations to be present in the default dir"
+
+        prefixes: list[str] = []
+        for path in files:
+            match = re.match(r"^(\d{3})_", path.name)
+            assert match, f"migration {path.name} lacks a 3-digit NNN prefix"
+            prefixes.append(match.group(1))
+        assert len(prefixes) == len(set(prefixes)), (
+            f"duplicate migration NNN prefixes: {prefixes}"
+        )
+
 
 def _table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
     return {row[1] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}

@@ -195,14 +195,14 @@ def test_parse_llm_response_returns_empty_on_bad_json():
 
 
 def test_llm_data_source_mock_topics_shape():
-    """_mock_topics returns 5 ai_inference items per US2 T041 fallback."""
+    """_mock_topics returns 5 llm_simulation items per US2 T041 fallback."""
     from app.data_sources.llm_source import LLMDataSource
 
     src = LLMDataSource.__new__(LLMDataSource)
     items = src._mock_topics("科技", count=5)
     assert len(items) == 5
     for t in items:
-        assert t["data_source"] == "ai_inference"
+        assert t["data_source"] == "llm_simulation"
         assert 0.5 <= t["confidence"] <= 0.8
 
 
@@ -211,7 +211,6 @@ def test_llm_data_source_mock_topics_shape():
 
 def test_topic_recommend_sync_wrapper_runs():
     """TopicRecommendService.recommend() runs synchronously via asyncio.run."""
-    from app.data_sources.data_manager import DataManager
     from app.services.topic_recommend import TopicRecommendService
 
     preloaded = _stub_source(True, topics=[
@@ -291,9 +290,8 @@ def test_topic_recommend_filter_by_track_empty_track_returns_all():
 @pytest.mark.asyncio
 async def test_llm_data_source_exception_falls_back_to_mock():
     """When llm.generate() raises, fetch_trending_topics returns the
-    ai_inference fallback (US2 T041 fallback contract).
+    llm_simulation fallback (US2 T041 fallback contract).
     """
-    import asyncio
     from app.data_sources.llm_source import LLMDataSource
 
     class _RaisingLLM:
@@ -303,7 +301,7 @@ async def test_llm_data_source_exception_falls_back_to_mock():
     src = LLMDataSource(llm_client=_RaisingLLM())
     out = await src.fetch_trending_topics("科技")
     assert len(out) == 5
-    assert all(t["data_source"] == "ai_inference" for t in out)
+    assert all(t["data_source"] == "llm_simulation" for t in out)
 
 
 @pytest.mark.asyncio
@@ -320,7 +318,7 @@ async def test_llm_data_source_empty_parse_falls_back_to_mock():
     src = LLMDataSource(llm_client=_EmptyTopicsLLM())
     out = await src.fetch_trending_topics("科技")
     assert len(out) == 5
-    assert all(t["data_source"] == "ai_inference" for t in out)
+    assert all(t["data_source"] == "llm_simulation" for t in out)
 
 
 @pytest.mark.asyncio
@@ -429,17 +427,19 @@ def test_topic_recommend_rank_topics_keeps_existing_score():
 # ─── _load_rubric_weights JSON-string parse path (lines 117-140) ─────
 
 
-def test_topic_recommend_load_rubric_weights_anonymous():
+@pytest.mark.asyncio
+async def test_topic_recommend_load_rubric_weights_anonymous():
     """Anonymous user gets DEFAULT_RUBRIC_WEIGHTS."""
     from app.services.topic_recommend import DEFAULT_RUBRIC_WEIGHTS, TopicRecommendService
 
     svc = TopicRecommendService.__new__(TopicRecommendService)
-    assert svc._load_rubric_weights("anonymous") == DEFAULT_RUBRIC_WEIGHTS
-    assert svc._load_rubric_weights("") == DEFAULT_RUBRIC_WEIGHTS
-    assert svc._load_rubric_weights(None) == DEFAULT_RUBRIC_WEIGHTS
+    assert await svc._load_rubric_weights("anonymous") == DEFAULT_RUBRIC_WEIGHTS
+    assert await svc._load_rubric_weights("") == DEFAULT_RUBRIC_WEIGHTS
+    assert await svc._load_rubric_weights(None) == DEFAULT_RUBRIC_WEIGHTS
 
 
-def test_topic_recommend_load_rubric_weights_db_failure_falls_back():
+@pytest.mark.asyncio
+async def test_topic_recommend_load_rubric_weights_db_failure_falls_back():
     """When the DB lookup fails, DEFAULT_RUBRIC_WEIGHTS is returned."""
     from unittest.mock import patch
 
@@ -449,11 +449,12 @@ def test_topic_recommend_load_rubric_weights_db_failure_falls_back():
     # Patch the source module's get_db — `from app.core.database import
     # get_db` always reads from the source module.
     with patch("app.core.database.get_db", side_effect=Exception("db unavailable"), create=True):
-        result = svc._load_rubric_weights("u-1")
+        result = await svc._load_rubric_weights("u-1")
     assert result == DEFAULT_RUBRIC_WEIGHTS
 
 
-def test_topic_recommend_load_rubric_weights_with_profile():
+@pytest.mark.asyncio
+async def test_topic_recommend_load_rubric_weights_with_profile():
     """When the DB returns a profile with rubric_weights, those are used.
 
     Exercises lines 117-137 of _load_rubric_weights (full try block).
@@ -473,12 +474,13 @@ def test_topic_recommend_load_rubric_weights_with_profile():
     with patch("app.core.database.get_db", return_value=MagicMock(), create=True), \
          patch("app.services.creator_profile.CreatorProfileService",
                return_value=fake_profile_svc, create=True):
-        result = svc._load_rubric_weights("u-1")
+        result = await svc._load_rubric_weights("u-1")
 
     assert result == {"track_match_score": 0.5, "format_match_score": 0.5}
 
 
-def test_topic_recommend_load_rubric_weights_with_json_string():
+@pytest.mark.asyncio
+async def test_topic_recommend_load_rubric_weights_with_json_string():
     """When rubric_weights stored as JSON string, parse and return."""
     from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -495,12 +497,13 @@ def test_topic_recommend_load_rubric_weights_with_json_string():
     with patch("app.core.database.get_db", return_value=MagicMock(), create=True), \
          patch("app.services.creator_profile.CreatorProfileService",
                return_value=fake_profile_svc, create=True):
-        result = svc._load_rubric_weights("u-1")
+        result = await svc._load_rubric_weights("u-1")
 
     assert result == {"track_match_score": 0.6, "format_match_score": 0.4}
 
 
-def test_topic_recommend_load_rubric_weights_no_profile():
+@pytest.mark.asyncio
+async def test_topic_recommend_load_rubric_weights_no_profile():
     """When the profile lookup returns None, default weights are returned."""
     from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -514,7 +517,7 @@ def test_topic_recommend_load_rubric_weights_no_profile():
     with patch("app.core.database.get_db", return_value=MagicMock(), create=True), \
          patch("app.services.creator_profile.CreatorProfileService",
                return_value=fake_profile_svc, create=True):
-        result = svc._load_rubric_weights("u-1")
+        result = await svc._load_rubric_weights("u-1")
 
     assert result == DEFAULT_RUBRIC_WEIGHTS
 

@@ -30,7 +30,6 @@ from pathlib import Path
 import pytest
 from sqlalchemy import text
 
-
 # ============================================================
 # Helpers
 # ============================================================
@@ -131,8 +130,8 @@ async def test_scenario_a_llm_coach_endpoints(client):
     # The tracks/diagnose and publish/suggest endpoints require
     # specific Pydantic request fields; we exercise the service
     # directly to verify AI transparency.
-    from app.services.track_diagnosis import TrackDiagnosisService
     from app.services.publish_advisor import PublishAdvisorService
+    from app.services.track_diagnosis import TrackDiagnosisService
 
     for svc_name, svc_call, kwargs in [
         ("track_diagnosis", TrackDiagnosisService().diagnose,
@@ -172,6 +171,7 @@ async def test_scenario_b_4_tier_data_source():
     HTTP route.
     """
     import asyncio
+
     from app.services.topic_recommend import TopicRecommendService
 
     svc = TopicRecommendService()
@@ -371,8 +371,8 @@ async def test_scenario_f_onboarding_rubric_weights():
     issue in the route (request.state.user_id is not propagated
     in the test fixture).
     """
-    from app.services.onboarding import OnboardingService
     from app.models.creator_profile import OnboardingRequest
+    from app.services.onboarding import OnboardingService
 
     req = OnboardingRequest(
         track="美食",

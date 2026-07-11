@@ -551,3 +551,26 @@ def _clean_json_response(raw: str) -> str:
         raw = raw[start:end + 1]
 
     return raw
+
+
+def wrap_user_input(text: str | None) -> str:
+    """Wrap untrusted user input in XML delimiters for prompt-injection defense.
+
+    Pairs of ``<user_input>...</user_input>`` tags let the LLM distinguish
+    the system-prompt scaffold from caller-supplied content (D6 of the
+    foundation plan, Constitution Principle XIII). Both the opening and
+    closing delimiter literals are HTML-escaped inside the payload, so a
+    malicious caller cannot nest a fake ``<user_input>`` block or close
+    the real one early to inject instructions into the surrounding
+    template context.
+
+    Args:
+        text: Untrusted caller content (None treated as empty string).
+
+    Returns:
+        The input wrapped in a single closed ``<user_input>...</user_input>``
+        pair with inner delimiter tags escaped.
+    """
+    safe = (text or "").replace("</user_input>", "&lt;/user_input&gt;")
+    safe = safe.replace("<user_input>", "&lt;user_input&gt;")
+    return f"<user_input>{safe}</user_input>"

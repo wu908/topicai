@@ -52,9 +52,17 @@ class Settings(BaseSettings):
     jwt_refresh_token_expire_days: int = Field(
         default=7, alias="JWT_REFRESH_TOKEN_EXPIRE_DAYS"
     )
+    jwt_iss: str = Field(default="topica", alias="JWT_ISS", min_length=1)
+    jwt_aud: str = Field(default="topica", alias="JWT_AUD", min_length=1)
 
     # ==================== Rate Limiting ====================
     ai_calls_per_day: int = Field(default=20, alias="AI_CALLS_PER_DAY")
+    auth_rate_limit_per_minute: int = Field(
+        default=5, alias="AUTH_RATE_LIMIT_PER_MINUTE", ge=1
+    )
+    anonymous_ai_calls_per_hour: int = Field(
+        default=20, alias="ANONYMOUS_AI_CALLS_PER_HOUR", ge=1
+    )
 
     # ==================== Monitoring ====================
     sentry_dsn: str = Field(default="", alias="SENTRY_DSN")
@@ -99,18 +107,25 @@ class Settings(BaseSettings):
 
     @property
     def is_production(self) -> bool:
-        """Check if running in production environment."""
-        return self.environment == "production"
+        """Check if running in production environment.
+
+        Comparison is case-insensitive and whitespace-trimmed so that
+        ``ENVIRONMENT=Production`` / ``PRODUCTION`` / `` production `` are
+        all treated as production. Without this normalization a case
+        typo would silently flip the JWT-secret strength gate to
+        fail-open in production.
+        """
+        return self.environment.strip().lower() == "production"
 
     @property
     def is_test(self) -> bool:
-        """Check if running in test environment."""
-        return self.environment == "test"
+        """Check if running in test environment (case-insensitive)."""
+        return self.environment.strip().lower() == "test"
 
     @property
     def is_development(self) -> bool:
-        """Check if running in development environment."""
-        return self.environment == "development"
+        """Check if running in development environment (case-insensitive)."""
+        return self.environment.strip().lower() == "development"
 
 
 # Singleton settings instance

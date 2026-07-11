@@ -68,7 +68,7 @@ class ViralAnalysisService:
         Returns:
             Dict with viral_score, structural_analysis, attributions, etc.
         """
-        from app.core.llm import LLMClient
+        from app.core.llm import LLMClient, wrap_user_input
 
         llm = LLMClient()
 
@@ -101,7 +101,7 @@ class ViralAnalysisService:
             "IMPORTANT: Respond ONLY with valid JSON. No markdown, no explanation."
         )
 
-        prompt = f"请分析以下{'图文' if input_type == 'text' else '图片'}内容的爆款潜力：\n\n{content[:3000]}"
+        prompt = f"请分析以下{'图文' if input_type == 'text' else '图片'}内容的爆款潜力：\n\n{wrap_user_input(content[:3000])}"
 
         raw = llm.generate(prompt=prompt, system_prompt=system_prompt, temperature=0.3)
 

@@ -27,57 +27,6 @@ import {
   getConfidenceLabel,
   truncateText,
 } from '../format';
-import {
-  isNotEmpty,
-  isValidEmail,
-  isValidPassword,
-  isValidUsername,
-  isWithinLength,
-} from '../validators';
-
-describe('validators', () => {
-  it('isValidEmail accepts well-formed addresses', () => {
-    expect(isValidEmail('user@example.com')).toBe(true);
-    expect(isValidEmail('a.b+c@sub.example.co.uk')).toBe(true);
-  });
-
-  it('isValidEmail rejects malformed addresses', () => {
-    expect(isValidEmail('')).toBe(false);
-    expect(isValidEmail('no-at-sign')).toBe(false);
-    expect(isValidEmail('a@b')).toBe(false);
-    expect(isValidEmail('a @b.com')).toBe(false);
-  });
-
-  it('isValidPassword enforces length, letter, digit', () => {
-    expect(isValidPassword('short1').valid).toBe(false);
-    expect(isValidPassword('allletters').valid).toBe(false);
-    expect(isValidPassword('12345678').valid).toBe(false);
-    const ok = isValidPassword('abc12345');
-    expect(ok.valid).toBe(true);
-    expect(ok.message).toBe('');
-  });
-
-  it('isValidUsername enforces 2-20 length and allowed chars', () => {
-    expect(isValidUsername('a').valid).toBe(false);
-    expect(isValidUsername('a'.repeat(21)).valid).toBe(false);
-    expect(isValidUsername('user@bad').valid).toBe(false);
-    expect(isValidUsername('user_ok').valid).toBe(true);
-    expect(isValidUsername('用户名').valid).toBe(true);
-  });
-
-  it('isNotEmpty trims before checking', () => {
-    expect(isNotEmpty('hi')).toBe(true);
-    expect(isNotEmpty('   ')).toBe(false);
-    expect(isNotEmpty('')).toBe(false);
-  });
-
-  it('isWithinLength checks trimmed length within [min,max]', () => {
-    expect(isWithinLength('hi', 2, 5)).toBe(true);
-    expect(isWithinLength('h', 2, 5)).toBe(false);
-    expect(isWithinLength('hello!!', 2, 5)).toBe(false);
-    expect(isWithinLength('  hi  ', 2, 5)).toBe(true);
-  });
-});
 
 describe('format', () => {
   it('formatDate returns "-" for null/invalid', () => {

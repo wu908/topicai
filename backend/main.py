@@ -24,6 +24,27 @@ from config.settings import get_settings
 
 logger = logging.getLogger(__name__)
 
+# Module-level weak-secret blacklist. Multi-word placeholder phrases
+# (NOT bare short words like "dev"/"test"/"secret") so a long
+# high-entropy random key that happens to contain "test" or "dev" as a
+# substring is not falsely rejected. The minimum-length gate below is
+# the primary defense against short keys regardless of content.
+_WEAK_SECRET_SUBSTRINGS: tuple[str, ...] = (
+    "change-me",
+    "change-in-prod",
+    "please-change",
+    "changeme",
+    "placeholder",
+    "your-secret",
+    "dev-secret",
+    "test-secret",
+    "secret-key",
+)
+
+# Minimum JWT_SECRET_KEY length enforced in production. 32 characters
+# is the baseline for a 192-bit HS256 secret.
+_PRODUCTION_SECRET_MIN_LENGTH: int = 32
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
@@ -57,22 +78,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await db.init_db()
         logger.info("Database initialized (SQLite WAL mode)")
 
-        # Apply pending SQL migrations (Spec-007 T004)
+        # Apply pending SQL migrations through the Database's own engine
+        # (Spec-007 T004 + T103). The bridge routes file DBs to the sync
+        # runner via asyncio.to_thread and :memory: to the aiosqlite engine,
+        # so migrations always land on the SAME database init_db uses.
         try:
-            from app.data.migrations.runner import apply as run_migrations
-
-            # settings.database_url looks like 'sqlite+aiosqlite:///./data/topicai.db'
-            # Strip the SQLAlchemy driver prefix so the stdlib sqlite3
-            # module can open it directly. For in-memory URLs
-            # (e.g. 'sqlite+aiosqlite:///:memory:') the split finds no
-            # '///' — fall back to ':memory:' which sqlite3 understands.
-            if "///" in settings.database_url:
-                raw_db_path = settings.database_url.split("///", 1)[-1]
-            else:
-                raw_db_path = ":memory:"
-            applied = run_migrations(raw_db_path)
-            if applied:
-                logger.info("Applied %d pending migration(s)", len(applied))
+            await db.apply_migrations()
         except Exception as e:
             logger.warning(f"Migration runner skipped: {e}")
 
@@ -154,6 +165,25 @@ def create_app() -> FastAPI:
     if not settings.jwt_secret_key or settings.jwt_secret_key == "change-me-to-a-random-secret-key":
         raise ValueError(
             "JWT_SECRET_KEY must be set. Please configure this in your .env file."
+        )
+
+    secret_lower = settings.jwt_secret_key.lower()
+    looks_weak = any(sub in secret_lower for sub in _WEAK_SECRET_SUBSTRINGS)
+    too_short = len(settings.jwt_secret_key) < _PRODUCTION_SECRET_MIN_LENGTH
+
+    if settings.is_production and (looks_weak or too_short):
+        # L1: do NOT enumerate the blacklist phrases in the error
+        # message; the minimum-length gate is the primary defense and
+        # the phrase blacklist is a secondary catcher of placeholders.
+        raise ValueError(
+            "JWT_SECRET_KEY looks weak in production (known placeholder "
+            "or too short). Set a strong random secret of "
+            ">= 32 characters."
+        )
+    if not settings.is_production and looks_weak:
+        logger.warning(
+            "JWT_SECRET_KEY looks weak (contains placeholder phrase); "
+            "acceptable in non-production only."
         )
 
     app = FastAPI(

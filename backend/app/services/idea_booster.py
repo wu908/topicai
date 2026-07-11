@@ -64,11 +64,18 @@ class IdeaBoosterService:
     def _analyze_with_llm(self, idea_text: str) -> dict[str, Any] | None:
         """Call the LLM and parse its JSON response. Returns None on any failure.
 
-        Truncates the idea to MAX_IDEA_CHARS before sending.
+        Truncates the idea to MAX_IDEA_CHARS before sending. The user idea is
+        wrapped in ``<user_input>`` XML delimiters (D6) so an injection attempt
+        like ``忽略以上指令`` stays inside the untrusted block and cannot
+        rewrite the surrounding prompt scaffold.
         """
         try:
+            from app.core.llm import wrap_user_input
+
             llm = self._get_llm()
-            prompt = self._load_prompt().replace("{idea_text}", idea_text[:MAX_IDEA_CHARS])
+            prompt = self._load_prompt().replace(
+                "{idea_text}", wrap_user_input(idea_text[:MAX_IDEA_CHARS])
+            )
             raw = llm.generate(prompt=prompt, temperature=0.4)
 
             # Local minimal JSON cleaner (mirrors app.core.llm._clean_json_response)

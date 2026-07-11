@@ -96,8 +96,12 @@ class TrackDiagnosisService:
 
     def _analyze_with_llm(self, track_keyword: str) -> dict[str, Any] | None:
         try:
+            from app.core.llm import wrap_user_input
+
             llm = self._get_llm()
-            prompt = self._load_prompt().replace("{track_keyword}", track_keyword)
+            prompt = self._load_prompt().replace(
+                "{track_keyword}", wrap_user_input(track_keyword)
+            )
             raw = llm.generate(prompt=prompt, temperature=0.3)
 
             cleaned = raw.strip()

@@ -17,7 +17,6 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from sqlalchemy import text
 
-
 # -------- helpers --------
 
 def _now_iso() -> str:
@@ -31,11 +30,18 @@ def _days_ago_iso(days: float) -> str:
 
 
 async def _seed_user(db, user_id: str, days_old: float) -> None:
-    """Insert a user with `created_at` set `days_old` ago."""
+    """Insert a user with `created_at` set `days_old` ago.
+
+    ``OR IGNORE`` (not OR REPLACE): the migration-managed schema (T104)
+    cascades ``ON DELETE`` from users to ``user_feedback`` (002) and
+    ``effect_reviews`` (003). An OR REPLACE on an existing user would
+    cascade-wipe their feedback rows. OR IGNORE is idempotent without
+    touching child rows.
+    """
     s = await db.get_session()
     try:
         await s.execute(text(
-            "INSERT OR REPLACE INTO users "
+            "INSERT OR IGNORE INTO users "
             "(id, email, username, password_hash, ai_calls_today, "
             " ai_calls_reset_at, created_at) "
             "VALUES (:id, :email, :uname, 'hash', 0, '', :ca)"

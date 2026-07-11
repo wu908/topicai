@@ -3,18 +3,25 @@
 Scans content for compliance risks including platform policy violations,
 copyright issues, and sensitive keywords.
 
-Spec-007 US5 (T075): explicit 80/20 LLM+keyword blend per Constitution
-Principle XI (Hybrid AI Discipline).
+Spec-007 US5 (T075): explicit 80/20 keyword+LLM blend per FR-008 and
+Constitution Principle XI (Hybrid AI Discipline).
 
 Algorithm (when LLM gate is open, i.e. keyword confidence < threshold):
-  1. keyword_scan -> (risks_kw, score_kw, conf_kw)            # 20% weight
-  2. try: llm_enhance -> (risks_llm, score_llm, conf_llm)     # 80% weight
+  1. keyword_scan -> (risks_kw, score_kw, conf_kw)            # 80% weight
+  2. try: llm_enhance -> (risks_llm, score_llm, conf_llm)     # 20% weight
      except: log warning + fall back to 100% keyword path
-  3. final_score  = 0.2 * score_kw + 0.8 * score_llm
+  3. final_score  = 0.8 * score_kw + 0.2 * score_llm
      final_risks  = union(keyword_risks, llm_risks) deduped
      final_confid = max(keyword_conf, 0.75) for LLM-succeeded path,
                     min(keyword_conf, 0.5)  for keyword-only fallback
   4. data_source  = "llm_simulation" if LLM succeeded else "keyword_only"
+
+Keyword source (T401-T405): when a ``db`` is injected, the keyword list
+is read from the ``risk_keywords`` table (seeded from
+``app/data/seed/risk_keywords.json`` on first use), with per-user rows
+overriding global rows of the same keyword. Without a db, the legacy
+hardcoded ``_RISKY_KEYWORDS`` list is the fallback so existing
+test/mock paths keep working.
 
 Constitution III: every response carries confidence / data_source /
 model_version.
@@ -22,10 +29,12 @@ Constitution VI: heuristic-first; LLM only when keyword confidence is
 low OR on the explicit 80/20 path. Any LLM failure must NOT propagate.
 """
 
+import asyncio
 import json
 import logging
 import uuid
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 from app.core.utils import utc_now
@@ -73,9 +82,11 @@ _LLM_CONFIDENCE_THRESHOLD = 0.6
 _LLM_MODEL_VERSION = "deepseek-v4-flash"
 _KEYWORD_MODEL_VERSION = "keyword-v1"
 
-# 80/20 blend weights (US5 T075).
-_KEYWORD_BLEND_WEIGHT = 0.2
-_LLM_BLEND_WEIGHT = 0.8
+# 80/20 blend weights per FR-008 (US5 T075). Note: the FR-008 spec inverts
+# the original 20/80 LLM-heavy direction — keyword scan is the dominant
+# signal, the LLM only refines the score.
+_KEYWORD_BLEND_WEIGHT = 0.8
+_LLM_BLEND_WEIGHT = 0.2
 
 # Confidence caps (Constitution III/VI).
 _LLM_CONFIDENCE = 0.75         # reported when LLM path succeeds
@@ -87,23 +98,202 @@ class ContentRiskService:
 
     Heuristic keyword scan is the primary signal; the LLM is invoked when
     the keyword confidence is below ``_LLM_CONFIDENCE_THRESHOLD`` and the
-    two are blended at 20% (keyword) + 80% (LLM) per Constitution XI.
+    two are blended at 80% (keyword) + 20% (LLM) per FR-008.
+
+    Args:
+        db: Optional ``Database`` instance. When provided, the keyword
+            library is read from the ``risk_keywords`` table (seeded
+            lazily on first ``check()`` from
+            ``app/data/seed/risk_keywords.json``); per-user rows for the
+            same keyword override the global entry. When ``None``, the
+            hardcoded ``_RISKY_KEYWORDS`` list is used as a fallback so
+            the service stays usable in tests / scripts that don't wire
+            a database.
     """
 
-    def __init__(self):
-        pass
+    def __init__(self, db: Any | None = None):
+        self.db = db
+        # Once-loaded guard for the seed. We can't reuse asyncio.Lock
+        # across event loops, so we lazily create one per instance.
+        self._seed_loaded = False
+        self._load_lock: asyncio.Lock | None = None
+
+    # ---------------- seed loader (T402) ----------------
+
+    def _ensure_lock(self) -> asyncio.Lock | None:
+        """Return the per-instance lock, or None if no db is wired in."""
+        if self.db is None:
+            return None
+        if self._load_lock is None:
+            self._load_lock = asyncio.Lock()
+        return self._load_lock
+
+    async def _load_seed_if_needed(self) -> None:
+        """Idempotently seed the global risk_keywords rows from JSON.
+
+        Behaviour:
+        * If ``self.db`` is ``None`` this is a no-op (hardcoded fallback).
+        * If the global keyword count is already > 0, do nothing.
+        * Otherwise, load ``app/data/seed/risk_keywords.json`` and INSERT
+          each entry with ``user_id IS NULL``.
+
+        The (user_id, keyword) UNIQUE index treats NULL != NULL in SQLite,
+        so a plain ``INSERT OR IGNORE`` cannot dedupe the global seed —
+        we instead guard with a count check + an ``asyncio.Lock`` to make
+        a concurrent first-call race-safe.
+        """
+        if self.db is None:
+            return
+        if self._seed_loaded:
+            return
+        lock = self._ensure_lock()
+        if lock is not None:
+            async with lock:
+                if self._seed_loaded:
+                    return
+                await self._do_load_seed()
+                self._seed_loaded = True
+        else:
+            await self._do_load_seed()
+            self._seed_loaded = True
+
+    async def _do_load_seed(self) -> None:
+        """Perform the actual seed INSERT (called under the lock)."""
+        assert self.db is not None
+        count_row = await self.db.fetch_one(
+            "SELECT COUNT(*) AS cnt FROM risk_keywords WHERE user_id IS NULL"
+        )
+        existing = int((count_row or {}).get("cnt", 0) or 0)
+        if existing > 0:
+            return
+
+        seed_path = (
+            Path(__file__).resolve().parent.parent
+            / "data"
+            / "seed"
+            / "risk_keywords.json"
+        )
+        try:
+            with open(seed_path, encoding="utf-8") as fh:
+                seed_entries = json.load(fh)
+        except FileNotFoundError:
+            logger.warning(
+                "risk: seed file missing at %s — skipping seed load", seed_path
+            )
+            return
+        except (OSError, ValueError) as e:
+            logger.warning(
+                "risk: failed to read seed file %s: %s — skipping seed load",
+                seed_path,
+                e,
+            )
+            return
+
+        now_iso = utc_now()
+        for entry in seed_entries:
+            if not isinstance(entry, dict):
+                continue
+            keyword = entry.get("keyword")
+            severity = entry.get("severity")
+            category = entry.get("category")
+            if not keyword or not severity or not category:
+                continue
+            await self.db.insert(
+                "risk_keywords",
+                {
+                    "id": str(uuid.uuid4()),
+                    "user_id": None,
+                    "keyword": keyword,
+                    "severity": severity,
+                    "category": category,
+                    "created_at": now_iso,
+                },
+            )
+        logger.info("risk: seeded %d global risk_keywords rows", len(seed_entries))
+
+    # ---------------- keyword fetch (T403/T404) ----------------
+
+    async def _fetch_keywords(
+        self, user_id: str
+    ) -> list[tuple[str, str, str]] | None:
+        """Read the effective keyword set for ``user_id`` from the db.
+
+        Returns ``None`` when no db is wired in (caller should use the
+        hardcoded fallback). Per-user rows override the global row of the
+        same keyword for that user only.
+
+        Returns:
+            List of (keyword, severity, category) tuples, or None.
+        """
+        if self.db is None:
+            return None
+        rows = await self.db.fetch_all(
+            "SELECT keyword, severity, category, user_id "
+            "FROM risk_keywords WHERE user_id IS NULL OR user_id = :uid",
+            {"uid": user_id},
+        )
+        # Per-user override takes precedence over global.
+        by_keyword: dict[str, tuple[str, str, str]] = {}
+        for row in rows:
+            kw = row.get("keyword")
+            if kw is None:
+                continue
+            entry = (
+                str(kw),
+                str(row.get("severity", "low")),
+                str(row.get("category", "")),
+            )
+            existing = by_keyword.get(kw)
+            if existing is None:
+                by_keyword[kw] = entry
+            elif row.get("user_id") is not None:
+                # User-specific row replaces the global one.
+                by_keyword[kw] = entry
+        return list(by_keyword.values())
 
     # ---------------- keyword scan ----------------
 
-    def _scan_risk(self, content: str) -> dict[str, Any]:
+    def _scan_risk(
+        self,
+        content: str,
+        keywords: list[tuple[str, str, str]] | None = None,
+    ) -> dict[str, Any]:
         """Scan content for risk keywords (deterministic).
 
-        Returns a dict shaped like ``{risks, overall_risk_score, confidence}``.
+        Args:
+            content: Text to scan.
+            keywords: Optional keyword list from the ``risk_keywords``
+                table. When ``None`` (no-db path), the module-level
+                hardcoded ``_RISKY_KEYWORDS`` catalog is used. When a
+                list is passed (table-driven path), the db keywords are
+                MERGED with the hardcoded catalog (db wins on duplicates)
+                so the well-known spec-007 keywords — ``保本`` /
+                ``100%`` / ``100% cure`` / ``guaranteed no loss`` — keep
+                firing regardless of the seed coverage. The seed has no
+                ``保本`` / ``100%`` / ``100% cure`` entries, so dropping
+                the hardcoded list would regress T069 / T070 and
+                acceptance scenario E.
+
+        Returns:
+            A dict shaped like ``{risks, overall_risk_score, confidence}``.
         """
+        if keywords is None:
+            kw_list = _RISKY_KEYWORDS
+        else:
+            # Merge: db keywords win on exact-text duplicates (so a
+            # per-user override downgrading a hardcoded high -> low
+            # still takes effect).
+            seen: set[str] = set()
+            kw_list: list[tuple[str, str, str]] = []
+            for kw, severity, category in list(keywords) + list(_RISKY_KEYWORDS):
+                if kw in seen:
+                    continue
+                seen.add(kw)
+                kw_list.append((kw, severity, category))
         content_lower = content.lower()
         # (severity, category) -> set of keywords (for dedupe + description)
         bucket: dict[tuple[str, str], list[str]] = {}
-        for kw, severity, category in _RISKY_KEYWORDS:
+        for kw, severity, category in kw_list:
             if kw.lower() in content_lower:
                 bucket.setdefault((severity, category), []).append(kw)
 
@@ -214,6 +404,12 @@ class ContentRiskService:
     async def check(self, user_id: str, content: str) -> dict[str, Any]:
         """Run the 80/20 blend (US5 T075) and return a report dict.
 
+        When a ``db`` was injected at construction time, the keyword
+        library is (lazily) loaded from the ``risk_keywords`` table on
+        the first call; per-user overrides are applied for the supplied
+        ``user_id``. Without a db, the hardcoded ``_RISKY_KEYWORDS``
+        list is the fallback.
+
         Args:
             user_id: User ID.
             content: Content text to analyze.
@@ -222,7 +418,13 @@ class ContentRiskService:
             Dict with risk report and AI transparency metadata
             (confidence, data_source, model_version).
         """
-        scan = self._scan_risk(content)
+        # T401-T405: lazy-load seed + fetch effective keyword set for user.
+        if self.db is not None:
+            await self._load_seed_if_needed()
+            keywords = await self._fetch_keywords(user_id)
+        else:
+            keywords = None
+        scan = self._scan_risk(content, keywords=keywords)
         keyword_confidence = scan["confidence"]
 
         # LLM gate: only when keyword confidence is below threshold.

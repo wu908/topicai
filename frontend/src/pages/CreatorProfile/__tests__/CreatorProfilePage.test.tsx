@@ -38,22 +38,6 @@ const profileStateRef: {
   updateProfile: vi.fn().mockResolvedValue(undefined),
 };
 
-const authStateRef: {
-  user: { id: string; email: string; username: string } | null;
-  isAuthenticated: boolean;
-  profile: typeof profileStateRef.profile;
-  isOnboarded: boolean;
-  fetchCurrentUser: () => Promise<unknown>;
-  fetchProfile: () => Promise<unknown>;
-} = {
-  user: { id: 'u-1', email: 'a@b.com', username: 'Alice' },
-  isAuthenticated: true,
-  profile: null,
-  isOnboarded: false,
-  fetchCurrentUser: vi.fn().mockResolvedValue(undefined),
-  fetchProfile: vi.fn().mockResolvedValue(undefined),
-};
-
 vi.mock('@/hooks/useAuth', () => ({
   useAuth: () => ({
     profile: profileStateRef.profile,

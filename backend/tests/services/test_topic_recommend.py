@@ -180,3 +180,73 @@ async def test_tier_shift_emits_warning_log(caplog):
     assert getattr(rec, "to_layer", None) == "Layer 1b"
     assert getattr(rec, "reason", None)
     assert out["topics"][0]["title"] == "next tier topic"
+
+
+# ─── F4.1 C2: rubric_weights async path ────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_recommend_async_uses_real_rubric_weights_for_logged_in_user():
+    """F4.1: a logged-in user with a creator_profile gets the profile's real
+    rubric_weights applied to ranking — not DEFAULT_RUBRIC_WEIGHTS.
+
+    Before C2, ``_load_rubric_weights`` short-circuited to DEFAULT whenever a
+    loop was running (i.e. always, under pytest-asyncio), so logged-in users
+    silently got default weights. After async-ifying, ``await svc.get(user_id)``
+    returns the real profile and its weights shape the composite_score.
+    """
+    from unittest.mock import AsyncMock, MagicMock
+
+    from app.services.topic_recommend import TopicRecommendService
+
+    # Topic A: scores match the user's rubric weights (track_match heavy).
+    # Topic B: scores match DEFAULT weights (data_quality heavy).
+    topics = [
+        {
+            "title": "track-aligned topic",
+            "track_match_score": 0.9,   # weighted high by user weights
+            "format_match_score": 0.3,
+            "data_quality_score": 0.3,
+            "estimated_heat": 0.5,
+        },
+        {
+            "title": "default-aligned topic",
+            "track_match_score": 0.3,
+            "format_match_score": 0.5,
+            "data_quality_score": 0.9,   # weighted high by DEFAULT
+            "estimated_heat": 0.5,
+        },
+    ]
+
+    dm = _dm_with_layers([
+        ("Layer 1", _make_available_source("Layer 1", topics=topics)),
+    ])
+    svc = TopicRecommendService()
+    svc.data_manager = dm
+
+    # Profile whose rubric_weights emphasize track_match_score.
+    user_weights = {
+        "track_match_score": 0.7,
+        "format_match_score": 0.1,
+        "data_quality_score": 0.1,
+        "estimated_heat": 0.1,
+    }
+    fake_profile = {"id": "u-1", "rubric_weights": user_weights}
+
+    fake_profile_svc = MagicMock()
+    fake_profile_svc.get = AsyncMock(return_value=fake_profile)
+
+    with patch("app.core.database.get_db", return_value=MagicMock(), create=True), \
+         patch("app.services.creator_profile.CreatorProfileService",
+               return_value=fake_profile_svc, create=True):
+        result = await svc.recommend_async(
+            user_id="u-1", track="科技", mode="hotspot_fusion", count=2
+        )
+
+    # track-aligned topic must rank first under the user's track-heavy weights.
+    assert result["topics"][0]["title"] == "track-aligned topic"
+    assert result["topics"][1]["title"] == "default-aligned topic"
+    # And the composite_scores must differ (proving weights were applied).
+    a = result["topics"][0]["composite_score"]
+    b = result["topics"][1]["composite_score"]
+    assert a > b, f"Expected track-aligned > default-aligned, got {a} vs {b}"
