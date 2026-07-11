@@ -524,3 +524,215 @@ class TestDropUnusedFeedbackTables:
             "_EXPECTED_TABLES still includes feedback_analyses — the 007 "
             "drop should have removed it from the expected set"
         )
+
+
+# ==================== T301-T305 (008 creator_profiles reconcile) ============
+
+
+class TestCreatorProfilesReconcile:
+    """T301-T305: migration 008 reconciles legacy ``creator_profiles``
+    tables that predate the 005 ``CHECK (recommendation_mode IN (...))``
+    constraint.
+
+    Background: a prod DB created before migration 005 has
+    ``creator_profiles.recommendation_mode`` as a plain ``TEXT NOT NULL``
+    with no CHECK — so a buggy write could land any string. The 005
+    migration adds the CHECK on fresh DBs only (``CREATE TABLE IF NOT
+    EXISTS`` is a no-op on an existing table), so legacy DBs remain
+    CHECK-less. Migration 008 rebuilds the table with the CHECK in place
+    using the 12-step SQLite pattern (CREATE new, INSERT-SELECT, DROP,
+    RENAME, CREATE INDEX).
+
+    Invariants verified here:
+      (a) A legacy creator_profiles that accepted a bogus
+          ``recommendation_mode`` pre-008 rejects the same bogus value
+          post-008 (proves the CHECK landed).
+      (b) A pre-existing row's ``rubric_weights`` (and row count) survive
+          the rebuild (proves no data loss).
+      (c) On a fresh DB the rebuild is a no-op — the CHECK and the
+          ``idx_creator_profiles_user_id`` index both still exist.
+      (d) Migration 008 is recorded in ``schema_migrations`` with a
+          64-char SHA-256 hex checksum.
+    """
+
+    _LE_USERS = (
+        "id TEXT PRIMARY KEY, "
+        "email TEXT UNIQUE NOT NULL, "
+        "username TEXT UNIQUE NOT NULL, "
+        "password_hash TEXT NOT NULL, "
+        "ai_calls_today INTEGER NOT NULL DEFAULT 0, "
+        "ai_calls_reset_at TEXT NOT NULL, "
+        "created_at TEXT NOT NULL, "
+        "last_login TEXT"
+    )
+
+    def _create_legacy_creator_profiles(self, conn: sqlite3.Connection) -> None:
+        """Simulate a pre-005 schema: ``users`` + ``creator_profiles``
+        with the 005 column order but NO CHECK on
+        ``recommendation_mode``."""
+        conn.executescript(
+            f"""
+            CREATE TABLE users ({self._LE_USERS});
+            CREATE TABLE creator_profiles (
+                id                    TEXT PRIMARY KEY,
+                user_id               TEXT NOT NULL UNIQUE,
+                track                 TEXT NOT NULL,
+                content_formats       TEXT NOT NULL,
+                production_complexity TEXT NOT NULL,
+                content_depth         TEXT NOT NULL,
+                hotspot_preference    TEXT NOT NULL,
+                recommendation_mode   TEXT NOT NULL,
+                rubric_weights        TEXT NOT NULL DEFAULT '{{}}',
+                created_at            TEXT NOT NULL,
+                updated_at            TEXT NOT NULL DEFAULT ''
+            );
+            """
+        )
+
+    def test_legacy_creator_profiles_gets_check_after_migration_008(
+        self, tmp_path
+    ):
+        """T301: bogus ``recommendation_mode`` is accepted on the legacy
+        table (proves no CHECK) and rejected after 008 runs (proves the
+        CHECK is back)."""
+        db = tmp_path / "legacy.db"
+        with sqlite3.connect(db) as conn:
+            self._create_legacy_creator_profiles(conn)
+            conn.execute(
+                "INSERT INTO users (id, email, username, password_hash, "
+                "ai_calls_reset_at, created_at) "
+                "VALUES ('u1','a@b.com','alice','h','2026-01-01','2026-01-01')"
+            )
+            # (1) bogus insert succeeds — proves legacy has no CHECK.
+            conn.execute(
+                "INSERT INTO creator_profiles "
+                "(id, user_id, track, content_formats, production_complexity, "
+                " content_depth, hotspot_preference, recommendation_mode, "
+                " rubric_weights, created_at, updated_at) "
+                "VALUES ('p0','u1','t','[]','low','shallow','hot',"
+                "        'bogus_legacy','{}','2026-01-01','')"
+            )
+            # Delete the bogus row so 008's INSERT-SELECT can succeed
+            # (the new table's CHECK would otherwise reject the copy).
+            conn.execute("DELETE FROM creator_profiles")
+            # Seed a valid row so the rebuild has data to preserve.
+            conn.execute(
+                "INSERT INTO creator_profiles "
+                "(id, user_id, track, content_formats, production_complexity, "
+                " content_depth, hotspot_preference, recommendation_mode, "
+                " rubric_weights, created_at, updated_at) "
+                "VALUES ('p1','u1','t','[]','low','shallow','hot',"
+                "        'hotspot_fusion','{}','2026-01-01','')"
+            )
+            conn.commit()
+
+        apply(db, DEFAULT_MIGRATIONS_DIR)
+
+        with sqlite3.connect(db) as conn:
+            conn.execute("PRAGMA foreign_keys=ON")
+            # (2) bogus insert after 008 must raise IntegrityError. Use a
+            # fresh user_id (u2) so the failure is the CHECK, not the
+            # UNIQUE(user_id) constraint on creator_profiles.
+            conn.execute(
+                "INSERT INTO users (id, email, username, password_hash, "
+                "ai_calls_reset_at, created_at) "
+                "VALUES ('u2','b@b.com','bob','h','2026-01-01','2026-01-01')"
+            )
+            with pytest.raises(sqlite3.IntegrityError):
+                conn.execute(
+                    "INSERT INTO creator_profiles "
+                    "(id, user_id, track, content_formats, production_complexity, "
+                    " content_depth, hotspot_preference, recommendation_mode, "
+                    " rubric_weights, created_at, updated_at) "
+                    "VALUES ('p2','u2','t','[]','low','shallow','hot',"
+                    "        'bogus_post_008','{}','2026-01-01','')"
+                )
+
+    def test_data_preserved_through_008_reconcile(self, tmp_path):
+        """T302/T303: ``rubric_weights`` and row count survive the 12-step
+        rebuild. Bug guard: a future refactor that drops a column from the
+        INSERT-SELECT list would silently lose data — this test pins the
+        full column set."""
+        db = tmp_path / "legacy.db"
+        with sqlite3.connect(db) as conn:
+            self._create_legacy_creator_profiles(conn)
+            conn.execute(
+                "INSERT INTO users (id, email, username, password_hash, "
+                "ai_calls_reset_at, created_at) "
+                "VALUES ('u1','a@b.com','alice','h','2026-01-01','2026-01-01')"
+            )
+            conn.execute(
+                "INSERT INTO creator_profiles "
+                "(id, user_id, track, content_formats, production_complexity, "
+                " content_depth, hotspot_preference, recommendation_mode, "
+                " rubric_weights, created_at, updated_at) "
+                "VALUES ('p1','u1','t','[]','low','shallow','hot',"
+                "        'hotspot_fusion','{\"x\":0.5}','2026-01-01','')"
+            )
+            conn.commit()
+
+        apply(db, DEFAULT_MIGRATIONS_DIR)
+
+        with sqlite3.connect(db) as conn:
+            (count,) = conn.execute(
+                "SELECT COUNT(*) FROM creator_profiles"
+            ).fetchone()
+            (rubric,) = conn.execute(
+                "SELECT rubric_weights FROM creator_profiles WHERE id='p1'"
+            ).fetchone()
+
+        assert count == 1, f"008 lost data: expected 1 row, got {count}"
+        assert rubric == '{"x":0.5}', (
+            f"rubric_weights not preserved through 008 rebuild: "
+            f"expected '{{\"x\":0.5}}', got {rubric!r}"
+        )
+
+    def test_fresh_db_creator_profiles_has_check_and_index_after_008(
+        self, tmp_path
+    ):
+        """T304: on a fresh DB (000 already creates ``creator_profiles``
+        WITH the CHECK), running migrations through 008 is a no-op
+        rebuild — the CHECK and the ``idx_creator_profiles_user_id``
+        index both survive."""
+        db = tmp_path / "fresh.db"
+        apply(db, DEFAULT_MIGRATIONS_DIR)
+
+        with sqlite3.connect(db) as conn:
+            (sql,) = conn.execute(
+                "SELECT sql FROM sqlite_master WHERE name='creator_profiles'"
+            ).fetchone()
+            assert "CHECK" in sql.upper(), (
+                "fresh DB creator_profiles missing CHECK after 008: " + str(sql)
+            )
+            indexes = {
+                row[0]
+                for row in conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type='index' "
+                    "AND tbl_name='creator_profiles'"
+                )
+            }
+            assert "idx_creator_profiles_user_id" in indexes, (
+                f"fresh DB missing idx_creator_profiles_user_id after 008: "
+                f"{sorted(indexes)}"
+            )
+
+    def test_migration_008_recorded_with_sha256_checksum(self, tmp_path):
+        """T305: migration 008 is recorded in ``schema_migrations`` with a
+        64-char SHA-256 hex checksum (mirrors the contract every other
+        shipped migration honours)."""
+        db = tmp_path / "fresh.db"
+        apply(db, DEFAULT_MIGRATIONS_DIR)
+
+        with sqlite3.connect(db) as conn:
+            rows = {
+                row[0]: row[1]
+                for row in conn.execute(
+                    "SELECT version, checksum FROM schema_migrations"
+                )
+            }
+
+        assert "008_creator_profiles_reconcile" in rows, (
+            "008_creator_profiles_reconcile not recorded in schema_migrations; "
+            f"recorded versions: {sorted(rows)}"
+        )
+        assert len(rows["008_creator_profiles_reconcile"]) == 64
