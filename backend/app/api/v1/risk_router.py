@@ -4,13 +4,19 @@ Spec-007 US7 (T074): exposes ``POST /api/v1/risk/check`` for the
 pre-publish content risk guard. Delegates to ``ContentRiskService``
 (Constitution I) and validates the response against the
 ``ContentRiskReport`` Pydantic model (Constitution VII).
+
+The shared ``Database`` is injected via ``Depends(get_db)`` so the
+service reads the ``risk_keywords`` table (seeded on first use) and
+honours per-user overrides. When no db is wired in (tests/scripts),
+the service falls back to its hardcoded keyword list.
 """
 
 import logging
+from typing import Any
 
 from fastapi import APIRouter, Depends
 
-from app.api.v1.deps import get_current_user
+from app.api.v1.deps import get_current_user, get_db
 from app.models.common import ApiResponse
 from app.models.risk import ContentRiskReport, RiskCheckRequest
 
@@ -23,6 +29,7 @@ router = APIRouter(tags=["Risk"])
 async def risk_check(
     data: RiskCheckRequest,
     user: dict = Depends(get_current_user),
+    db: Any = Depends(get_db),
 ) -> ApiResponse[ContentRiskReport]:
     """Check content for compliance risks (Spec-007 T074).
 
@@ -34,7 +41,7 @@ async def risk_check(
     """
     from app.services.content_risk import ContentRiskService
 
-    svc = ContentRiskService()
+    svc = ContentRiskService(db=db)
     report = await svc.check(user["id"], data.content)
 
     # Pydantic validation at the boundary. The service may include
