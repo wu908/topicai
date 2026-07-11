@@ -81,8 +81,9 @@ class TestDatabaseInitialization:
             "idea_boosters",
             "title_optimizations",
             "track_diagnoses",
-            "feedback_records",
-            "feedback_analyses",
+            # feedback_records / feedback_analyses intentionally omitted —
+            # retired by migration 007 (T201-T204). Production writes
+            # user_feedback (002).
             "effect_reviews",
             "content_risks",
             "publish_suggestions",
