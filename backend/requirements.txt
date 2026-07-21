@@ -26,7 +26,7 @@ zhipuai==2.1.5.20250726
 httpx==0.28.1
 
 # Authentication
-PyJWT==2.9.0
+PyJWT==2.8.0
 bcrypt==4.0.1
 email-validator==2.1.0
 passlib[bcrypt]==1.7.4
