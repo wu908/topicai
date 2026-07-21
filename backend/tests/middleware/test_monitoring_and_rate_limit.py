@@ -518,6 +518,27 @@ class TestAuthRateLimit:
         assert result.status_code == 429
 
     @pytest.mark.asyncio
+    async def test_auth_endpoints_have_independent_budgets(self):
+        """A failed-login burst must not consume registration's budget."""
+        middleware = self._middleware(max_per_minute=1)
+
+        call_next = AsyncMock(return_value="ok")
+        login = _make_request("/api/v1/auth/login", client_host="10.0.0.10")
+        register = _make_request("/api/v1/auth/register", client_host="10.0.0.10")
+
+        assert await middleware.dispatch(login, call_next) == "ok"
+        assert await middleware.dispatch(register, call_next) == "ok"
+
+        login_again = _make_request(
+            "/api/v1/auth/login", client_host="10.0.0.10"
+        )
+        register_again = _make_request(
+            "/api/v1/auth/register", client_host="10.0.0.10"
+        )
+        assert (await middleware.dispatch(login_again, call_next)).status_code == 429
+        assert (await middleware.dispatch(register_again, call_next)).status_code == 429
+
+    @pytest.mark.asyncio
     async def test_auth_rate_limit_is_per_ip(self):
         """IP A exhausting its budget must NOT block IP B."""
         middleware = self._middleware(max_per_minute=5)

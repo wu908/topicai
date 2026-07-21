@@ -26,10 +26,16 @@ const TITLES: Record<string, string> = {
 const RightPanel: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
+
+  if (location.pathname === '/content' || location.pathname.startsWith('/content/')) {
+    return null;
+  }
+
   const title = TITLES[location.pathname] ?? '快捷入口';
 
   return (
     <aside
+      className="app-right-panel"
       style={{
         width: 'var(--v3-panel-width)',
         flexShrink: 0,

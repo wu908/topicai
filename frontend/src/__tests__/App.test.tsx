@@ -54,6 +54,7 @@ vi.mock('@/pages/PublishAdvisor/PublishAdvisorPage', () => pageMock('page-publis
 vi.mock('@/pages/Analytics/AnalyticsPage', () => pageMock('page-analytics'));
 vi.mock('@/pages/Assets/AssetsPage', () => pageMock('page-assets'));
 vi.mock('@/pages/Accounts/AccountsPage', () => pageMock('page-accounts'));
+vi.mock('@/pages/Content/ContentPage', () => pageMock('page-content'));
 vi.mock('@/pages/NotFound/NotFoundPage', () => pageMock('page-notfound'));
 
 import App from '../App';
@@ -92,6 +93,11 @@ describe('App routing', () => {
   it('routes /topics to the topic recommendation page', async () => {
     renderAt('/topics');
     expect(await screen.findByTestId('page-topics')).toBeInTheDocument();
+  });
+
+  it('routes /content to the content project workspace', async () => {
+    renderAt('/content');
+    expect(await screen.findByTestId('page-content')).toBeInTheDocument();
   });
 
   it('fetches the current user when authenticated but user is null', async () => {

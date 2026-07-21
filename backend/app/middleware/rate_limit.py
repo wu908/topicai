@@ -167,8 +167,12 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         # so anonymous requests (login/register) are still throttled.
         if path in _AUTH_RATE_LIMITED_PATHS:
             ip = _client_ip(request)
+            # Keep login, registration, and refresh budgets independent. A
+            # failed login burst must not prevent a legitimate registration
+            # or token refresh from using the same local network address.
+            auth_key = f"{ip}:{path}"
             try:
-                self.auth_rate_limiter.check_and_increment(ip)
+                self.auth_rate_limiter.check_and_increment(auth_key)
             except RateLimitException:
                 return JSONResponse(
                     status_code=429,

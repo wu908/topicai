@@ -17,6 +17,16 @@ const PathDisplay = () => {
 };
 
 describe('RightPanel', () => {
+  it('does not render the legacy panel inside the content workflow', () => {
+    const { container } = render(
+      <MemoryRouter initialEntries={["/content/project-1"]}>
+        <RightPanel />
+      </MemoryRouter>
+    );
+
+    expect(container).toBeEmptyDOMElement();
+  });
+
   it('renders the 今日概览 section for the root route', () => {
     render(
       <MemoryRouter initialEntries={["/"]}>
