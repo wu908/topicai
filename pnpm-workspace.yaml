@@ -1,1 +1,4 @@
+packages:
+  - frontend
+
 onlyBuiltDependencies: '["esbuild"]'

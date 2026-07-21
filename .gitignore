@@ -11,6 +11,8 @@ env/
 .test-runtime/
 **/.pytest-*/
 **/.pytest_tmp*/
+backend/.ci-tmp/
+backend/coverage.xml
 .mypy_cache/
 .ruff_cache/
 .coverage
