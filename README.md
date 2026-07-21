@@ -6,6 +6,7 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688)](https://fastapi.tiangolo.com/)
 [![React](https://img.shields.io/badge/React-19-61DAFB)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-6-3178C6)](https://www.typescriptlang.org/)
+[![CI](https://github.com/wu908/topicai/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/wu908/topicai/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/License-MIT-black)](./LICENSE)
 
 TopicAI 不再把选题、标题、写作、发布和复盘拆成一组彼此孤立的 AI 工具。它以 `ContentProject` 为核心，让 AI 先理解一条内容希望产生的影响，再主动准备下一步，用户只负责确认事实、表达、公开范围和长期经验等关键决策。
@@ -197,20 +198,33 @@ docker compose up --build -d
 ## 测试与质量检查
 
 ```powershell
-# 后端
+# 后端：与 ci-backend 等价，覆盖率不得低于 80%
 cd backend
-pytest -q
+python -m pytest -q `
+  -k "not test_scenario_g_coverage_gate" `
+  --cov=app `
+  --cov-report=term-missing `
+  --cov-report=xml `
+  --cov-fail-under=80 `
+  --basetemp=.ci-tmp
 
-# 前端
+# 前端：与 ci-frontend 等价
 cd frontend
-pnpm test
 pnpm lint
+pnpm test
 pnpm build
 ```
 
+面向 `main` 的 Pull Request 必须通过以下检查：
+
+- `ci-backend`：后端测试和 80% 覆盖率门禁。
+- `ci-frontend`：前端 lint、单元测试和 production build。
+
+Playwright E2E 当前保留为本地手动检查，不属于首批强制合并门禁。
+
 最近一次完整验证（2026-07-21）：
 
-- 后端非递归全量：737 passed。
+- 后端非递归全量：744 passed，1 deselected，覆盖率 86.67%。
 - 前端全量：338 passed，2 skipped。
 - 前端 lint：通过。
 - Production build：通过。
