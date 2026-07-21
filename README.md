@@ -1,201 +1,243 @@
-# TopicAI v4.0 "Air Pro"
+# TopicAI
 
-> AI 智能选题推荐 Agent — 面向内容创作者的全流程 AI 助手
+> 面向小红书知识/经验型创作者的 AI 驱动内容操作系统。
 
-[![Python 3.12](https://img.shields.io/badge/Python-3.12-blue)](https://python.org) [![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-green)](https://fastapi.tiangolo.com) [![React 19](https://img.shields.io/badge/React-19-blue)](https://react.dev) [![Tests](https://img.shields.io/badge/Tests-519%20passed-brightgreen)](#)
+[![Python](https://img.shields.io/badge/Python-3.12-blue)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688)](https://fastapi.tiangolo.com/)
+[![React](https://img.shields.io/badge/React-19-61DAFB)](https://react.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-6-3178C6)](https://www.typescriptlang.org/)
+[![License](https://img.shields.io/badge/License-MIT-black)](./LICENSE)
 
----
+TopicAI 不再把选题、标题、写作、发布和复盘拆成一组彼此孤立的 AI 工具。它以 `ContentProject` 为核心，让 AI 先理解一条内容希望产生的影响，再主动准备下一步，用户只负责确认事实、表达、公开范围和长期经验等关键决策。
 
-## 功能特性
+## 产品定位
 
-| 功能模块 | 说明 |
-|--------|------|
-| **智能选题推荐** | 基于赛道 + 创作画像 + 4-tier 数据源（天行 / B站 / LLM / 预置）级联回落 |
-| **爆款拆解** | LLM 分析爆款内容结构（支持文本/图片/视频） |
-| **想法推进** | 把粗糙想法扩展为完整内容创作方案 |
-| **标题优化** | 多维评分 + 爆款标题公式生成候选 |
-| **赛道诊断** | 评估赛道竞争度、机会窗、红利期预警 |
-| **创作画像** | Onboarding LLM 推导 rubric_weights + 反馈循环 30d 滚动窗口自适应 |
-| **效果复盘** | 发布前盲预测 + 实际数据归因 + learnings 30 天聚合 |
-| **内容风险** | Keyword + LLM 80/20 混合扫描（5 类 100 词种子），publish 阻塞 |
-| **反馈闭环** | 7d 冷启动守门 + 单维度 bounded shift ≤0.15 |
-| **发布时间** | 基于平台 + 赛道的最优发布时间建议 |
-| **AI 透明度** | 所有 AI 响应携带 `data_source` / `confidence` / `model_version` |
+当前 MVP 聚焦：
 
----
+- 平台：小红书。
+- 用户：已开始创作或准备稳定创作的知识/经验型个人创作者。
+- 目标：降低持续更新中的选题、素材组织、内容推进和复盘成本。
+- 内容意图：`解决`、`分享`、`记录`。
+- 内容形式：以图文笔记为主，记录型内容可以规划 Vlog，但不包含视频剪辑。
 
-## 快速启动
+产品核心原则：
 
-### 前提条件
+1. AI 负责理解上下文、发现缺口、选择唯一下一步并准备候选内容。
+2. 用户负责确认真实事实、内容意图、公开范围、发布动作和长期经验。
+3. AI 不自动发布、不自动公开私人素材、不覆盖已确认版本。
+4. 复盘区分事实、可能原因和下一轮实验，未经用户确认的结论不会进入长期画像。
 
-- Python 3.12+
-- Node.js 22+
-- DeepSeek API Key（必须）
+## 核心流程
 
-### 方式一：本地开发（推荐）
-
-**后端**
-
-```bash
-cd backend
-
-# 配置环境变量
-cp .env.example .env
-# 编辑 .env，至少填入 DEEPSEEK_API_KEY
-
-# 创建虚拟环境 & 安装依赖
-python -m venv .venv
-source .venv/Scripts/activate   # Windows
-# source .venv/bin/activate      # macOS/Linux
-pip install -r requirements.txt
-pip install "bcrypt==4.0.1" "pydantic[email]"
-
-# 启动后端
-uvicorn "main:create_app" --factory --host 127.0.0.1 --port 8000 --reload
+```mermaid
+flowchart LR
+    A["模糊想法、历史内容或素材"] --> B["AI 识别候选内容意图"]
+    B --> C["用户确认或纠正意图"]
+    C --> D["AI 采访并补齐证据"]
+    D --> E["AI 准备候选内容"]
+    E --> F["用户确认事实、表达和公开范围"]
+    F --> G["用户在小红书发布"]
+    G --> H["回填表现数据"]
+    H --> I["AI 生成复盘与下一次观察"]
+    I --> J["用户确认经验"]
+    J --> K["更新创作者状态、观点、规则与系列"]
+    K --> B
 ```
 
-API 文档：http://localhost:8000/docs
+## 已实现能力
 
-**前端**
+### AI 行动编排
 
-```bash
-cd frontend
-npm install
-npm run dev
-```
+- `CreatorState`：维护用户事实、AI 推断、已验证经验、未知项和自动化信任状态。
+- `NextBestAction`：为当前用户或项目选择一个可解释的下一步。
+- `HumanGate`：在意图、事实、候选版本、发布和长期经验写入前暂停确认。
+- `AITrace`：记录 AI 使用的证据、未知项、决策理由和降级路径。
+- 无可用模型时保留手动路径，不阻塞内容项目继续推进。
 
-应用地址：http://localhost:5173
+### 意图驱动内容项目
 
-### 方式二：Docker 一键部署
+三种意图使用不同的创作和复盘逻辑：
 
-```bash
-cp backend/.env.example .env
-# 编辑 .env 填入 API Keys
+| 内容意图 | 内容结构 | 重点观察信号 |
+| --- | --- | --- |
+| 解决 | 问题、方法、案例、结果 | 收藏、问题评论、关注变化 |
+| 分享 | 事件、感受、观点、意义 | 共鸣评论、互动质量、关注变化 |
+| 记录 | 起点、过程、转折、结果 | 阅读完成、持续关注、系列延续 |
 
-docker compose up -d
-```
+内容项目覆盖：意图确认、证据采访、候选内容、分段接受/拒绝/替换、版本恢复、发布假设、发布记录、表现快照、盲评、观察任务和经验确认。
 
-- 后端 API：http://localhost:8000
-- 前端界面：http://localhost
-- API 文档：http://localhost:8000/docs
+### 个性化内容资产
 
----
+- `Evidence`：带来源、隐私级别和确认状态的事实证据。
+- `CreatorRule`：从多次结果中确认的创作规则，支持版本和冲突处理。
+- `CreatorViewpoint`：用户确认的稳定观点，可撤销并追踪来源。
+- `CreatorSeries`：识别可持续内容系列，而不是只生成一次性选题。
+- `ContentOpportunity`：基于已确认系列准备下一篇机会，接受后才创建项目。
+- `ContentGenome`：聚合规则、例外、观点、系列和项目关系，形成可审计的个性化上下文。
+
+### 旧版兼容
+
+仓库仍保留 `/api/v1` 和部分旧页面，用于认证、画像、素材、账号及历史工具兼容。新的主链路位于 `/api/v2` 与前端 `/content` 工作台。热点推荐、爆款分析、标题优化等旧能力不是新版产品的核心流程，后续将逐步收敛到内容项目上下文中。
+
+## 当前边界
+
+当前版本不包含：
+
+- 自动发布或自动操作小红书账号。
+- 小红书官方数据自动同步；MVP 使用手动回填。
+- 视频剪辑、音频处理和多平台分发。
+- 团队、MCN、矩阵账号和直播电商工作流。
+- “一键爆款”、精确流量预测或审核必过承诺。
+- 将持续热点/新闻数据源作为内容推荐的必要前置条件。
+
+`TianAPI` 等数据源仍作为旧版可选能力保留，不是意图驱动内容闭环的运行依赖。
 
 ## 技术架构
 
-### 后端（FastAPI）
-
-```
-backend/
-├── app/
-│   ├── api/v1/            # 21 个 REST API 端点
-│   ├── chains/             # LangChain 处理链
-│   ├── content_analyzers/  # 文本/图像内容分析器
-│   ├── core/               # LLM 客户端、JWT 认证、数据库
-│   ├── data_sources/       # TianAPI + B站 + LLM 模拟 + 预置基准
-│   ├── middleware/         # 认证中间件、速率限制、监控
-│   ├── models/             # Pydantic 数据模型
-│   ├── prompts/            # 版本化 Prompt 文件
-│   ├── services/           # 业务逻辑层（17 个服务）
-│   └── tasks/              # 定时任务
-├── tests/                  # 46 python test files (pytest)
-├── main.py                 # FastAPI 工厂函数入口
-└── requirements.txt
+```text
+TopicAI
+├── backend/
+│   ├── app/api/v1/              # 认证、画像、素材及旧功能兼容 API
+│   ├── app/api/v2/              # 内容项目、AI 行动、复盘与个性化资产 API
+│   ├── app/models/v2/           # v2 结构化契约
+│   ├── app/services/            # 编排、证据、版本、复盘、规则和系列服务
+│   ├── app/data/migrations/     # SQLite 增量迁移
+│   └── tests/                   # pytest 测试
+├── frontend/
+│   ├── src/pages/Content/       # 内容项目列表与工作台
+│   ├── src/features/content/    # 采访、候选内容、复盘、观点和系列组件
+│   ├── src/services/api/v2/     # v2 API 客户端
+│   └── src/types/contracts/v2/  # 前后端类型契约
+├── docs/                        # 产品定义、架构与阶段实施记录
+└── specs/                       # Spec 008/009 需求、计划、模型和任务
 ```
 
-### 前端（React + MUI）
+主要技术：
 
-```
-frontend/src/
-├── components/
-│   ├── layout/             # AppLayout + Sidebar + Header
-│   ├── common/             # LoadingCard, EmptyState, ConfidenceBadge
-│   ├── feedback/           # ThumbFeedback + FeedbackDialog
-│   └── ai-badge/           # AICreatedBadge + AIDegradedNotice
-├── pages/                  # 10 个功能页面
-├── services/api/           # Axios + JWT 自动刷新（11 个 API 模块）
-├── store/                  # Zustand 状态管理（auth/profile/app）
-├── hooks/                  # useAuth/useApi/useRateLimit/useFeedback
-└── e2e/                    # Playwright E2E 测试（8 条）
-└── types/                  # TypeScript 类型定义
-```
+- 后端：FastAPI、Pydantic 2、SQLAlchemy 2、SQLite/aiosqlite、OpenAI-compatible SDK。
+- 前端：React 19、TypeScript 6、Vite 8、MUI 5、Zustand、Axios。
+- 测试：pytest、Vitest、Testing Library、Playwright。
+- 本地数据：SQLite WAL、可选 ChromaDB、本地对象存储。
 
-### LLM 调度（4 层）
+## 快速开始
 
-| 层级 | 模型 | 用途 |
-|------|------|------|
-| 默认推理 | `deepseek-v4-flash` | 所有常规推理任务，2500 并发 |
-| 深度分析 | `deepseek-v4-pro` | 复杂分析 + 思维链，500 并发 |
-| 热备 | `qwen-plus` | DeepSeek 不可用时自动切换 |
-| 视觉 | `glm-5v-turbo` | 图片/视频内容分析（200K上下文） |
+### 环境要求
 
----
+- Python 3.12+
+- Node.js 22+
+- pnpm 10+
+- 一个强随机 `JWT_SECRET_KEY`
+- 可选：DeepSeek 或 OpenAI-compatible 模型凭据
 
-## 环境变量
+### 1. 启动后端
 
-| 变量 | 必须 | 说明 |
-|------|------|------|
-| `DEEPSEEK_API_KEY` | ✅ | DeepSeek V4 API Key |
-| `JWT_SECRET_KEY` | ✅（生产） | JWT 签名密钥，≥32位随机字符串 |
-| `DASHSCOPE_API_KEY` | 可选 | Qwen 热备 API Key |
-| `ZHIPU_API_KEY` | 可选 | GLM-5V-Turbo 视觉模型 |
-| `TIANAPI_KEY` | 可选 | 热搜数据（免费 100 次/天） |
-| `SENTRY_DSN` | 可选 | 错误追踪（Sentry） |
-| `LANGFUSE_PUBLIC_KEY` | 可选 | LLM 链路追踪（LangFuse） |
-| `POSTHOG_API_KEY` | 可选 | 用户行为分析（PostHog） |
-
-详见 `backend/.env.example`
-
----
-
-## 开发测试
-
-```bash
-# 运行后端测试（274 条）
+```powershell
 cd backend
-source .venv/Scripts/activate
-pytest tests/ -v
-
-# 运行前端类型检查 & 构建
-cd frontend
-npx tsc --noEmit
-npm run build
-
-# 启动前端开发服务
-npm run dev
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+Copy-Item .env.example .env
 ```
 
----
+编辑 `backend/.env`，至少设置：
 
-## API 端点总览
+```dotenv
+JWT_SECRET_KEY=replace-with-a-random-secret-at-least-32-characters
+```
 
-| 端点 | 方法 | 说明 |
-|------|------|------|
-| `/api/v1/health` | GET | 健康检查 |
-| `/api/v1/auth/register` | POST | 用户注册 |
-| `/api/v1/auth/login` | POST | 用户登录 |
-| `/api/v1/auth/refresh` | POST | 刷新 Token |
-| `/api/v1/profiles/onboarding` | POST | 创作画像初始化 |
-| `/api/v1/profiles/me` | GET/PUT | 获取/更新画像 |
-| `/api/v1/topics/recommend` | GET | 选题推荐 |
-| `/api/v1/viral/analyze` | POST | 爆款拆解 |
-| `/api/v1/ideas/boost` | POST | 想法推进 |
-| `/api/v1/titles/optimize` | POST | 标题优化 |
-| `/api/v1/tracks/diagnose` | POST | 赛道诊断 |
-| `/api/v1/publish/suggest` | POST | 发布时间建议 |
-| `/api/v1/feedback` | POST | 提交反馈 |
+使用 DeepSeek：
 
----
+```dotenv
+DEEPSEEK_API_KEY=your-key
+```
 
-## 数据安全
+或使用任意 OpenAI-compatible 文本模型：
 
-- 用户内容 90 天自动清理（`expires_at` 字段）
-- JWT 认证（无 Cookie），Token 30 分钟过期 + Refresh Token 7 天
-- AI 调用速率限制：20 次/天（免费层）
-- AI 内容标识：所有 AI 输出含 `confidence` + `data_source` + `model_version`
+```dotenv
+LLM_BASE_URL=https://your-provider.example/v1
+LLM_API_KEY=your-key
+LLM_MODEL=your-model
+LLM_CAPABILITIES=text
+```
 
----
+不配置模型时，系统仍可启动，并在 AI 不可用处降级到手动路径。
+
+```powershell
+python -m uvicorn main:create_app --factory --host 127.0.0.1 --port 8000 --reload
+```
+
+- API：<http://127.0.0.1:8000>
+- Swagger：<http://127.0.0.1:8000/docs>
+- 健康检查：<http://127.0.0.1:8000/api/v1/health>
+
+### 2. 启动前端
+
+```powershell
+cd frontend
+pnpm install
+pnpm dev
+```
+
+应用地址：<http://127.0.0.1:5173>
+
+### Docker Compose
+
+在仓库根目录执行：
+
+```powershell
+Copy-Item backend\.env.example .env
+# 编辑根目录 .env，设置 JWT_SECRET_KEY 和可选的模型凭据
+docker compose up --build -d
+```
+
+- 前端：<http://localhost>
+- 后端：<http://localhost:8000>
+- Swagger：<http://localhost:8000/docs>
+
+## 测试与质量检查
+
+```powershell
+# 后端
+cd backend
+pytest -q
+
+# 前端
+cd frontend
+pnpm test
+pnpm lint
+pnpm build
+```
+
+最近一次完整验证（2026-07-21）：
+
+- 后端非递归全量：737 passed。
+- 前端全量：338 passed，2 skipped。
+- 前端 lint：通过。
+- Production build：通过。
+- 前后端健康检查：HTTP 200。
+
+## 关键文档
+
+- [产品功能文档](./docs/product-functional-document.md)
+- [用户视角产品介绍](./docs/product-introduction-user.md)
+- [技术视角产品介绍](./docs/product-introduction-technical.md)
+- [意图驱动架构](./docs/intent-driven-architecture.md)
+- [意图驱动实施报告](./docs/intent-driven-implementation-report-2026-07-19.md)
+- [系列延展机会阶段记录](./docs/series-extension-opportunity-stage-2026-07-21.md)
+- [Spec 008：内容项目 MVP](./specs/008-content-project-mvp/spec.md)
+- [Spec 009：AI 原生行动闭环](./specs/009-ai-native-action-loop/spec.md)
+
+## 开发状态
+
+项目处于 MVP 验证与持续重构阶段。当前重点不是继续增加独立 AI 工具，而是验证 AI 是否真正减少创作者的流程判断、上下文切换和手动决策数量。
+
+下一阶段优先验证：
+
+1. 首次有效行动所需时间。
+2. AI 行动接受率和意图纠正率。
+3. 候选内容确认率与发布后复盘完成率。
+4. 规则、观点、系列和内容机会能否随真实结果持续提升个性化质量。
 
 ## License
 
-MIT
+[MIT](./LICENSE)
