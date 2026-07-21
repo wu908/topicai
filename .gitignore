@@ -8,6 +8,9 @@ __pycache__/
 venv/
 env/
 .pytest_cache/
+.test-runtime/
+**/.pytest-*/
+**/.pytest_tmp*/
 .mypy_cache/
 .ruff_cache/
 .coverage
@@ -21,6 +24,7 @@ node_modules/
 frontend/node_modules/
 frontend/dist/
 frontend/build/
+.npm-cache/
 .env
 .env.local
 .env.*.local
@@ -72,6 +76,7 @@ frontend/coverage/
 topicai-v2-improved.html
 topicai-v3-complete.html
 topicai-v3-fixed.html
+topicai-v3-login-meta.html
 scheme-b-direction-2.html
 原型分析报告.md
 

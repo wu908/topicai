@@ -1,4 +1,4 @@
-"""LLM Client abstraction layer for TopicAI v4.0.
+﻿"""LLM Client abstraction layer for TopicAI v4.0.
 
 Provides a unified interface for multiple LLM providers with:
 - Provider strategy pattern (DeepSeek V4 Flash/Pro, Qwen Plus, GLM-5V-Turbo)
@@ -22,6 +22,7 @@ from config.llm_config import (
     DEEP_THINKING_PARAMS,
     DEFAULT_LLM_PARAMS,
     LLM_PROVIDERS,
+    get_compatible_llm_config,
     get_fallback_action,
 )
 from config.settings import get_settings
@@ -35,7 +36,7 @@ class LLMClient:
     """Unified LLM client with multi-provider support and degradation.
 
     All LLM calls go through this class. It handles:
-    - Provider routing (DeepSeek → Qwen hot standby)
+    - Provider routing (DeepSeek 鈫?Qwen hot standby)
     - Retry logic (up to 2 retries for structured output)
     - Streaming responses
     - Function tier degradation
@@ -46,7 +47,10 @@ class LLMClient:
     def __init__(self):
         """Initialize LLMClient with configured providers."""
         self.settings = get_settings()
-        self.default_provider = "deepseek"
+        self.compatible_config = get_compatible_llm_config(self.settings)
+        self.default_provider = (
+            "compatible" if self.compatible_config["configured"] else "deepseek"
+        )
         self.active_provider = self.default_provider
         self.providers = self._init_providers()
         self._retry_count = 0
@@ -72,6 +76,7 @@ class LLMClient:
             ),
             "base_url": ds_config["base_url"],
             "timeout": ds_config["timeout_seconds"],
+            "configured": bool(self.settings.deepseek_api_key),
         }
 
         # Qwen (hot standby)
@@ -85,6 +90,7 @@ class LLMClient:
             ),
             "base_url": qw_config["base_url"],
             "timeout": qw_config["timeout_seconds"],
+            "configured": bool(self.settings.dashscope_api_key),
         }
 
         # GLM-5V-Turbo (vision)
@@ -94,7 +100,23 @@ class LLMClient:
             "model": glm_config["default_model"],
             "base_url": glm_config["base_url"],
             "timeout": glm_config["timeout_seconds"],
+            "configured": bool(self.settings.zhipu_api_key),
+            "capabilities": {"vision"},
         }
+
+        if self.compatible_config["configured"]:
+            providers["compatible"] = {
+                "name": "openai_compatible",
+                "model": self.compatible_config["model"],
+                "client": OpenAI(
+                    api_key=self.compatible_config["api_key"],
+                    base_url=self.compatible_config["base_url"],
+                ),
+                "base_url": self.compatible_config["base_url"],
+                "timeout": self.compatible_config["timeout"],
+                "capabilities": self.compatible_config["capabilities"],
+                "configured": True,
+            }
 
         return providers
 
@@ -118,12 +140,22 @@ class LLMClient:
         logger.info(f"Switched LLM provider to {provider_name}")
 
     def get_active_provider(self) -> str:
-        """Get the currently active provider name.
-
-        Returns:
-            Active provider name.
-        """
+        """Get the currently active provider name."""
         return self.active_provider
+
+    def get_capabilities(self) -> set[str]:
+        """Return capabilities declared by the active runtime endpoint."""
+        return set(self.providers.get(self.active_provider, {}).get("capabilities", {"text"}))
+
+    def is_available(self, capability: str = "text") -> bool:
+        """Return whether AI is enabled, configured, and supports a capability."""
+        provider = self.providers.get(self.active_provider, {})
+        return bool(
+            getattr(self.settings, "ai_enabled", True)
+            and provider.get("configured", False)
+            and provider.get("client") is not None
+            and capability in self.get_capabilities()
+        )
 
     # ==================== Core Generation ====================
 
@@ -381,7 +413,7 @@ class LLMClient:
         image_url: str | None = None,
         video_url: str | None = None,
         file_url: str | None = None,
-        prompt: str = "描述这张图片",
+        prompt: str = "鎻忚堪杩欏紶鍥剧墖",
         **kwargs: Any,
     ) -> str:
         """Generate text from image/video using GLM-5V-Turbo.
@@ -574,3 +606,4 @@ def wrap_user_input(text: str | None) -> str:
     safe = (text or "").replace("</user_input>", "&lt;/user_input&gt;")
     safe = safe.replace("<user_input>", "&lt;user_input&gt;")
     return f"<user_input>{safe}</user_input>"
+

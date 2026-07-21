@@ -29,7 +29,7 @@ from app.data.migrations.runner import DEFAULT_MIGRATIONS_DIR, apply
 
 # The complete set of tables the application expects after the runner
 # bootstraps a fresh DB. Sourced from the union of SQL_SCHEMA (the 19
-# originals) + the 002/003/004/005/006 additive migrations. Sorted for
+# originals) + all additive migrations. Sorted for
 # stable diff output.
 _EXPECTED_TABLES: frozenset[str] = frozenset(
     {
@@ -61,6 +61,33 @@ _EXPECTED_TABLES: frozenset[str] = frozenset(
         "user_feedback",
         "risk_keywords",
         "platform_tokens",
+        # v2 content-project foundation and intent orchestration (012-020)
+        "content_projects",
+        "content_versions",
+        "publish_hypotheses",
+        "publish_records_v2",
+        "performance_snapshots_v2",
+        "ai_traces_v2",
+        "blind_reviews",
+        "observations",
+        "observation_events",
+        "creator_states",
+        "next_best_actions",
+        "human_gates",
+        "action_events",
+        "evidence_items",
+        "content_segments",
+        "content_segment_decisions",
+        "creator_rules",
+        "creator_rule_versions",
+        "creator_rule_events",
+        "creator_rule_resolutions",
+        "creator_viewpoints",
+        "creator_viewpoint_events",
+        "creator_series",
+        "creator_series_events",
+        "content_opportunities",
+        "content_opportunity_events",
     }
 )
 

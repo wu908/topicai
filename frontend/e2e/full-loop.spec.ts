@@ -98,8 +98,13 @@ test.describe('Full Loop: Topics -> Feedback -> Effect Review', () => {
       headers: { 'Content-Type': 'application/json' }
     });
     expect(response.status()).toBe(200);
-    const body = await response.json();
+    const body = (await response.json()) as {
+      data: {
+        overall_risk_score: number;
+        risks: Array<{ severity: string }>;
+      };
+    };
     expect(body.data.overall_risk_score).toBeGreaterThanOrEqual(0.7);
-    expect(body.data.risks.some((r: any) => r.severity === 'high')).toBeTruthy();
+    expect(body.data.risks.some((risk) => risk.severity === 'high')).toBeTruthy();
   });
 });

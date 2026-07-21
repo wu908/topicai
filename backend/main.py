@@ -17,6 +17,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.router import api_v1_router
+from app.api.v2.router import api_v2_router
 from app.core.exceptions import setup_exception_handlers
 from app.middleware.auth_middleware import JWTAuthMiddleware
 from app.middleware.rate_limit import RateLimitMiddleware
@@ -237,6 +238,7 @@ def create_app() -> FastAPI:
 
     # ==================== API Routes ====================
     app.include_router(api_v1_router, prefix="/api/v1")
+    app.include_router(api_v2_router, prefix="/api/v2", tags=["ContentProject v2"])
 
     return app
 

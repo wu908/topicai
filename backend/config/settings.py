@@ -1,4 +1,4 @@
-"""Global configuration for TopicAI v4.0.
+﻿"""Global configuration for TopicAI v4.0.
 
 Uses Pydantic BaseSettings for environment variable loading with validation.
 All sensitive values read from .env file or environment variables.
@@ -32,13 +32,27 @@ class Settings(BaseSettings):
         alias="CHROMA_PERSIST_DIR",
     )
 
-    # ==================== LLM Providers ====================
+    # ==================== Provider-neutral LLM ====================
+    # Spec-008 v2 uses one OpenAI-compatible endpoint. The legacy provider
+    # fields below remain temporarily for v1 compatibility and migration tests.
+    llm_base_url: str = Field(default="", alias="LLM_BASE_URL")
+    llm_api_key: str = Field(default="", alias="LLM_API_KEY")
+    llm_model: str = Field(default="", alias="LLM_MODEL")
+    llm_timeout_seconds: float = Field(default=30.0, alias="LLM_TIMEOUT_SECONDS", gt=0)
+    llm_capabilities: str = Field(default="text", alias="LLM_CAPABILITIES")
+
+    # ==================== Legacy LLM Providers ====================
     deepseek_api_key: str = Field(default="", alias="DEEPSEEK_API_KEY")
     dashscope_api_key: str = Field(default="", alias="DASHSCOPE_API_KEY")
     zhipu_api_key: str = Field(default="", alias="ZHIPU_API_KEY")
 
     # ==================== Data Sources ====================
     tianapi_key: str = Field(default="", alias="TIANAPI_KEY")
+
+    # ==================== Content Project v2 ====================
+    content_project_v2_enabled: bool = Field(default=True, alias="CONTENT_PROJECT_V2_ENABLED")
+    ai_enabled: bool = Field(default=True, alias="AI_ENABLED")
+    vision_enabled: bool = Field(default=False, alias="VISION_ENABLED")
 
     # ==================== Authentication ====================
     jwt_secret_key: str = Field(
@@ -142,3 +156,4 @@ def get_settings() -> Settings:
     if _settings is None:
         _settings = Settings()
     return _settings
+

@@ -14,8 +14,7 @@ function forceLogout() {
 }
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
-const API_PREFIX = '/api/v1';
-const BASE_URL = `${API_BASE_URL}${API_PREFIX}`;
+const AUTH_BASE_URL = `${API_BASE_URL}/api/v1`;
 
 /** Get auth headers with JWT token */
 function getHeaders(): Record<string, string> {
@@ -49,7 +48,7 @@ async function handleUnauthorized(
   }
 
   try {
-    const refreshResponse = await fetch(`${BASE_URL}/auth/refresh`, {
+    const refreshResponse = await fetch(`${AUTH_BASE_URL}/auth/refresh`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ refresh_token: refreshToken }),
@@ -112,12 +111,13 @@ function buildQueryString(params?: Record<string, unknown> | null): string {
 
 /** Single generic HTTP request helper used by all 5 apiClient methods. */
 async function request<T>(
+  baseUrl: string,
   method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   url: string,
   body?: unknown,
   params?: Record<string, unknown>,
 ): Promise<{ data: T }> {
-  const fullUrl = `${BASE_URL}${url}${buildQueryString(params)}`;
+  const fullUrl = `${baseUrl}${url}${buildQueryString(params)}`;
   const makeRequest = (): Promise<Response> =>
     fetch(fullUrl, {
       method,
@@ -130,14 +130,23 @@ async function request<T>(
   return { data };
 }
 
-/** Fetch-based HTTP client with same interface as axios */
-const apiClient = {
-  get: <T>(url: string, config?: { params?: Record<string, unknown> }) =>
-    request<T>('GET', url, undefined, config?.params),
-  post: <T>(url: string, data?: unknown) => request<T>('POST', url, data),
-  put: <T>(url: string, data?: unknown) => request<T>('PUT', url, data),
-  patch: <T>(url: string, data?: unknown) => request<T>('PATCH', url, data),
-  delete: <T>(url: string) => request<T>('DELETE', url),
-};
+/** Create a versioned client while sharing JWT refresh and error behavior. */
+export function createApiClient(apiPrefix: '/api/v1' | '/api/v2') {
+  const baseUrl = `${API_BASE_URL}${apiPrefix}`;
+  return {
+    get: <T>(url: string, config?: { params?: Record<string, unknown> }) =>
+      request<T>(baseUrl, 'GET', url, undefined, config?.params),
+    post: <T>(url: string, data?: unknown) =>
+      request<T>(baseUrl, 'POST', url, data),
+    put: <T>(url: string, data?: unknown) =>
+      request<T>(baseUrl, 'PUT', url, data),
+    patch: <T>(url: string, data?: unknown) =>
+      request<T>(baseUrl, 'PATCH', url, data),
+    delete: <T>(url: string) => request<T>(baseUrl, 'DELETE', url),
+  };
+}
+
+/** Fetch-based v1 client with the existing axios-compatible interface. */
+const apiClient = createApiClient('/api/v1');
 
 export default apiClient;

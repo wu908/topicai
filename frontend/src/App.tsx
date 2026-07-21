@@ -26,6 +26,7 @@ const PublishAdvisorPage = React.lazy(() => import('@/pages/PublishAdvisor/Publi
 const AnalyticsPage = React.lazy(() => import('@/pages/Analytics/AnalyticsPage'));
 const AssetsPage = React.lazy(() => import('@/pages/Assets/AssetsPage'));
 const AccountsPage = React.lazy(() => import('@/pages/Accounts/AccountsPage'));
+const ContentPage = React.lazy(() => import('@/pages/Content/ContentPage'));
 const NotFoundPage = React.lazy(() => import('@/pages/NotFound/NotFoundPage'));
 
 /** Wraps children in Suspense with a loading fallback */
@@ -75,6 +76,26 @@ const App: React.FC = () => {
                 <LazyRoute>
                   <ProtectedRoute>
                     <HomePage />
+                  </ProtectedRoute>
+                </LazyRoute>
+              }
+            />
+            <Route
+              path="/content"
+              element={
+                <LazyRoute>
+                  <ProtectedRoute>
+                    <ContentPage />
+                  </ProtectedRoute>
+                </LazyRoute>
+              }
+            />
+            <Route
+              path="/content/:projectId"
+              element={
+                <LazyRoute>
+                  <ProtectedRoute>
+                    <ContentPage />
                   </ProtectedRoute>
                 </LazyRoute>
               }

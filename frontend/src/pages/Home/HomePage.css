@@ -1,0 +1,106 @@
+.today-loading {
+  min-height: 280px;
+  display: grid;
+  place-items: center;
+}
+
+.today-action {
+  max-width: 860px;
+  margin-top: 24px;
+  padding: 28px;
+  border: 1px solid var(--v3-border);
+  border-radius: 8px;
+  background: var(--v3-surface);
+}
+
+.today-action-topline,
+.today-action-controls,
+.today-action-meta,
+.today-state-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.today-action-topline {
+  justify-content: space-between;
+}
+
+.today-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--v3-blue);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.today-action h2 {
+  max-width: 680px;
+  margin: 22px 0 10px;
+  font-size: 32px;
+  line-height: 1.25;
+  letter-spacing: 0;
+}
+
+.today-action-reason {
+  max-width: 680px;
+  margin: 0;
+  color: var(--v3-text-sec);
+  font-size: 15px;
+  line-height: 1.75;
+}
+
+.today-action-meta {
+  margin-top: 18px;
+  color: var(--v3-text-ter);
+  font-size: 12px;
+}
+
+.today-action-meta span {
+  padding-right: 10px;
+  border-right: 1px solid var(--v3-border);
+}
+
+.today-action-meta span:last-child { border-right: 0; }
+
+.today-evidence-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin: 24px 0;
+  padding-top: 20px;
+  border-top: 1px solid var(--v3-border);
+}
+
+.today-evidence-grid > div {
+  min-width: 0;
+  padding: 14px;
+  background: var(--v3-bg);
+  border: 1px solid var(--v3-border-light);
+  border-radius: 6px;
+}
+
+.today-evidence-grid strong { font-size: 12px; }
+.today-evidence-grid p,
+.today-evidence-grid li { color: var(--v3-text-sec); font-size: 12px; line-height: 1.6; }
+.today-evidence-grid ul { margin: 8px 0 0; padding-left: 18px; }
+
+.today-action-controls { margin-top: 22px; }
+.today-trust-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 18px;
+  color: var(--v3-text-ter);
+  font-size: 11px;
+}
+.today-state-row { margin-top: 24px; color: var(--v3-text-sec); font-size: 12px; }
+
+@media (max-width: 640px) {
+  .today-action { margin-top: 16px; padding: 20px; }
+  .today-action h2 { font-size: 26px; }
+  .today-evidence-grid { grid-template-columns: 1fr; }
+  .today-action-controls > button { width: 100%; }
+}

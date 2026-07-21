@@ -24,6 +24,7 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -410,7 +411,7 @@ async def test_scenario_f_onboarding_rubric_weights():
 # Scenario G: US7 - Coverage gate
 # ============================================================
 
-def test_scenario_g_coverage_gate():
+def test_scenario_g_coverage_gate(tmp_path):
     """G: pytest --cov=app --cov-fail-under=80 must pass.
 
     Invoked as a subprocess so the test accurately reflects the
@@ -418,12 +419,13 @@ def test_scenario_g_coverage_gate():
     the base ``python`` may not have pytest installed.
     """
     backend_dir = Path(__file__).resolve().parents[2]
-    venv_python = backend_dir / ".venv" / "Scripts" / "python.exe"
     # Exclude this acceptance file from the subprocess so the gate
     # measures the existing test suite, not the acceptance tests
     # themselves.
-    cmd = [str(venv_python), "-m", "pytest",
+    coverage_basetemp = tmp_path / "coverage-gate"
+    cmd = [sys.executable, "-m", "pytest",
            "--cov=app", "--cov-fail-under=80", "-q", "--no-header",
+           f"--basetemp={coverage_basetemp}",
            "--ignore=tests/integration/test_acceptance_scenarios.py"]
     result = subprocess.run(
         cmd, cwd=backend_dir, capture_output=True, text=True, timeout=300,

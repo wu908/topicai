@@ -257,6 +257,30 @@ class ValidationException(AppException):
         super().__init__(message, status_code, error_code)
         self.details = details or {}
 
+
+class VersionConflictException(AppException):
+    """Optimistic concurrency token no longer matches the aggregate."""
+
+    def __init__(self, current_version: int, expected_version: int):
+        super().__init__(
+            message="Project changed since you opened it",
+            status_code=409,
+            error_code="VERSION_CONFLICT",
+        )
+        self.current_version = current_version
+        self.expected_version = expected_version
+
+
+class IdempotencyConflictException(AppException):
+    """An idempotency key was reused for a different request payload."""
+
+    def __init__(self):
+        super().__init__(
+            message="Idempotency key was already used for a different request",
+            status_code=409,
+            error_code="IDEMPOTENCY_CONFLICT",
+        )
+
 # ==================== Exception Handler Setup ====================
 
 def setup_exception_handlers(app: FastAPI) -> None:
@@ -311,16 +335,23 @@ def setup_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(AppException)
     async def app_exception_handler(request: Request, exc: AppException):
         """Handle all AppException subclasses with appropriate HTTP responses."""
+        meta = {
+            "error_code": exc.error_code,
+            "timestamp": utc_now(),
+        }
+        if isinstance(exc, VersionConflictException):
+            meta["details"] = {
+                "current_version": exc.current_version,
+                "expected_version": exc.expected_version,
+            }
+
         return JSONResponse(
             status_code=exc.status_code,
             content={
                 "code": exc.status_code,
                 "data": None,
                 "message": exc.message,
-                "meta": {
-                    "error_code": exc.error_code,
-                    "timestamp": utc_now(),
-                },
+                "meta": meta,
             },
         )
 

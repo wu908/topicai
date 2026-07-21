@@ -180,3 +180,35 @@ def get_fallback_action(function_name: str) -> dict[str, Any]:
         "action": tier_config["fallback_action"],
         "message": tier_config.get("degraded_message", ""),
     }
+
+# ==================== Spec-008 provider-neutral runtime ====================
+# This boundary is intentionally vendor-neutral. The endpoint and model are
+# supplied by deployment configuration; legacy LLM_PROVIDERS remains available
+# only to keep v1 compatibility tests and adapters working during migration.
+COMPATIBLE_LLM_DEFAULTS: dict[str, Any] = {
+    "timeout_seconds": 30.0,
+    "max_retries": 2,
+    "capabilities": {"text"},
+}
+
+
+def get_compatible_llm_config(settings: Any) -> dict[str, Any]:
+    """Return the configured OpenAI-compatible endpoint and capabilities."""
+    capabilities = {
+        value.strip().lower()
+        for value in str(getattr(settings, "llm_capabilities", "text")).split(",")
+        if value.strip()
+    }
+    return {
+        "name": "openai_compatible",
+        "base_url": str(getattr(settings, "llm_base_url", "")).strip(),
+        "api_key": str(getattr(settings, "llm_api_key", "")),
+        "model": str(getattr(settings, "llm_model", "")).strip(),
+        "timeout": float(getattr(settings, "llm_timeout_seconds", 30.0)),
+        "capabilities": capabilities or {"text"},
+        "configured": bool(
+            getattr(settings, "llm_base_url", "").strip()
+            and getattr(settings, "llm_api_key", "")
+            and getattr(settings, "llm_model", "").strip()
+        ),
+    }
