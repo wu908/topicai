@@ -107,6 +107,14 @@ class IntentOrchestratorService:
     async def _ensure_opportunity_action(
         self, owner_user_id: str, opportunity: dict[str, Any]
     ) -> dict[str, Any]:
+        async with self._creation_lock():
+            return await self._ensure_opportunity_action_locked(
+                owner_user_id, opportunity
+            )
+
+    async def _ensure_opportunity_action_locked(
+        self, owner_user_id: str, opportunity: dict[str, Any]
+    ) -> dict[str, Any]:
         current = await self.db.fetch_one(
             "SELECT * FROM next_best_actions WHERE owner_user_id=:owner "
             "AND project_id IS NULL AND status IN ('proposed','accepted','deferred') "
@@ -194,7 +202,7 @@ class IntentOrchestratorService:
             "opportunity_id": opportunity["id"],
         }
         session = await self.db.get_session()
-        async with self._creation_lock(), session, session.begin():
+        async with session, session.begin():
                 inserted = await session.execute(
                     text(
                         "INSERT INTO next_best_actions (id,owner_user_id,project_id,action_type,"
@@ -205,11 +213,11 @@ class IntentOrchestratorService:
                         "(:id,:owner,NULL,:action_type,:content_intent,:title,:reason,:evidence,"
                         ":unknown,:change,:effort,:automation,NULL,:fallback,'proposed',NULL,"
                         "NULL,1,:key,:hash,:now,:now) "
-                        "ON CONFLICT(owner_user_id,idempotency_key) DO NOTHING"
+                        "ON CONFLICT(owner_user_id,idempotency_key) DO NOTHING RETURNING id"
                     ),
                     action_params,
                 )
-                if inserted.rowcount == 1:
+                if inserted.scalar_one_or_none() == action_id:
                     await self._create_opportunity_trace(
                         session, owner_user_id, action_id, opportunity, trace_id
                     )
@@ -262,7 +270,7 @@ class IntentOrchestratorService:
             "fallback_action": json.loads(action["fallback_action_json"]),
         }
         session = await self.db.get_session()
-        async with self._creation_lock(), session, session.begin():
+        async with session, session.begin():
                 updated = await session.execute(
                     text(
                         "UPDATE next_best_actions SET status='expired',updated_at=:now,"
@@ -348,6 +356,12 @@ class IntentOrchestratorService:
         return trace_id
 
     async def ensure_project_action(
+        self, owner_user_id: str, project: dict[str, Any] | str
+    ) -> dict[str, Any]:
+        async with self._creation_lock():
+            return await self._ensure_project_action_locked(owner_user_id, project)
+
+    async def _ensure_project_action_locked(
         self, owner_user_id: str, project: dict[str, Any] | str
     ) -> dict[str, Any]:
         if isinstance(project, str):
@@ -522,11 +536,11 @@ class IntentOrchestratorService:
                         "(:id,:owner,:project,:action_type,:content_intent,:title,:reason,:evidence,"
                         ":unknown,:change,:effort,:automation,:gate,:fallback,'proposed',NULL,"
                         ":expires,1,:key,:hash,:now,:now) "
-                        "ON CONFLICT(owner_user_id,idempotency_key) DO NOTHING"
+                        "ON CONFLICT(owner_user_id,idempotency_key) DO NOTHING RETURNING id"
                     ),
                     action_params,
                 )
-                if inserted.rowcount == 1:
+                if inserted.scalar_one_or_none() == action_id:
                     await self._create_trace(
                         session,
                         owner_user_id,
