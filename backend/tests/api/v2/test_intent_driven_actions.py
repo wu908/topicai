@@ -1,5 +1,7 @@
 """Contract tests for the intent-driven action loop."""
 
+import asyncio
+
 import pytest
 from sqlalchemy import text
 
@@ -58,7 +60,7 @@ async def test_legacy_project_maps_to_solve_but_requires_confirmation(client, te
 
 
 @pytest.mark.asyncio
-async def test_new_creator_can_go_from_intent_to_publish_gate(client):
+async def test_growth_creator_completes_confirmed_learning_loop(client):
     today = await client.get("/api/v2/today")
     assert today.status_code == 200
     assert today.json()["data"]["action"]["action_type"] == "create_project"
@@ -184,6 +186,124 @@ async def test_new_creator_can_go_from_intent_to_publish_gate(client):
     assert locked.status_code == 201
     assert locked.json()["data"]["gate"]["status"] == "confirmed"
     assert locked.json()["data"]["next_action"]["action_type"] == "record_publication"
+
+    workspace_response = await client.get(
+        f"/api/v2/projects/{project['id']}/calibration"
+    )
+    assert workspace_response.status_code == 200
+    workspace = workspace_response.json()["data"]
+    publication_response = await client.post(
+        f"/api/v2/projects/{project['id']}/publish-records",
+        json={
+            "content_version_id": workspace["project"]["locked_publish_version_id"],
+            "note_url": "https://www.xiaohongshu.com/explore/intent-growth-loop",
+            "published_at": "2026-07-20T08:00:00Z",
+            "expected_project_version": workspace["project"]["version"],
+            "idempotency_key": "intent-publication",
+        },
+    )
+    assert publication_response.status_code == 201
+    publication = publication_response.json()["data"]
+    assert publication["project"]["status"] == "published"
+    publication_action = await client.get(
+        f"/api/v2/projects/{project['id']}/next-action"
+    )
+    assert publication_action.json()["data"]["action_type"] == "add_performance"
+
+    snapshot_response = await client.post(
+        f"/api/v2/publish-records/{publication['record']['id']}/snapshots",
+        json={
+            "captured_at": "2026-07-21T08:00:00Z",
+            "source": "manual",
+            "metrics": {"comments": 12, "follows_gained": 4},
+            "confirmed_by_user": True,
+            "expected_project_version": publication["project"]["version"],
+            "idempotency_key": "intent-performance",
+        },
+    )
+    assert snapshot_response.status_code == 201
+    snapshot = snapshot_response.json()["data"]
+    assert snapshot["project"]["status"] == "awaiting_review"
+    snapshot_action = await client.get(
+        f"/api/v2/projects/{project['id']}/next-action"
+    )
+    assert snapshot_action.json()["data"]["action_type"] == "review_result"
+
+    review_response = await client.post(
+        f"/api/v2/projects/{project['id']}/blind-reviews",
+        json={
+            "result_snapshot_ids": [snapshot["snapshot"]["id"]],
+            "expected_project_version": snapshot["project"]["version"],
+            "idempotency_key": "intent-blind-review",
+        },
+    )
+    assert review_response.status_code == 201
+    review = review_response.json()["data"]
+    plan = review["review"]["comparison"]["intent_review"]
+    assert review["review"]["calibration_state"] == "valid"
+    assert plan["intent"] == "record"
+    assert plan["confirmation_required"] is True
+    assert plan["long_term_write_allowed"] is False
+    assert len(plan["continue_item"].strip()) > 0
+    assert len(plan["stop_item"].strip()) > 0
+    assert len(plan["experiment_item"].strip()) > 0
+    assert {fact["metric"] for fact in plan["observed_facts"]} == {
+        "comments",
+        "follows_gained",
+    }
+
+    learning_action_response = await client.get(
+        f"/api/v2/projects/{project['id']}/next-action"
+    )
+    learning_action = learning_action_response.json()["data"]
+    assert learning_action["action_type"] == "confirm_learning"
+    assert learning_action["human_gate_type"] == "long_term_learning"
+
+    before_confirmation = await client.get(
+        f"/api/v2/projects/{project['id']}/calibration"
+    )
+    assert before_confirmation.json()["data"]["observations"] == []
+
+    learning_gate_responses = await asyncio.gather(
+        *(
+            client.post(f"/api/v2/actions/{learning_action['id']}/human-gate")
+            for _ in range(4)
+        )
+    )
+    assert {response.status_code for response in learning_gate_responses} == {201}
+    learning_gates = [response.json()["data"] for response in learning_gate_responses]
+    assert len({gate["id"] for gate in learning_gates}) == 1
+    learning_gate = learning_gates[0]
+    assert learning_gate["gate_type"] == "long_term_learning"
+    assert learning_gate["payload"]["intent_review"] == plan
+
+    learning_confirmation = await client.post(
+        f"/api/v2/human-gates/{learning_gate['id']}:decide",
+        json={
+            "decision": "confirm",
+            "decision_payload": {"learning_confirmed": True},
+            "expected_gate_version": learning_gate["version"],
+            "idempotency_key": "intent-learning-confirm",
+        },
+    )
+    assert learning_confirmation.status_code == 201
+    learning = learning_confirmation.json()["data"]
+    assert learning["gate"]["status"] == "confirmed"
+    assert learning["observation"]["statement"] == plan["experiment_item"]
+    assert learning["observation"]["next_test"] == plan["experiment_item"]
+    assert learning["observation"]["scope"]["content_intent"] == "record"
+    assert learning["observation"]["scope"]["continue_item"] == plan["continue_item"]
+    assert learning["observation"]["scope"]["stop_item"] == plan["stop_item"]
+    assert learning["next_action"]["action_type"] == "manage_learning"
+
+    completed_workspace = await client.get(
+        f"/api/v2/projects/{project['id']}/calibration"
+    )
+    completed = completed_workspace.json()["data"]
+    assert len(completed["observations"]) == 1
+    assert completed["observations"][0]["id"] == learning["observation"]["id"]
+    assert completed["next_action"] == "manage_observations"
+    assert completed["orchestrated_action"]["action_type"] == "manage_learning"
 
 
 @pytest.mark.asyncio
