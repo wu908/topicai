@@ -100,5 +100,13 @@ The feature is not complete until all P1 tasks are green, synthetic logic scenar
 - The production HumanGate path now receives the optional model used for evidence-bound candidate generation; model timeout and malformed output preserve confirmed user input and fall back to a reviewable deterministic candidate.
 - The content workspace persists unsaved edits per project and base version, blocks server saves while offline, protects navigation, and requires explicit recovery or discard after reload.
 - Concurrent project, calibration and series-opportunity reads now converge on one persisted `NextBestAction`, proposed event and referenced AI trace instead of racing on the idempotency index.
-- T049 remains open because the starter assessment/direction/sprint flow does not exist and the growth journey does not yet reach confirmed post-publication learning.
+- T049 remains open because the starter assessment/direction/sprint flow does not exist.
 - T050 remains open because evidence revocation is covered but v2 entity deletion and cascade guarantees are not implemented.
+
+## Phase 13 growth-learning progress (2026-07-22)
+
+- `test_growth_creator_completes_confirmed_learning_loop` exercises the production API from Today through manual publication, intent-specific metrics, blind review and the `long_term_learning` HumanGate.
+- The test proves no Observation exists before confirmation, and that confirmation persists exactly one next experiment with the reviewed continue/stop context before advancing to `manage_learning`.
+- Concurrent requests to open the same learning gate now converge through the database uniqueness contract instead of surfacing an idempotency-index 500.
+- `intent-driven-loop.spec.ts` covers the same journey in Chromium, including real offline draft recovery before publication and the user-visible facts, possible causes, continue, stop and experiment sections.
+- The growth creator row is Covered in `phase-12-release-matrix.md`; T049 remains open only because the bounded starter entry flow is still absent.

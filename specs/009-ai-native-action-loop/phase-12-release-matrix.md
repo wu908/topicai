@@ -1,4 +1,4 @@
-# Phase 12 Action Protocol Release Matrix
+# Phase 12-13 Action Protocol Release Matrix
 
 **Date**: 2026-07-22
 
@@ -12,7 +12,7 @@ Phase 12 validates user journeys against the persisted action protocol. Existing
 
 | Journey | Action-protocol evidence | Status | Remaining gap |
 |---|---|---|---|
-| Growth creator | `test_new_creator_can_go_from_intent_to_publish_gate` covers Today, project creation, intent confirmation, evidence interview, fact gate, candidate review, immutable version lock and the manual-publication boundary | Partial | Add one executable journey through publication, snapshots, blind review and confirmed next experiment |
+| Growth creator | `test_growth_creator_completes_confirmed_learning_loop` and `intent-driven-loop.spec.ts` cover Today, project creation, intent confirmation, evidence interview, immutable version lock, manual publication, intent-specific metrics, blind review, explicit long-term-learning confirmation and one persisted next experiment | Covered | None for this journey; real-user outcome validation remains separate |
 | Starter creator | No starter assessment, direction candidate, sprint service, API or page exists in the current repository | Blocked | Implement the bounded starter entry flow, then hand its created projects to the same `NextBestAction` protocol |
 
 The existing `starter_sprint_id` column is an extension point, not a working starter journey. T049 must remain unchecked until both rows pass.
@@ -21,10 +21,11 @@ The existing `starter_sprint_id` column is an extension point, not a working sta
 
 | Scenario | Automated evidence | Expected invariant | Status |
 |---|---|---|---|
-| No model | `test_new_creator_can_go_from_intent_to_publish_gate`; `intent-driven-loop.spec.ts` | Confirmed user evidence produces a marked deterministic candidate and never invents facts | Covered |
+| No model | `test_growth_creator_completes_confirmed_learning_loop`; `intent-driven-loop.spec.ts` | Confirmed user evidence produces a marked deterministic candidate and never invents facts | Covered |
 | Model timeout | `test_model_failure_after_fact_confirmation_preserves_input_and_uses_fallback[TimeoutError]` | Preserve confirmed input and return the same reviewable fallback candidate | Covered |
 | Malformed model output | `test_model_failure_after_fact_confirmation_preserves_input_and_uses_fallback[ValueError]` | Preserve confirmed input and return the same reviewable fallback candidate | Covered |
 | Concurrent workspace loads | `test_concurrent_project_action_creation_is_idempotent`; `test_concurrent_opportunity_action_creation_is_idempotent` | Concurrent project or series-opportunity reads create one action, one proposed event and one referenced AI trace without returning 500 | Covered |
+| Concurrent HumanGate opens | `test_growth_creator_completes_confirmed_learning_loop`; `intent-driven-loop.spec.ts` | Concurrent requests for the same action and gate type return one persisted HumanGate without a uniqueness-index 500 | Covered |
 | Offline editing and refresh | `ProjectWorkspace.test.tsx`; `intent-driven-loop.spec.ts` | Keep edits local, make no server save while offline, offer recovery after reload, and require user confirmation | Covered |
 | Version conflict | `test_stale_project_version_returns_typed_conflict`; candidate and rule version-conflict tests | Reject stale writes without overwriting the current version | Covered |
 | Revoked evidence | `test_revoked_evidence_blocks_candidate_lock` | Revoked evidence cannot lock an unpublished candidate | Covered |
@@ -36,10 +37,10 @@ T050 remains unchecked because revocation is not equivalent to deletion. The rel
 
 ## Validation Evidence
 
-- Backend release matrix: 32 passed on Windows with Python 3.13.
-- Intent-driven Playwright journey: 2 passed, including real browser offline mode and the 390 x 844 mobile navigation check.
-- Frontend lint and production build: passed.
-- Rendered desktop QA reached the manual-publication boundary without an application console error. The remaining console warnings are React Router v7 future-flag notices.
+- Backend release matrix: 32 passed on Windows with Python 3.13, including the complete confirmed learning loop.
+- Frontend Vitest: 357 passed and 2 skipped; lint and production build passed.
+- Intent-driven Playwright journey: 2 passed, including real browser offline recovery, publication-to-learning confirmation and the 390 x 844 mobile navigation check.
+- Rendered desktop QA reached the persisted next experiment without an application console error. The remaining console warnings are React Router v7 future-flag notices.
 
 ## Commands
 
@@ -64,7 +65,6 @@ pnpm --dir frontend test:e2e -- intent-driven-loop.spec.ts
 
 ## Next Implementation Order
 
-1. Finish the growth journey through confirmed review output.
-2. Define v2 deletion scope, retention exceptions and cascade behavior before writing endpoints.
-3. Implement the bounded starter assessment and three-project experiment as an entry flow, not a second content lifecycle.
-4. Re-run this matrix and only then close T049/T050.
+1. Define v2 deletion scope, retention exceptions and cascade behavior before writing endpoints.
+2. Implement the bounded starter assessment and three-project experiment as an entry flow, not a second content lifecycle.
+3. Re-run this matrix and only then close T049/T050.

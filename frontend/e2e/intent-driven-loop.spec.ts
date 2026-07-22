@@ -20,14 +20,15 @@ async function login(page: Page) {
 }
 
 test.describe('intent-driven MVP', () => {
-  test('share idea becomes a confirmed candidate and stops before publishing', async ({ page, context }) => {
+  test('record idea reaches a user-confirmed post-publication experiment', async ({ page, context }) => {
+    test.setTimeout(60_000);
     await login(page);
     await page.goto('/content');
 
     await page.getByLabel('项目标题').fill('稳定更新失败后，我改掉的一件事');
     await page.getByLabel('这条内容更像什么').click();
-    await page.getByRole('option', { name: '分享：表达经历或观点' }).click();
-    await page.getByLabel('希望读者发生什么变化（可留空）').fill('让读者看到一次真实调整，而不是一个万能方法');
+    await page.getByRole('option', { name: '记录：留下过程和变化' }).click();
+    await page.getByLabel('希望读者发生什么变化（可留空）').fill('让读者愿意持续关注这次调整接下来会发生什么');
     await page.getByRole('button', { name: '创建项目' }).click();
     await page.waitForURL(/\/content\/[0-9a-f-]+$/, { timeout: 15_000 });
 
@@ -75,6 +76,31 @@ test.describe('intent-driven MVP', () => {
     await expect(page.getByText('发现这篇内容尚未保存的本地草稿')).toBeVisible({ timeout: 15_000 });
     await page.getByRole('button', { name: '恢复' }).click();
     await expect(page.getByRole('textbox', { name: '当前内容正文' })).toHaveValue(offlineBody);
+
+    await page.getByLabel('小红书笔记链接').fill('https://www.xiaohongshu.com/explore/e2e-growth-loop');
+    await page.getByRole('button', { name: '确认已发布' }).click();
+
+    await expect(page.getByRole('heading', { name: '回填这篇内容的真实表现' }).first()).toBeVisible({ timeout: 15_000 });
+    await page.getByLabel('评论').fill('12');
+    await page.getByLabel('新增关注').fill('4');
+    await page.getByRole('button', { name: '保存数据快照' }).click();
+
+    await expect(page.getByRole('heading', { name: '让 AI 对照发布前判断和真实结果' }).first()).toBeVisible({ timeout: 15_000 });
+    await page.getByRole('button', { name: '查看这次结果' }).click();
+
+    await expect(page.locator('#workspace-action-heading')).toHaveText('确认下一轮只做一个实验', { timeout: 15_000 });
+    for (const section of ['这次实际看到的事实', '仍然可能的原因', '继续一项', '停止一项', '实验一项']) {
+      await expect(page.getByText(section, { exact: true })).toBeVisible();
+    }
+    await expect(page.getByText('一次结果不会自动改写长期规则；确认后只保存为下一次可验证的观察。')).toBeVisible();
+    await expect(page.getByRole('heading', { name: '观察工作台' })).not.toBeVisible();
+    await page.getByRole('button', { name: '确认并保存下一轮实验' }).click();
+
+    await expect(page.getByRole('heading', { name: '观察工作台' })).toBeVisible({ timeout: 15_000 });
+    const observation = page.getByRole('article').filter({ hasText: '下一篇保持系列主题相近' });
+    await expect(observation.getByText('下一篇保持系列主题相近，只增加一个阶段性更新和明确的后续节点，再比较持续关注信号。').first()).toBeVisible();
+    await expect(observation.getByText('观察中', { exact: true })).toBeVisible();
+    await expect(page.getByText('处理一条待验证经验', { exact: true }).first()).toBeVisible();
   });
 
   test('mobile navigation exposes the same five-node product', async ({ page }) => {

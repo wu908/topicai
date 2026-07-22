@@ -406,13 +406,45 @@ class HumanGateService:
                 payload["blind_review_id"] = review["id"]
                 payload["intent_review"] = comparison.get("intent_review")
         key = f"gate:{action_id}:{action['human_gate_type']}"
-        await self.db.execute(
-            "INSERT INTO human_gates (id,owner_user_id,project_id,action_id,gate_type,prompt,"
-            "payload_json,status,version,idempotency_key,request_hash,created_at,updated_at) "
-            "VALUES (:id,:owner,:project,:action,:type,:prompt,:payload,'pending',1,:key,:hash,:now,:now)",
-            {"id": gate_id, "owner": owner, "project": action["project_id"], "action": action_id, "type": action["human_gate_type"], "prompt": action["title"], "payload": json.dumps(payload, ensure_ascii=False), "key": key, "hash": request_hash(payload), "now": timestamp},
-        )
-        return self._normalize(await self.db.fetch_one("SELECT * FROM human_gates WHERE id=:id", {"id": gate_id}))
+        session = await self.db.get_session()
+        async with session:
+            async with session.begin():
+                await session.execute(
+                    text(
+                        "INSERT INTO human_gates (id,owner_user_id,project_id,action_id,"
+                        "gate_type,prompt,payload_json,status,version,idempotency_key,"
+                        "request_hash,created_at,updated_at) VALUES "
+                        "(:id,:owner,:project,:action,:type,:prompt,:payload,'pending',1,"
+                        ":key,:hash,:now,:now) "
+                        "ON CONFLICT(action_id,gate_type) DO NOTHING"
+                    ),
+                    {
+                        "id": gate_id,
+                        "owner": owner,
+                        "project": action["project_id"],
+                        "action": action_id,
+                        "type": action["human_gate_type"],
+                        "prompt": action["title"],
+                        "payload": json.dumps(payload, ensure_ascii=False),
+                        "key": key,
+                        "hash": request_hash(payload),
+                        "now": timestamp,
+                    },
+                )
+                created = (
+                    await session.execute(
+                        text(
+                            "SELECT * FROM human_gates WHERE action_id=:action "
+                            "AND gate_type=:type AND owner_user_id=:owner"
+                        ),
+                        {
+                            "action": action_id,
+                            "type": action["human_gate_type"],
+                            "owner": owner,
+                        },
+                    )
+                ).mappings().one()
+        return self._normalize(created)
 
     async def decide(self, owner: str, gate_id: str, body: HumanGateDecision) -> tuple[dict[str, Any], bool]:
         digest = request_hash(body)

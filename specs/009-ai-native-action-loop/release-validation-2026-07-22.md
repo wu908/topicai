@@ -103,4 +103,4 @@ Phase 12 adds local draft recovery and verifies deterministic fallback after mod
 
 The rendered release pass also exposed and fixed concurrent `NextBestAction` creation during overlapping project-list and calibration requests. Creation is now transactional and conflict-safe, with regression coverage that rejects duplicate actions, events and orphan traces.
 
-This does not close the release matrix. The starter entry flow, full growth publication-to-learning journey, and v2 deletion/cascade contract remain missing product capabilities.
+Phase 13 closes the executable growth publication-to-learning journey through explicit user confirmation and one persisted next experiment. The release matrix remains open because the starter entry flow and v2 deletion/cascade contract are still missing product capabilities.
