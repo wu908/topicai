@@ -137,6 +137,7 @@ export default function HomePage() {
   }
 
   const action = data?.action;
+  const isDeferred = deferred || action?.status === 'deferred';
   return (
     <PageContainer
       title={`你好，${user?.username || '创作者'}`}
@@ -149,8 +150,8 @@ export default function HomePage() {
             <span className="today-eyebrow"><AutoAwesomeOutlined fontSize="small" /> 现在先做</span>
             {action.content_intent ? <Chip size="small" label={`${intentLabels[action.content_intent]}内容`} /> : null}
           </div>
-          <h2 id="today-action-title">{deferred ? '这件事已暂缓' : action.title}</h2>
-          <p className="today-action-reason">{deferred ? '它仍会保留在对应内容项目中，你可以稍后继续。' : action.reason}</p>
+          <h2 id="today-action-title">{isDeferred ? '这件事已暂缓' : action.title}</h2>
+          <p className="today-action-reason">{isDeferred ? '它仍会保留在对应内容项目中，你可以稍后继续。' : action.reason}</p>
           <div className="today-action-meta">
             <span>预计 {action.estimated_effort_minutes} 分钟</span>
             <span>{modeLabels[action.automation_level]}</span>
@@ -162,13 +163,13 @@ export default function HomePage() {
           </div>
           <div className="today-action-controls">
             <Button variant="contained" startIcon={<ArrowForward />} disabled={busy} onClick={startAction}>
-              {deferred
+              {isDeferred
                 ? '回到对应页面'
                 : action.expected_state_change.source === 'series_opportunity'
                   ? '查看并确认机会'
                   : actionLabels[action.action_type]}
             </Button>
-            {!deferred ? <Button variant="text" startIcon={<Pause />} disabled={busy} onClick={() => void deferAction()}>暂不做</Button> : null}
+            {!isDeferred ? <Button variant="text" startIcon={<Pause />} disabled={busy} onClick={() => void deferAction()}>暂不做</Button> : null}
             <Button variant="text" onClick={() => navigate(actionPath)}>
               手动继续
             </Button>
