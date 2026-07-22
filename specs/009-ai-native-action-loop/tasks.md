@@ -69,7 +69,7 @@
 - [x] T047 Add metric queries with documented numerator, denominator, window and missing-data handling.
 - [x] T048 Add action funnel and calibration-quality export for internal validation only.
 - [ ] T049 Run existing 008 starter and growth journeys against the action protocol.
-- [ ] T050 Run no-model, timeout, offline recovery, version conflict, deletion, contamination and rule-rollback journeys.
+- [x] T050 Run no-model, timeout, offline recovery, version conflict, deletion, contamination and rule-rollback journeys.
 - [x] T051 Verify legacy routes redirect or become project-context compatibility shims.
 - [x] T052 Run cross-artifact consistency checks and update the release validation report in `release-validation-2026-07-22.md`.
 
@@ -110,3 +110,11 @@ The feature is not complete until all P1 tasks are green, synthetic logic scenar
 - Concurrent requests to open the same learning gate now converge through the database uniqueness contract instead of surfacing an idempotency-index 500.
 - `intent-driven-loop.spec.ts` covers the same journey in Chromium, including real offline draft recovery before publication and the user-visible facts, possible causes, continue, stop and experiment sections.
 - The growth creator row is Covered in `phase-12-release-matrix.md`; T049 remains open only because the bounded starter entry flow is still absent.
+
+## Phase 14 project-deletion progress (2026-07-22)
+
+- `DELETE /api/v2/projects/{project_id}` now permanently removes an owner-scoped project while returning the same `204` for retries and foreign IDs.
+- Existing foreign-key cascades remove project content, evidence, publication data, reviews, actions and gates; project-derived rules, series and opportunities are explicitly removed because their provenance is no longer complete.
+- CreatorState references, orphan AI traces and project-only screenshot assets are removed in the same transaction.
+- `test_growth_creator_completes_confirmed_learning_loop` now continues through deletion and proves that ContentGenome, Today and privacy-safe metrics no longer expose the deleted project.
+- The Phase 12-14 backend release matrix passes `33` tests. T050 is complete; T049 remains open for the bounded starter journey.

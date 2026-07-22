@@ -1,6 +1,7 @@
 """Contract tests for the intent-driven action loop."""
 
 import asyncio
+import json
 
 import pytest
 from sqlalchemy import text
@@ -60,7 +61,7 @@ async def test_legacy_project_maps_to_solve_but_requires_confirmation(client, te
 
 
 @pytest.mark.asyncio
-async def test_growth_creator_completes_confirmed_learning_loop(client):
+async def test_growth_creator_completes_confirmed_learning_loop(client, test_db):
     today = await client.get("/api/v2/today")
     assert today.status_code == 200
     assert today.json()["data"]["action"]["action_type"] == "create_project"
@@ -304,6 +305,248 @@ async def test_growth_creator_completes_confirmed_learning_loop(client):
     assert completed["observations"][0]["id"] == learning["observation"]["id"]
     assert completed["next_action"] == "manage_observations"
     assert completed["orchestrated_action"]["action_type"] == "manage_learning"
+
+    project_id = project["id"]
+    observation_id = learning["observation"]["id"]
+    session = await test_db.get_session()
+    async with session:
+        async with session.begin():
+            trace_id = (
+                await session.execute(
+                    text(
+                        "SELECT ai_trace_id FROM blind_reviews WHERE project_id=:project"
+                    ),
+                    {"project": project_id},
+                )
+            ).scalar_one()
+            version_id = (
+                await session.execute(
+                    text(
+                        "SELECT current_version_id FROM content_projects WHERE id=:project"
+                    ),
+                    {"project": project_id},
+                )
+            ).scalar_one()
+            evidence_id = (
+                await session.execute(
+                    text("SELECT id FROM evidence_items WHERE project_id=:project"),
+                    {"project": project_id},
+                )
+            ).scalar_one()
+            snapshot_id = (
+                await session.execute(
+                    text(
+                        "SELECT id FROM performance_snapshots_v2 WHERE project_id=:project"
+                    ),
+                    {"project": project_id},
+                )
+            ).scalar_one()
+            await session.execute(
+                text(
+                    "INSERT INTO creator_rules (id,owner_user_id,rule_key,content_intent,"
+                    "active_version_id,version,created_at,updated_at) VALUES "
+                    "('deletion-rule','u1','deletion-rule-key','record',"
+                    "'deletion-rule-v1',1,'2026-07-22T00:00:00Z','2026-07-22T00:00:00Z')"
+                )
+            )
+            await session.execute(
+                text(
+                    "INSERT INTO creator_rule_versions (id,owner_user_id,rule_id,"
+                    "version_number,statement,scope_json,source_observation_ids_json,status,"
+                    "idempotency_key,request_hash,created_at,confirmed_at) VALUES "
+                    "('deletion-rule-v1','u1','deletion-rule',1,'derived deletion rule',"
+                    "'{}',:sources,'active','deletion-rule-v1','hash',"
+                    "'2026-07-22T00:00:00Z','2026-07-22T00:00:00Z')"
+                ),
+                {"sources": json.dumps([observation_id])},
+            )
+            await session.execute(
+                text(
+                    "INSERT INTO creator_series (id,owner_user_id,content_intent,"
+                    "content_format,proposed_name,proposed_promise,proposed_rationale,"
+                    "proposed_continuation_prompt,confirmed_name,confirmed_promise,"
+                    "confirmed_continuation_prompt,scope_json,source_project_ids_json,status,"
+                    "proposal_source,ai_trace_id,limitations_json,version,idempotency_key,"
+                    "request_hash,created_at,updated_at,confirmed_at) VALUES "
+                    "('deletion-series','u1','record','graphic_note','series name',"
+                    "'series promise','series rationale','continue','series name',"
+                    "'series promise','continue','{}',:projects,'confirmed',"
+                    "'deterministic_fallback',:trace,'[]',1,'deletion-series','hash',"
+                    "'2026-07-22T00:00:00Z','2026-07-22T00:00:00Z',"
+                    "'2026-07-22T00:00:00Z')"
+                ),
+                {"projects": json.dumps([project_id]), "trace": trace_id},
+            )
+            await session.execute(
+                text(
+                    "INSERT INTO content_opportunities (id,owner_user_id,opportunity_type,"
+                    "source_ref,content_intent,content_format,proposed_title,"
+                    "proposed_audience_change,proposed_rationale,"
+                    "proposed_material_requirements_json,evidence_refs_json,unknown_refs_json,"
+                    "status,proposal_source,ai_trace_id,created_project_id,limitations_json,"
+                    "version,idempotency_key,request_hash,created_at,updated_at) VALUES "
+                    "('deletion-opportunity','u1','series_extension',"
+                    "'creator-series:deletion-series','record','graphic_note',"
+                    "'derived opportunity','derived audience change','derived rationale',"
+                    "'[]','[]','[]','proposed','deterministic_fallback',:trace,:project,"
+                    "'[]',1,'deletion-opportunity','hash','2026-07-22T00:00:00Z',"
+                    "'2026-07-22T00:00:00Z')"
+                ),
+                {"trace": trace_id, "project": project_id},
+            )
+            await session.execute(
+                text(
+                    "INSERT INTO creator_viewpoints (id,owner_user_id,project_id,"
+                    "content_intent,proposed_statement,proposed_rationale,confirmed_statement,"
+                    "scope_json,source_evidence_ids_json,source_content_version_id,privacy_level,"
+                    "status,proposal_source,ai_trace_id,limitations_json,version,idempotency_key,"
+                    "request_hash,created_at,updated_at,confirmed_at) VALUES "
+                    "('deletion-viewpoint','u1',:project,'record','proposed viewpoint',"
+                    "'derived rationale','confirmed viewpoint','{}',:evidence,:version,"
+                    "'private','confirmed','deterministic_fallback',:trace,'[]',1,"
+                    "'deletion-viewpoint','hash','2026-07-22T00:00:00Z',"
+                    "'2026-07-22T00:00:00Z','2026-07-22T00:00:00Z')"
+                ),
+                {
+                    "project": project_id,
+                    "evidence": json.dumps([evidence_id]),
+                    "version": version_id,
+                    "trace": trace_id,
+                },
+            )
+            await session.execute(
+                text(
+                    "INSERT INTO assets (id,owner_id,filename,mime_type,type,size,url,"
+                    "used_count,created_at,updated_at) VALUES ('deletion-screenshot','u1',"
+                    "'metrics.png','image/png','image',12,'/private/metrics.png',0,"
+                    "'2026-07-22T00:00:00Z','2026-07-22T00:00:00Z')"
+                )
+            )
+            await session.execute(
+                text(
+                    "UPDATE performance_snapshots_v2 SET screenshot_material_id="
+                    "'deletion-screenshot' WHERE id=:snapshot"
+                ),
+                {"snapshot": snapshot_id},
+            )
+            state = (
+                await session.execute(
+                    text(
+                        "SELECT validated_insights_json FROM creator_states "
+                        "WHERE owner_user_id='u1'"
+                    )
+                )
+            ).scalar_one()
+            insights = json.loads(state)
+            insights.extend(
+                [
+                    {"statement": "rule", "source_ref": "creator-rule:deletion-rule:v1"},
+                    {"statement": "series", "source_ref": "creator-series:deletion-series"},
+                    {"statement": "viewpoint", "source_ref": "creator-viewpoint:deletion-viewpoint"},
+                ]
+            )
+            await session.execute(
+                text(
+                    "UPDATE creator_states SET validated_insights_json=:insights "
+                    "WHERE owner_user_id='u1'"
+                ),
+                {"insights": json.dumps(insights)},
+            )
+
+    await client.get("/api/v2/today")
+    opportunity_action = await test_db.fetch_one(
+        "SELECT id FROM next_best_actions WHERE owner_user_id='u1' AND project_id IS NULL "
+        "AND json_extract(expected_state_change_json,'$.opportunity_id')="
+        "'deletion-opportunity'"
+    )
+    assert opportunity_action is not None
+
+    deleted = await client.delete(f"/api/v2/projects/{project_id}")
+    assert deleted.status_code == 204
+    assert (await client.delete(f"/api/v2/projects/{project_id}")).status_code == 204
+    assert (await client.get(f"/api/v2/projects/{project_id}")).status_code == 404
+    assert (await client.get(f"/api/v2/projects/{project_id}/calibration")).status_code == 404
+
+    session = await test_db.get_session()
+    async with session:
+        for table, project_column in (
+            ("content_projects", "id"),
+            ("content_versions", "project_id"),
+            ("content_segments", "project_id"),
+            ("content_segment_decisions", "project_id"),
+            ("evidence_items", "project_id"),
+            ("publish_hypotheses", "project_id"),
+            ("publish_records_v2", "project_id"),
+            ("performance_snapshots_v2", "project_id"),
+            ("blind_reviews", "project_id"),
+            ("observations", "project_id"),
+            ("next_best_actions", "project_id"),
+            ("human_gates", "project_id"),
+            ("action_events", "project_id"),
+            ("creator_viewpoints", "project_id"),
+        ):
+            count = (
+                await session.execute(
+                    text(f"SELECT COUNT(*) FROM {table} WHERE {project_column}=:project"),
+                    {"project": project_id},
+                )
+            ).scalar_one()
+            assert count == 0, table
+        for table, identifier in (
+            ("creator_rules", "deletion-rule"),
+            ("creator_series", "deletion-series"),
+            ("content_opportunities", "deletion-opportunity"),
+            ("assets", "deletion-screenshot"),
+        ):
+            count = (
+                await session.execute(
+                    text(f"SELECT COUNT(*) FROM {table} WHERE id=:id"),
+                    {"id": identifier},
+                )
+            ).scalar_one()
+            assert count == 0, table
+        trace_refs = (
+            await session.execute(
+                text(
+                    "SELECT COUNT(*) FROM ai_traces_v2 WHERE owner_user_id='u1' AND ("
+                    "input_refs_json LIKE :needle OR evidence_refs_json LIKE :needle "
+                    "OR source_snapshot_ids_json LIKE :needle OR output_ref LIKE :needle)"
+                ),
+                {"needle": f"%{project_id}%"},
+            )
+        ).scalar_one()
+        assert trace_refs == 0
+        assert (
+            await session.execute(
+                text(
+                    "SELECT COUNT(*) FROM next_best_actions WHERE id=:id"
+                ),
+                {"id": opportunity_action["id"]},
+            )
+        ).scalar_one() == 0
+
+    state_after_delete = (await client.get("/api/v2/creator-state")).json()["data"]
+    assert state_after_delete["facts"] == []
+    assert state_after_delete["validated_insights"] == []
+    genome = (await client.get("/api/v2/content-genome")).json()["data"]
+    assert project_id not in json.dumps(genome)
+    today_after_delete = (await client.get("/api/v2/today")).json()["data"]
+    assert today_after_delete["action"].get("project_id") != project_id
+    metrics = (await client.get("/api/v2/internal/validation/action-metrics")).json()["data"]
+    serialized_metrics = json.dumps(metrics)
+    assert project_id not in serialized_metrics
+    assert "intent-growth-loop" not in serialized_metrics
+
+
+@pytest.mark.asyncio
+async def test_project_deletion_is_owner_scoped(client, client_as_u2):
+    created = await client.post(
+        "/api/v2/projects",
+        json={"title": "private project", "idempotency_key": "private-delete-project"},
+    )
+    project_id = created.json()["data"]["id"]
+    assert (await client_as_u2.delete(f"/api/v2/projects/{project_id}")).status_code == 204
+    assert (await client.get(f"/api/v2/projects/{project_id}")).status_code == 200
 
 
 @pytest.mark.asyncio

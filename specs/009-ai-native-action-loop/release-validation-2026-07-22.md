@@ -104,3 +104,12 @@ Phase 12 adds local draft recovery and verifies deterministic fallback after mod
 The rendered release pass also exposed and fixed concurrent `NextBestAction` creation during overlapping project-list and calibration requests. Creation is now transactional and conflict-safe, with regression coverage that rejects duplicate actions, events and orphan traces.
 
 Phase 13 closes the executable growth publication-to-learning journey through explicit user confirmation and one persisted next experiment. The release matrix remains open because the starter entry flow and v2 deletion/cascade contract are still missing product capabilities.
+
+# Phase 14 Update
+
+- Added the owner-scoped permanent `ContentProject` deletion contract and API.
+- Extended the complete growth journey through deletion, deterministic retry and cross-owner isolation.
+- Verified removal of raw project content, project-derived rules, series, opportunities, CreatorState references, orphan traces and project-only screenshots.
+- Phase 12-14 backend release matrix: `33 passed`.
+- Backend CI equivalent: `761 passed`, `1 deselected`, `86.54%` coverage.
+- T050 is complete. T049 remains open until the bounded starter journey exists.
