@@ -124,6 +124,25 @@ async def test_action_funnel_has_stable_denominator_and_safe_events(client, test
                     "error": "private raw exception message",
                 },
             )
+            await session.execute(
+                text(
+                    "INSERT INTO next_best_actions (id,owner_user_id,action_type,title,reason,"
+                    "fallback_action_json,status,version,idempotency_key,request_hash,created_at,updated_at,"
+                    "estimated_effort_minutes) VALUES "
+                    "('cross-owner-action','u2','create_project','private title','private reason','{}',"
+                    "'proposed',1,'cross-owner-action','h',:now,:now,1)"
+                ),
+                {"now": timestamp},
+            )
+            await session.execute(
+                text(
+                    "INSERT INTO action_events (id,owner_user_id,action_id,event_type,to_status,"
+                    "payload_json,action_version,idempotency_key,request_hash,created_at) VALUES "
+                    "('cross-owner-event','u1','cross-owner-action','proposed','proposed','{}',1,"
+                    "'cross-owner-event','h',:now)"
+                ),
+                {"now": timestamp},
+            )
 
     response = await client.get(
         "/api/v2/internal/validation/action-metrics",
@@ -150,6 +169,7 @@ async def test_action_funnel_has_stable_denominator_and_safe_events(client, test
     assert "eligible secret content" not in serialized
     assert "private raw exception message" not in serialized
     assert any(event["error_code"] == "invalid_error_code" for event in data["events"])
+    assert all(event["action_id"] != "cross-owner-action" for event in data["events"])
     assert "payload_json" not in data["events"][0]
     assert len(data["events"][0]["user_id_hash"]) == 64
 
@@ -310,3 +330,41 @@ async def test_project_scoped_calibration_query_executes_on_sqlite(client):
     )
     assert exported.status_code == 200
     assert exported.json()["data"]["action_funnel"]["offered"] == 1
+
+
+@pytest.mark.asyncio
+async def test_rule_upgrade_numerator_is_limited_to_valid_clean_reviews():
+    class CalibrationRows:
+        async def fetch_all(self, query, params):
+            if "FROM blind_reviews" in query:
+                return [
+                    {
+                        "calibration_state": "valid",
+                        "contamination_status": "clean",
+                        "eligible_for_rule_upgrade": 1,
+                    },
+                    {
+                        "calibration_state": "insufficient",
+                        "contamination_status": "clean",
+                        "eligible_for_rule_upgrade": 1,
+                    },
+                    {
+                        "calibration_state": "calibration_invalid",
+                        "contamination_status": "contaminated",
+                        "eligible_for_rule_upgrade": 1,
+                    },
+                ]
+            return []
+
+    result = await ExperimentMetricsService(CalibrationRows())._calibration(
+        "u1",
+        [],
+        datetime(2026, 7, 1, tzinfo=UTC),
+        datetime(2026, 8, 1, tzinfo=UTC),
+        require_projects=False,
+    )
+
+    metric = result["eligible_rule_upgrades"]
+    assert metric["numerator"] == 1
+    assert metric["denominator"] == 1
+    assert metric["rate"] == 1

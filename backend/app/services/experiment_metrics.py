@@ -235,7 +235,8 @@ class ExperimentMetricsService:
             "ae.to_status,ae.experiment_id,ae.cohort,ae.ai_trace_id,ae.latency_ms,"
             "ae.success,ae.error_code,ae.model_version,ae.prompt_version,ae.created_at,"
             "nba.action_type FROM action_events ae JOIN next_best_actions nba "
-            f"ON nba.id=ae.action_id WHERE {where} ORDER BY ae.created_at,ae.id",
+            f"ON nba.id=ae.action_id AND nba.owner_user_id=ae.owner_user_id "
+            f"WHERE {where} ORDER BY ae.created_at,ae.id",
             params,
         )
         offered_ids = {row["action_id"] for row in rows if row["event_type"] == "proposed"}
@@ -404,7 +405,12 @@ class ExperimentMetricsService:
             for row in reviews
         )
         contaminated = sum(row["contamination_status"] != "clean" for row in reviews)
-        eligible = sum(bool(row["eligible_for_rule_upgrade"]) for row in reviews)
+        eligible = sum(
+            bool(row["eligible_for_rule_upgrade"])
+            and row["calibration_state"] == "valid"
+            and row["contamination_status"] == "clean"
+            for row in reviews
+        )
 
         def rate(
             numerator: int,
