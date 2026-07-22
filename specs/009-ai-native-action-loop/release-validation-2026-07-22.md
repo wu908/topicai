@@ -96,3 +96,11 @@ No real-user experiment data exists yet. E1-E4 remain hypotheses and must not be
 ## Decision
 
 The intent-driven MVP vertical slice is suitable for controlled local user validation after rendered QA. It is not yet suitable for a claim of full Spec 009 completion or production-grade autonomous operation.
+
+## Phase 12 Recovery Addendum
+
+Phase 12 adds local draft recovery and verifies deterministic fallback after model timeout or malformed structured output. The current evidence and blockers are maintained in `phase-12-release-matrix.md`.
+
+The rendered release pass also exposed and fixed concurrent `NextBestAction` creation during overlapping project-list and calibration requests. Creation is now transactional and conflict-safe, with regression coverage that rejects duplicate actions, events and orphan traces.
+
+This does not close the release matrix. The starter entry flow, full growth publication-to-learning journey, and v2 deletion/cascade contract remain missing product capabilities.

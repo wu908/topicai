@@ -270,16 +270,19 @@ export default function ContentPage() {
           : <StageAction workspace={workspace} busy={busy} runCommand={runCommand} />}
         onBack={() => navigate('/content')}
         onRefresh={() => void load()}
-        onSaveVersion={(title, bodyText) =>
-          runCommand(() =>
-            createContentVersion(workspace.project.id, {
+        onSaveVersion={async (title, bodyText) => {
+          let saved = false;
+          await runCommand(async () => {
+            await createContentVersion(workspace.project.id, {
               title,
               body_text: bodyText,
               expected_project_version: workspace.project.version,
               idempotency_key: makeKey('workspace-version'),
-            }),
-          )
-        }
+            });
+            saved = true;
+          });
+          return saved;
+        }}
         onTransition={handleTransition}
         onProposeRule={(observation) => void runCommand(() => proposeRuleCandidate(observation.id, {
           expected_creator_state_version: workspace.creator_state?.version ?? workspace.project.creator_state_version,

@@ -368,8 +368,9 @@ class ActionResponseService:
 
 
 class HumanGateService:
-    def __init__(self, db: Any):
+    def __init__(self, db: Any, llm: LLMClient | None = None):
         self.db = db
+        self.llm = llm
 
     async def ensure_for_action(
         self,
@@ -451,7 +452,7 @@ class HumanGateService:
                         idempotency_key=f"gate:{gate_id}:evidence-confirm",
                     ),
                 )
-                response_service = ActionResponseService(self.db)
+                response_service = ActionResponseService(self.db, llm=self.llm)
                 candidate = await response_service._prepare_candidate(
                     owner,
                     action,

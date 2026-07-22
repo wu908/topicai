@@ -1,5 +1,6 @@
 """Service contracts for manual publication and judgment calibration."""
 
+import asyncio
 import json
 
 import pytest
@@ -156,6 +157,93 @@ async def test_today_prioritizes_review_over_the_most_recent_early_draft(seeded_
 
     assert today["action"]["project_id"] == review_project["id"]
     assert today["action"]["action_type"] == "review_result"
+
+
+@pytest.mark.asyncio
+async def test_concurrent_project_action_creation_is_idempotent(seeded_db):
+    project, _ = await ContentProjectService(seeded_db).create(
+        "u1",
+        ContentProjectCreate(
+            title="A concurrent project load",
+            target_audience="Xiaohongshu knowledge creators",
+            idempotency_key="concurrent-action-project",
+        ),
+    )
+
+    actions = await asyncio.gather(
+        *(
+            IntentOrchestratorService(seeded_db).ensure_project_action("u1", project["id"])
+            for _ in range(8)
+        )
+    )
+
+    assert len({action["id"] for action in actions}) == 1
+    action_id = actions[0]["id"]
+    persisted_actions = await seeded_db.fetch_all(
+        "SELECT id,ai_trace_id FROM next_best_actions WHERE owner_user_id=:owner "
+        "AND project_id=:project",
+        {"owner": "u1", "project": project["id"]},
+    )
+    assert persisted_actions == [
+        {"id": action_id, "ai_trace_id": actions[0]["ai_trace_id"]}
+    ]
+    events = await seeded_db.fetch_all(
+        "SELECT action_id FROM action_events WHERE owner_user_id=:owner "
+        "AND project_id=:project AND event_type='proposed'",
+        {"owner": "u1", "project": project["id"]},
+    )
+    assert events == [{"action_id": action_id}]
+    traces = await seeded_db.fetch_all(
+        "SELECT id FROM ai_traces_v2 WHERE owner_user_id=:owner "
+        "AND task_type='next_best_action'",
+        {"owner": "u1"},
+    )
+    assert traces == [{"id": actions[0]["ai_trace_id"]}]
+
+
+@pytest.mark.asyncio
+async def test_concurrent_opportunity_action_creation_is_idempotent(seeded_db):
+    opportunity = {
+        "id": "opportunity-concurrent",
+        "version": 1,
+        "content_intent": "record",
+        "proposed_title": "Continue a confirmed series",
+        "proposed_rationale": "A confirmed series has enough evidence for one next step.",
+        "evidence_refs_json": '["creator-series:series-1"]',
+        "unknown_refs_json": "[]",
+    }
+
+    actions = await asyncio.gather(
+        *(
+            IntentOrchestratorService(seeded_db)._ensure_opportunity_action(
+                "u1", opportunity
+            )
+            for _ in range(8)
+        )
+    )
+
+    assert len({action["id"] for action in actions}) == 1
+    action_id = actions[0]["id"]
+    persisted_actions = await seeded_db.fetch_all(
+        "SELECT id,ai_trace_id FROM next_best_actions WHERE owner_user_id=:owner "
+        "AND project_id IS NULL",
+        {"owner": "u1"},
+    )
+    assert persisted_actions == [
+        {"id": action_id, "ai_trace_id": actions[0]["ai_trace_id"]}
+    ]
+    events = await seeded_db.fetch_all(
+        "SELECT action_id FROM action_events WHERE owner_user_id=:owner "
+        "AND project_id IS NULL AND event_type='proposed'",
+        {"owner": "u1"},
+    )
+    assert events == [{"action_id": action_id}]
+    traces = await seeded_db.fetch_all(
+        "SELECT id FROM ai_traces_v2 WHERE owner_user_id=:owner "
+        "AND task_type='next_best_action'",
+        {"owner": "u1"},
+    )
+    assert traces == [{"id": actions[0]["ai_trace_id"]}]
 
 
 def test_today_priority_always_prefers_an_active_action_over_a_deferred_one():

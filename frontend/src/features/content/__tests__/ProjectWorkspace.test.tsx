@@ -1,7 +1,8 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CalibrationWorkspace } from '@/types/contracts/v2/content';
 import ProjectWorkspace from '../ProjectWorkspace';
+import { projectDraftKey } from '../projectDraft';
 
 const workspace: CalibrationWorkspace = {
   project: {
@@ -42,7 +43,7 @@ const workspace: CalibrationWorkspace = {
 };
 
 const renderWorkspace = (overrides: Partial<CalibrationWorkspace> = {}) => {
-  const onSaveVersion = vi.fn().mockResolvedValue(undefined);
+  const onSaveVersion = vi.fn().mockResolvedValue(true);
   const onTransition = vi.fn();
   render(
     <ProjectWorkspace
@@ -59,6 +60,15 @@ const renderWorkspace = (overrides: Partial<CalibrationWorkspace> = {}) => {
 };
 
 describe('ProjectWorkspace', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(true);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('anchors the editor in project evidence and keeps the current stage action available', () => {
     renderWorkspace();
 
@@ -85,6 +95,55 @@ describe('ProjectWorkspace', () => {
         '第一版真实经验',
         '补充一段新的真实经历，并说明这次具体做了什么。',
       );
+    });
+  });
+
+  it('offers an unsaved local draft and restores it only after confirmation', () => {
+    localStorage.setItem(projectDraftKey('p1', 'v1'), JSON.stringify({
+      projectId: 'p1',
+      baseVersionId: 'v1',
+      title: '离线修改的标题',
+      bodyText: '离线修改后尚未提交的正文。',
+      savedAt: '2026-07-22T08:00:00Z',
+    }));
+
+    renderWorkspace();
+
+    expect(screen.getByText('发现这篇内容尚未保存的本地草稿')).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: '当前内容标题' })).toHaveValue('第一版真实经验');
+    fireEvent.click(screen.getByRole('button', { name: '恢复' }));
+    expect(screen.getByRole('textbox', { name: '当前内容标题' })).toHaveValue('离线修改的标题');
+    expect(screen.getByRole('textbox', { name: '当前内容正文' })).toHaveValue('离线修改后尚未提交的正文。');
+  });
+
+  it('persists edits locally and removes the draft after a successful server save', async () => {
+    const { onSaveVersion } = renderWorkspace();
+    fireEvent.change(screen.getByRole('textbox', { name: '当前内容正文' }), {
+      target: { value: '这段修改会先进入本地恢复草稿，再创建新的服务端版本。' },
+    });
+
+    await waitFor(() => {
+      expect(localStorage.getItem(projectDraftKey('p1', 'v1'))).not.toBeNull();
+    });
+    fireEvent.click(screen.getByRole('button', { name: '保存修改' }));
+
+    await waitFor(() => {
+      expect(onSaveVersion).toHaveBeenCalled();
+      expect(localStorage.getItem(projectDraftKey('p1', 'v1'))).toBeNull();
+    });
+  });
+
+  it('keeps editing available offline and defers the server save', async () => {
+    vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
+    renderWorkspace();
+    fireEvent.change(screen.getByRole('textbox', { name: '当前内容正文' }), {
+      target: { value: '断网期间继续补充的真实经历。' },
+    });
+
+    expect(screen.getByText('当前离线，修改已保存在此设备')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '保存修改' })).toBeDisabled();
+    await waitFor(() => {
+      expect(localStorage.getItem(projectDraftKey('p1', 'v1'))).toContain('断网期间继续补充的真实经历');
     });
   });
 

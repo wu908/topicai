@@ -20,7 +20,7 @@ async function login(page: Page) {
 }
 
 test.describe('intent-driven MVP', () => {
-  test('share idea becomes a confirmed candidate and stops before publishing', async ({ page }) => {
+  test('share idea becomes a confirmed candidate and stops before publishing', async ({ page, context }) => {
     await login(page);
     await page.goto('/content');
 
@@ -62,6 +62,19 @@ test.describe('intent-driven MVP', () => {
     await expect(page.getByRole('heading', { name: '发布后，把笔记链接留在这里' }).first()).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText('系统不会替你发布。记录真实发布时间后，AI 才能安排复盘。').first()).toBeVisible();
     await expect(page.getByRole('button', { name: '确认已发布' })).toBeVisible();
+
+    const offlineBody = '断网期间补充的真实经历，恢复网络后仍应由我确认是否保存。';
+    await context.setOffline(true);
+    await page.getByRole('textbox', { name: '当前内容正文' }).fill(offlineBody);
+    await expect(page.getByText('当前离线，修改已保存在此设备')).toBeVisible();
+    await expect(page.getByRole('button', { name: '保存修改' })).toBeDisabled();
+    await page.waitForTimeout(350);
+
+    await context.setOffline(false);
+    await page.reload();
+    await expect(page.getByText('发现这篇内容尚未保存的本地草稿')).toBeVisible({ timeout: 15_000 });
+    await page.getByRole('button', { name: '恢复' }).click();
+    await expect(page.getByRole('textbox', { name: '当前内容正文' })).toHaveValue(offlineBody);
   });
 
   test('mobile navigation exposes the same five-node product', async ({ page }) => {
