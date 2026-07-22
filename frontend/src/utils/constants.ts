@@ -5,7 +5,7 @@
 /** Application metadata */
 export const APP_NAME = 'TopicAI';
 export const APP_VERSION = '4.0.0';
-export const APP_SUBTITLE = '智能选题推荐Agent';
+export const APP_SUBTITLE = '小红书内容操作系统';
 
 /** API configuration */
 export const API_PREFIX = '/api/v1';
