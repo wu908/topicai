@@ -93,3 +93,12 @@ The feature is not complete until all P1 tasks are green, synthetic logic scenar
 - The export is owner-scoped and omits all action payloads, raw content, material content, email, credentials, API keys, and platform tokens. User identifiers are domain-separated SHA-256 pseudonyms.
 - Every rate includes numerator, denominator, a half-open UTC window, and explicit zero/missing-data handling. Calibration output separately reports valid-clean reviews, contamination, upgrade eligibility, observation states, and rule-version states.
 - These changes make E1-E4 measurable; they do not supply real-user samples or prove any experiment hypothesis. T049 and T050 remain open.
+
+## Phase 12 release-matrix progress (2026-07-22)
+
+- `phase-12-release-matrix.md` maps every T049/T050 journey to executable evidence and keeps missing capabilities blocked.
+- The production HumanGate path now receives the optional model used for evidence-bound candidate generation; model timeout and malformed output preserve confirmed user input and fall back to a reviewable deterministic candidate.
+- The content workspace persists unsaved edits per project and base version, blocks server saves while offline, protects navigation, and requires explicit recovery or discard after reload.
+- Concurrent project and calibration reads now converge on one persisted `NextBestAction`, proposed event and referenced AI trace instead of racing on the idempotency index.
+- T049 remains open because the starter assessment/direction/sprint flow does not exist and the growth journey does not yet reach confirmed post-publication learning.
+- T050 remains open because evidence revocation is covered but v2 entity deletion and cascade guarantees are not implemented.

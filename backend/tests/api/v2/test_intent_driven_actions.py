@@ -3,6 +3,9 @@
 import pytest
 from sqlalchemy import text
 
+from app.models.v2.intent_actions import HumanGateDecision
+from app.services.intent_actions import HumanGateService
+
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
@@ -410,3 +413,67 @@ async def test_revoked_evidence_blocks_candidate_lock(client):
         },
     )
     assert locked.status_code == 400
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("generation_error", [TimeoutError("model timeout"), ValueError("malformed output")])
+async def test_model_failure_after_fact_confirmation_preserves_input_and_uses_fallback(
+    client,
+    test_db,
+    generation_error,
+):
+    class FailingLLM:
+        @staticmethod
+        def is_available(capability):
+            return capability == "text"
+
+        @staticmethod
+        def generate_structured(*args, **kwargs):
+            raise generation_error
+
+    created = await client.post(
+        "/api/v2/projects",
+        json={
+            "title": "模型失败时保留真实经历",
+            "content_intent": "share",
+            "idempotency_key": f"failure-project-{type(generation_error).__name__}",
+        },
+    )
+    project = created.json()["data"]
+    confirmed = await client.post(
+        f"/api/v2/projects/{project['id']}/intent:confirm",
+        json={
+            "content_intent": "share",
+            "audience_change": "让读者理解一次真实调整",
+            "expected_project_version": project["version"],
+            "idempotency_key": f"failure-intent-{type(generation_error).__name__}",
+        },
+    )
+    question = confirmed.json()["data"]["next_action"]
+    answer = "连续三周没有更新后，我删掉了追热点步骤，只记录亲自验证的变化。"
+    responded = await client.post(
+        f"/api/v2/actions/{question['id']}:respond",
+        json={
+            "decision": "accept",
+            "response_payload": {"answer": answer},
+            "expected_action_version": question["version"],
+            "idempotency_key": f"failure-answer-{type(generation_error).__name__}",
+        },
+    )
+    gate = responded.json()["data"]["action"]["human_gate"]
+
+    result, replayed = await HumanGateService(test_db, llm=FailingLLM()).decide(
+        "u1",
+        gate["id"],
+        HumanGateDecision(
+            decision="confirm",
+            decision_payload={"evidence_confirmed": True},
+            expected_gate_version=gate["version"],
+            idempotency_key=f"failure-gate-{type(generation_error).__name__}",
+        ),
+    )
+
+    assert replayed is False
+    assert answer in result["candidate_version"]["body_text"]
+    assert "请在发布前补充并确认具体细节" in result["candidate_version"]["body_text"]
+    assert result["next_action"]["action_type"] == "review_candidate"

@@ -35,6 +35,17 @@ def _created_or_replayed(response: Response, result, replayed: bool):
     )
 
 
+def _optional_llm() -> LLMClient | None:
+    try:
+        from config.settings import get_settings
+
+        if get_settings().environment != "test":
+            return LLMClient()
+    except Exception:
+        pass
+    return None
+
+
 @router.get("/today")
 async def get_today_action(
     user=Depends(get_current_user),
@@ -121,15 +132,7 @@ async def respond_to_action(
     user=Depends(get_current_user),
     db: Database = Depends(get_db),
 ):
-    llm = None
-    try:
-        from config.settings import get_settings
-
-        if get_settings().environment != "test":
-            llm = LLMClient()
-    except Exception:
-        llm = None
-    result, replayed = await ActionResponseService(db, llm=llm).respond(
+    result, replayed = await ActionResponseService(db, llm=_optional_llm()).respond(
         user["id"], action_id, body
     )
     return _created_or_replayed(response, result, replayed)
@@ -169,5 +172,7 @@ async def decide_human_gate(
     user=Depends(get_current_user),
     db: Database = Depends(get_db),
 ):
-    result, replayed = await HumanGateService(db).decide(user["id"], gate_id, body)
+    result, replayed = await HumanGateService(db, llm=_optional_llm()).decide(
+        user["id"], gate_id, body
+    )
     return _created_or_replayed(response, result, replayed)

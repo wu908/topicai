@@ -1,4 +1,5 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
+import { Alert, Button, Stack } from '@mui/material';
 import {
   ArrowBack,
   AutoAwesomeOutlined,
@@ -27,6 +28,12 @@ import ReviewSummary from './ReviewSummary';
 import ObservationList from './ObservationList';
 import ViewpointPanel from './ViewpointPanel';
 import SeriesPanel from './SeriesPanel';
+import {
+  readProjectDraft,
+  removeProjectDraft,
+  writeProjectDraft,
+  type ProjectDraft,
+} from './projectDraft';
 
 interface ProjectWorkspaceProps {
   workspace: CalibrationWorkspace;
@@ -34,7 +41,7 @@ interface ProjectWorkspaceProps {
   actionPanel: ReactNode;
   onBack: () => void;
   onRefresh: () => void;
-  onSaveVersion: (title: string, bodyText: string) => Promise<void>;
+  onSaveVersion: (title: string, bodyText: string) => Promise<boolean>;
   onTransition: (observation: Observation, status: ObservationStatus, reason: string) => void;
   onProposeRule?: (observation: Observation) => void;
   onDecideRule?: (version: CreatorRuleVersion, decision: 'confirm' | 'reject') => void;
@@ -203,12 +210,79 @@ export default function ProjectWorkspace({
   onOpenOpportunityProject,
 }: ProjectWorkspaceProps) {
   const version = workspace.current_version;
+  const baseVersionId = version?.id ?? null;
+  const baseTitle = version?.title ?? workspace.project.title;
+  const baseBodyText = version?.body_text ?? '';
   const hypothesis = workspace.publish_hypothesis;
   const latestObservation = workspace.observations[0];
-  const [title, setTitle] = useState(version?.title ?? workspace.project.title);
-  const [bodyText, setBodyText] = useState(version?.body_text ?? '');
+  const [title, setTitle] = useState(baseTitle);
+  const [bodyText, setBodyText] = useState(baseBodyText);
+  const [recoveryDraft, setRecoveryDraft] = useState<ProjectDraft | null>(() =>
+    readProjectDraft(workspace.project.id, baseVersionId));
+  const [isOnline, setIsOnline] = useState(() => navigator.onLine);
   const [acceptedSuggestions, setAcceptedSuggestions] = useState<string[]>([]);
   const [rejectedSuggestions, setRejectedSuggestions] = useState<string[]>([]);
+
+  const hasUnsavedChanges = title !== baseTitle || bodyText !== baseBodyText;
+
+  useEffect(() => {
+    if (recoveryDraft) return undefined;
+    const timer = window.setTimeout(() => {
+      if (hasUnsavedChanges) {
+        writeProjectDraft({
+          projectId: workspace.project.id,
+          baseVersionId,
+          title,
+          bodyText,
+          savedAt: new Date().toISOString(),
+        });
+      } else {
+        removeProjectDraft(workspace.project.id, baseVersionId);
+      }
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [baseVersionId, bodyText, hasUnsavedChanges, recoveryDraft, title, workspace.project.id]);
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!hasUnsavedChanges) return undefined;
+    const protectDraft = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', protectDraft);
+    return () => window.removeEventListener('beforeunload', protectDraft);
+  }, [hasUnsavedChanges]);
+
+  const restoreDraft = () => {
+    if (!recoveryDraft) return;
+    setTitle(recoveryDraft.title);
+    setBodyText(recoveryDraft.bodyText);
+    setRecoveryDraft(null);
+  };
+
+  const discardDraft = () => {
+    removeProjectDraft(workspace.project.id, baseVersionId);
+    setRecoveryDraft(null);
+  };
+
+  const saveVersion = async () => {
+    const saved = await onSaveVersion(title.trim(), bodyText.trim());
+    if (saved) {
+      removeProjectDraft(workspace.project.id, baseVersionId);
+      setRecoveryDraft(null);
+    }
+  };
 
   const suggestions: Array<{ id: string; title: string; body: string; source: string }> = [];
   if (!bodyText.trim() || bodyText.trim().length < 80) {
@@ -345,6 +419,22 @@ export default function ProjectWorkspace({
           </div>
 
           {version ? <>
+          {recoveryDraft ? (
+            <Alert
+              severity="warning"
+              action={(
+                <Stack direction="row" spacing={0.5}>
+                  <Button color="inherit" size="small" onClick={restoreDraft}>恢复</Button>
+                  <Button color="inherit" size="small" onClick={discardDraft}>丢弃</Button>
+                </Stack>
+              )}
+            >
+              发现这篇内容尚未保存的本地草稿
+            </Alert>
+          ) : null}
+          {!isOnline && hasUnsavedChanges ? (
+            <Alert severity="info">当前离线，修改已保存在此设备</Alert>
+          ) : null}
           <section className="editor-section">
             <div className="editor-section-heading">
               <span className="editor-section-number">1.</span>
@@ -390,8 +480,8 @@ export default function ProjectWorkspace({
               <button
                 className="workspace-primary-button workspace-small-button"
                 type="button"
-                disabled={busy || !title.trim() || !bodyText.trim()}
-                onClick={() => void onSaveVersion(title.trim(), bodyText.trim())}
+                disabled={busy || !isOnline || !title.trim() || !bodyText.trim()}
+                onClick={() => void saveVersion()}
               >
                 <SaveOutlined fontSize="small" />
                 保存修改

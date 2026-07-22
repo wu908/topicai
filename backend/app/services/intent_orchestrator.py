@@ -314,7 +314,6 @@ class IntentOrchestratorService:
                 {"now": now(), "id": current["id"], "owner": owner_user_id},
             )
 
-        action_id = str(uuid.uuid4())
         spec = self._action_spec(action_type, project)
         genome_refs = [
             item["source_ref"]
@@ -326,32 +325,30 @@ class IntentOrchestratorService:
             ]
         ]
         evidence_refs = list(dict.fromkeys([*spec["evidence_refs"], *genome_refs]))
-        timestamp = now()
-        expires = (datetime.now(UTC) + timedelta(days=7)).isoformat().replace("+00:00", "Z")
-        trace_id = await self._create_trace(
-            owner_user_id,
-            project,
-            action_id,
-            action_type,
-            content_genome,
-        )
         expected_change = {
             **spec["expected_state_change"],
             "based_on_project_version": project["version"] if project else None,
             "content_genome_fingerprint": content_genome["fingerprint"],
             "content_genome_context_refs": genome_refs,
         }
-        key = (
+        base_key = (
             f"orchestrator:{project_id or 'today'}:{action_type}:"
             f"{project['version'] if project else 1}:{content_genome['fingerprint'][:12]}"
         )
-        key_owner = await self.db.fetch_one(
+        key = base_key
+        retry_number = 0
+        while await self.db.fetch_one(
             "SELECT id FROM next_best_actions WHERE owner_user_id=:owner "
             "AND idempotency_key=:key",
             {"owner": owner_user_id, "key": key},
-        )
-        if key_owner:
-            key = f"{key}:retry:{uuid.uuid4()}"
+        ):
+            retry_number += 1
+            key = f"{base_key}:retry:{retry_number}"
+
+        action_id = str(uuid.uuid4())
+        trace_id = str(uuid.uuid4())
+        timestamp = now()
+        expires = (datetime.now(UTC) + timedelta(days=7)).isoformat().replace("+00:00", "Z")
         payload = {
             "owner": owner_user_id,
             "project": project_id,
@@ -367,36 +364,83 @@ class IntentOrchestratorService:
             "gate": spec["human_gate"],
             "fallback": spec["fallback_action"],
         }
-        await self.db.execute(
-            "INSERT INTO next_best_actions (id,owner_user_id,project_id,action_type,"
-            "content_intent,title,reason,evidence_refs_json,unknown_refs_json,"
-            "expected_state_change_json,estimated_effort_minutes,automation_level,"
-            "human_gate_type,fallback_action_json,status,ai_trace_id,expires_at,version,"
-            "idempotency_key,request_hash,created_at,updated_at) VALUES "
-            "(:id,:owner,:project,:action_type,:content_intent,:title,:reason,:evidence,"
-            ":unknown,:change,:effort,:automation,:gate,:fallback,'proposed',:trace,"
-            ":expires,1,:key,:hash,:now,:now)",
-            {
-                "id": action_id,
-                **payload,
-                "evidence": json.dumps(payload["evidence"], ensure_ascii=False),
-                "unknown": json.dumps(payload["unknown"], ensure_ascii=False),
-                "change": json.dumps(payload["change"], ensure_ascii=False),
-                "fallback": json.dumps(payload["fallback"], ensure_ascii=False),
-                "trace": trace_id,
-                "expires": expires,
-                "key": key,
-                "hash": request_hash(payload),
-                "now": timestamp,
-            },
-        )
-        await self._insert_event(
-            owner_user_id, action_id, project_id, "proposed", None, "proposed", 1,
-            f"{key}:proposed", {"source": "deterministic_orchestrator"},
-        )
-        created = await self.db.fetch_one(
-            "SELECT * FROM next_best_actions WHERE id=:id", {"id": action_id}
-        )
+        action_params = {
+            "id": action_id,
+            **payload,
+            "evidence": json.dumps(payload["evidence"], ensure_ascii=False),
+            "unknown": json.dumps(payload["unknown"], ensure_ascii=False),
+            "change": json.dumps(payload["change"], ensure_ascii=False),
+            "fallback": json.dumps(payload["fallback"], ensure_ascii=False),
+            "trace": trace_id,
+            "expires": expires,
+            "key": key,
+            "hash": request_hash(payload),
+            "now": timestamp,
+        }
+        session = await self.db.get_session()
+        async with session:
+            async with session.begin():
+                await self._create_trace(
+                    session,
+                    owner_user_id,
+                    project,
+                    action_id,
+                    action_type,
+                    content_genome,
+                    trace_id,
+                )
+                inserted = await session.execute(
+                    text(
+                        "INSERT INTO next_best_actions (id,owner_user_id,project_id,action_type,"
+                        "content_intent,title,reason,evidence_refs_json,unknown_refs_json,"
+                        "expected_state_change_json,estimated_effort_minutes,automation_level,"
+                        "human_gate_type,fallback_action_json,status,ai_trace_id,expires_at,version,"
+                        "idempotency_key,request_hash,created_at,updated_at) VALUES "
+                        "(:id,:owner,:project,:action_type,:content_intent,:title,:reason,:evidence,"
+                        ":unknown,:change,:effort,:automation,:gate,:fallback,'proposed',:trace,"
+                        ":expires,1,:key,:hash,:now,:now) "
+                        "ON CONFLICT(owner_user_id,idempotency_key) DO NOTHING"
+                    ),
+                    action_params,
+                )
+                if inserted.rowcount == 1:
+                    event_payload = {"source": "deterministic_orchestrator"}
+                    await session.execute(
+                        text(
+                            "INSERT INTO action_events (id,owner_user_id,action_id,project_id,"
+                            "event_type,from_status,to_status,payload_json,action_version,"
+                            "idempotency_key,request_hash,created_at) VALUES "
+                            "(:id,:owner,:action,:project,'proposed',NULL,'proposed',:payload,"
+                            "1,:key,:hash,:now)"
+                        ),
+                        {
+                            "id": str(uuid.uuid4()),
+                            "owner": owner_user_id,
+                            "action": action_id,
+                            "project": project_id,
+                            "payload": json.dumps(event_payload, ensure_ascii=False),
+                            "key": f"{key}:proposed",
+                            "hash": request_hash(event_payload),
+                            "now": timestamp,
+                        },
+                    )
+                else:
+                    await session.execute(
+                        text(
+                            "DELETE FROM ai_traces_v2 WHERE id=:trace "
+                            "AND NOT EXISTS (SELECT 1 FROM next_best_actions WHERE ai_trace_id=:trace)"
+                        ),
+                        {"trace": trace_id},
+                    )
+                created = (
+                    await session.execute(
+                        text(
+                            "SELECT * FROM next_best_actions WHERE owner_user_id=:owner "
+                            "AND idempotency_key=:key"
+                        ),
+                        {"owner": owner_user_id, "key": key},
+                    )
+                ).mappings().first()
         return await self._normalize_with_gate(owner_user_id, created)
 
     def _action_spec(self, action_type: str, project: dict[str, Any] | None) -> dict[str, Any]:
@@ -429,13 +473,14 @@ class IntentOrchestratorService:
 
     async def _create_trace(
         self,
+        session: Any,
         owner: str,
         project: dict[str, Any] | None,
         action_id: str,
         action_type: str,
         content_genome: dict[str, Any],
+        trace_id: str,
     ) -> str:
-        trace_id = str(uuid.uuid4())
         genome_refs = [
             item["source_ref"]
             for item in [
@@ -458,14 +503,16 @@ class IntentOrchestratorService:
             actual_boundary.append("user_confirmed_viewpoints")
         if any(item.startswith("creator-series:") for item in genome_refs):
             actual_boundary.append("user_confirmed_series")
-        await self.db.execute(
-            "INSERT INTO ai_traces_v2 (id,owner_user_id,task_type,input_refs_json,"
-            "evidence_refs_json,policy_version,model_identifier,capability,"
-            "visibility_boundary_json,source_snapshot_ids_json,contamination_check_json,"
-            "calibration_state,limitations_json,output_ref,generated_at) VALUES "
-            "(:id,:owner,'next_best_action',:inputs,:evidence,'intent-orchestrator-v2',"
-            "NULL,'deterministic_fallback',:boundary,'[]',:check,'insufficient',"
-            ":limitations,:output,:now)",
+        await session.execute(
+            text(
+                "INSERT INTO ai_traces_v2 (id,owner_user_id,task_type,input_refs_json,"
+                "evidence_refs_json,policy_version,model_identifier,capability,"
+                "visibility_boundary_json,source_snapshot_ids_json,contamination_check_json,"
+                "calibration_state,limitations_json,output_ref,generated_at) VALUES "
+                "(:id,:owner,'next_best_action',:inputs,:evidence,'intent-orchestrator-v2',"
+                "NULL,'deterministic_fallback',:boundary,'[]',:check,'insufficient',"
+                ":limitations,:output,:now)"
+            ),
             {
                 "id": trace_id,
                 "owner": owner,
