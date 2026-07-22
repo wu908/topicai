@@ -491,7 +491,7 @@ class IntentOrchestratorService:
         audience = (project or {}).get("target_audience") or "目标读者尚未确认"
         project_id = (project or {}).get("id", "")
         specs = {
-            "create_project": ("说出你最近想做的一条内容", "现在还没有进行中的内容。先给 AI 一个模糊想法或真实经历。", [], ["content_seed"], 3, None, {"action_type": "create_project", "path": "/content"}),
+            "create_project": ("确定下一条内容从哪里开始", "有模糊想法可以直接创建；还不知道做什么，可以先盘点真实经历并完成三篇低成本实验。", [], ["content_seed"], 3, None, {"action_type": "create_project", "path": "/content"}),
             "confirm_intent": (f"确认这是一条“{config['label']}”内容吗？", "内容意图会决定 AI 接下来问什么、怎么组织内容以及发布后观察什么。", ["project:title", f"project:audience:{audience}"], ["confirmed_intent", "audience_change"], 2, "intent", {"action_type": "confirm_intent", "path": f"/content/{project_id}"}),
             "answer_key_question": (config["question"], "只补一个最关键的真实信息，AI 就能先准备候选内容，不需要你填写完整 Brief。", ["project:intent", "project:title"], ["first_party_evidence"], 5, "user_fact", {"action_type": "create_version", "path": f"/content/{project_id}"}),
             "review_candidate": ("确认候选内容是否准确表达了你", "发布前只需要确认事实、表达和公开范围；已确认内容不会被自动覆盖。", ["content:current_version", "project:intent"], ["fact_accuracy", "public_scope"], 8, "content_version", {"action_type": "lock_hypothesis", "path": f"/content/{project_id}"}),
