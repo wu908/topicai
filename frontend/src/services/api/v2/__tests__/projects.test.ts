@@ -17,6 +17,8 @@ import {
   getCalibrationWorkspace,
   getContentGenome,
   getProjectContentGenome,
+  getCreatorState,
+  listContentOpportunities,
   listProjects,
   lockPublishHypothesis,
   recordPublication,
@@ -36,6 +38,8 @@ describe('v2 content project API', () => {
     await getCalibrationWorkspace('p1');
     await getContentGenome({ content_intent: 'solve', audience: 'Creators' });
     await getProjectContentGenome('p1');
+    await getCreatorState();
+    await listContentOpportunities();
     await createProject({
       title: 'Project',
       primary_goal: 'stable_publish',
@@ -67,6 +71,8 @@ describe('v2 content project API', () => {
     expect(v2Client.get).toHaveBeenNthCalledWith(4, '/projects/p1/content-genome', {
       params: undefined,
     });
+    expect(v2Client.get).toHaveBeenNthCalledWith(5, '/creator-state');
+    expect(v2Client.get).toHaveBeenNthCalledWith(6, '/content-opportunities');
     expect(v2Client.post).toHaveBeenCalledWith('/projects', expect.any(Object));
     expect(v2Client.post).toHaveBeenCalledWith('/projects/p1/versions', expect.any(Object));
     expect(v2Client.post).toHaveBeenCalledWith(
