@@ -68,6 +68,14 @@ class ActionResponse(StrictModel):
     expected_action_version: int = Field(ge=1)
     idempotency_key: str = Field(min_length=1, max_length=200)
 
+    @model_validator(mode="after")
+    def require_rejection_reason(self):
+        if self.decision == "reject" and not str(
+            self.response_payload.get("reason", "")
+        ).strip():
+            raise ValueError("rejection reason is required")
+        return self
+
 
 class ActionLifecycleCommand(StrictModel):
     operation: Literal["fail", "expire", "cancel"]

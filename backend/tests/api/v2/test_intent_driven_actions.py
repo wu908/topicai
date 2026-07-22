@@ -843,6 +843,32 @@ async def test_model_failure_after_fact_confirmation_preserves_input_and_uses_fa
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("response_payload", [{}, {"reason": "   "}])
+async def test_rejecting_action_requires_reason(client, response_payload):
+    project = (
+        await client.post(
+            "/api/v2/projects",
+            json={"title": "reject reason", "idempotency_key": "reject-reason-project"},
+        )
+    ).json()["data"]
+    action = (
+        await client.get(f"/api/v2/projects/{project['id']}/next-action")
+    ).json()["data"]
+
+    response = await client.post(
+        f"/api/v2/actions/{action['id']}:respond",
+        json={
+            "decision": "reject",
+            "response_payload": response_payload,
+            "expected_action_version": action["version"],
+            "idempotency_key": "reject-without-reason",
+        },
+    )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_rejecting_action_keeps_cancelled_state_until_project_changes(client):
     project = (
         await client.post(
