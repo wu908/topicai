@@ -21,6 +21,18 @@ from app.models.v2.evidence import (
     EvidenceRevocation,
     EvidenceSourceType,
 )
+from app.models.v2.experiment_metrics import (
+    ActionFunnel,
+    ActionMetricsExport,
+    CalibrationQuality,
+    ExperimentAssignmentUpsert,
+    ExperimentId,
+    MetricsWindow,
+    MetricsFilter,
+    PrivacyBoundary,
+    RateMetric,
+    SafeActionEvent,
+)
 
 __all__ = [
     "BlindReviewCreate",
@@ -39,4 +51,14 @@ __all__ = [
     "EvidencePrivacyLevel",
     "EvidenceRevocation",
     "EvidenceSourceType",
+    "ActionFunnel",
+    "ActionMetricsExport",
+    "CalibrationQuality",
+    "ExperimentAssignmentUpsert",
+    "ExperimentId",
+    "MetricsWindow",
+    "MetricsFilter",
+    "PrivacyBoundary",
+    "RateMetric",
+    "SafeActionEvent",
 ]

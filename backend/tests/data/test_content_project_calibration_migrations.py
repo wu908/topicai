@@ -31,6 +31,7 @@ def test_content_project_calibration_schema_applies_and_replays(tmp_path):
     assert any(item.version == "024_creator_rule_resolutions" for item in first)
     assert any(item.version == "025_creator_viewpoints" for item in first)
     assert any(item.version == "026_creator_series" for item in first)
+    assert any(item.version == "028_action_experiment_metrics" for item in first)
 
     with sqlite3.connect(db_path) as conn:
         tables = _tables(conn)
@@ -59,6 +60,9 @@ def test_content_project_calibration_schema_applies_and_replays(tmp_path):
             "creator_viewpoint_events",
             "creator_series",
             "creator_series_events",
+            "experiments",
+            "experiment_assignments",
+            "experiment_assignment_events",
         } <= tables
         project_columns = {
             row[1] for row in conn.execute("PRAGMA table_info(content_projects)")
@@ -96,14 +100,28 @@ def test_intent_action_migration_upgrades_from_019_and_replays(tmp_path):
         "025_creator_viewpoints",
         "026_creator_series",
         "027_content_opportunities",
+        "028_action_experiment_metrics",
     ]
     assert replay == []
     with sqlite3.connect(db_path) as conn:
-        assert {"creator_states", "next_best_actions", "human_gates", "action_events", "evidence_items", "content_segments", "content_segment_decisions", "creator_rules", "creator_rule_versions", "creator_rule_events", "creator_rule_resolutions", "creator_viewpoints", "creator_viewpoint_events", "creator_series", "creator_series_events", "content_opportunities", "content_opportunity_events"} <= _tables(conn)
+        assert {"creator_states", "next_best_actions", "human_gates", "action_events", "evidence_items", "content_segments", "content_segment_decisions", "creator_rules", "creator_rule_versions", "creator_rule_events", "creator_rule_resolutions", "creator_viewpoints", "creator_viewpoint_events", "creator_series", "creator_series_events", "content_opportunities", "content_opportunity_events", "experiments", "experiment_assignments", "experiment_assignment_events"} <= _tables(conn)
         legacy_defaults = conn.execute(
             "SELECT sql FROM sqlite_master WHERE type='table' AND name='content_projects'"
         ).fetchone()[0]
         assert "content_intent" in legacy_defaults
+        event_columns = {
+            row[1] for row in conn.execute("PRAGMA table_info(action_events)")
+        }
+        assert {
+            "experiment_id",
+            "cohort",
+            "ai_trace_id",
+            "latency_ms",
+            "success",
+            "error_code",
+            "model_version",
+            "prompt_version",
+        } <= event_columns
 
 
 def test_publish_hypothesis_is_unique_per_project_version(tmp_path):

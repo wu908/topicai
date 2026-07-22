@@ -6,6 +6,7 @@ All database operations go through this module — no raw SQL elsewhere.
 
 import asyncio
 import logging
+import sqlite3
 from typing import Any
 
 from sqlalchemy import text
@@ -32,7 +33,9 @@ logger = logging.getLogger(__name__)
 def _split_sql_statements(sql: str) -> list[str]:
     """Split a multi-statement SQL blob into individual executable statements.
 
-    Strips SQL comments FIRST (whole-file), then splits on ``;``:
+    Strips SQL comments first, then uses SQLite's parser to identify complete
+    statements. This preserves compound statements such as triggers, whose
+    bodies legitimately contain semicolons.
 
     * Whole-line ``--`` comments are dropped.
     * Inline ``-- ...`` tails are stripped, but only when the ``--`` is NOT
@@ -66,10 +69,17 @@ def _split_sql_statements(sql: str) -> list[str]:
     without_comments = "\n".join(without_comments_lines)
 
     statements: list[str] = []
-    for block in without_comments.split(";"):
-        stmt = block.strip()
-        if stmt:
-            statements.append(stmt + ";")
+    buffer = ""
+    for character in without_comments:
+        buffer += character
+        if character == ";" and sqlite3.complete_statement(buffer):
+            stmt = buffer.strip()
+            if stmt:
+                statements.append(stmt)
+            buffer = ""
+    remainder = buffer.strip()
+    if remainder:
+        statements.append(remainder)
     return statements
 
 

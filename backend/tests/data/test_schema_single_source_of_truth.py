@@ -88,6 +88,9 @@ _EXPECTED_TABLES: frozenset[str] = frozenset(
         "creator_series_events",
         "content_opportunities",
         "content_opportunity_events",
+        "experiments",
+        "experiment_assignments",
+        "experiment_assignment_events",
     }
 )
 
@@ -251,7 +254,7 @@ class TestSingleSourceOfTruth:
 
         # Built-in / non-app tables that are legitimately referenced but
         # not owned by the app schema.
-        _ignore = {"sqlite_master", "schema_migrations", "dual"}
+        _ignore = {"sqlite_master", "schema_migrations", "dual", "json_each"}
         referenced -= _ignore
 
         # Tables the migrations create.
