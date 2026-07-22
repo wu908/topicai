@@ -254,7 +254,7 @@ class TestSingleSourceOfTruth:
 
         # Built-in / non-app tables that are legitimately referenced but
         # not owned by the app schema.
-        _ignore = {"sqlite_master", "schema_migrations", "dual"}
+        _ignore = {"sqlite_master", "schema_migrations", "dual", "json_each"}
         referenced -= _ignore
 
         # Tables the migrations create.

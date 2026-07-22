@@ -37,6 +37,8 @@ An action without an in-window offer is excluded from every funnel numerator, ev
 
 When experiment/cohort filters are present, calibration rows are limited to projects represented by offered actions in that filtered cohort. If no such projects exist, calibration denominators are zero and rates are `null`.
 
+Without experiment or cohort filters, calibration quality is owner-wide for the selected window. Reviews, observations, and rule versions always use the same scope; filtered rule versions must trace through their source observations to an in-scope project.
+
 ## Privacy Boundary
 
 The internal export includes only identifiers, enums, timestamps, state transitions, technical outcome fields, and aggregate counts. It never selects:

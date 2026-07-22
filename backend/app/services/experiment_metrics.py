@@ -24,7 +24,12 @@ class ExperimentAssignmentService:
         experiment_id: ExperimentId,
         body: ExperimentAssignmentUpsert,
     ) -> tuple[dict[str, Any], bool]:
-        digest = request_hash(body)
+        digest = request_hash(
+            {
+                "experiment_id": experiment_id.value,
+                "body": body.model_dump(mode="json"),
+            }
+        )
         session = await self.db.get_session()
         async with session:
             async with session.begin():
@@ -360,13 +365,21 @@ class ExperimentMetricsService:
             "end": self._timestamp(end),
         }
         project_filter = ""
-        if project_ids:
+        rule_project_filter = ""
+        scoped_project_ids = project_ids if require_projects else []
+        if scoped_project_ids:
             placeholders = []
-            for index, project_id in enumerate(project_ids):
+            for index, project_id in enumerate(scoped_project_ids):
                 key = f"project_{index}"
                 params[key] = project_id
                 placeholders.append(f":{key}")
             project_filter = f" AND project_id IN ({','.join(placeholders)})"
+            rule_project_filter = (
+                " AND EXISTS (SELECT 1 FROM json_each(crv.source_observation_ids_json) source "
+                "JOIN observations scoped_observation ON scoped_observation.id=source.value "
+                "WHERE scoped_observation.owner_user_id=:owner AND "
+                f"scoped_observation.project_id IN ({','.join(placeholders)}))"
+            )
         reviews = await self.db.fetch_all(
             "SELECT calibration_state,contamination_status,eligible_for_rule_upgrade "
             "FROM blind_reviews WHERE owner_user_id=:owner AND created_at>=:start "
@@ -380,10 +393,10 @@ class ExperimentMetricsService:
             params,
         )
         rules = await self.db.fetch_all(
-            "SELECT status,COUNT(*) AS count FROM creator_rule_versions "
-            "WHERE owner_user_id=:owner AND created_at>=:start AND created_at<:end "
-            "GROUP BY status",
-            {"owner": owner, "start": self._timestamp(start), "end": self._timestamp(end)},
+            "SELECT crv.status,COUNT(*) AS count FROM creator_rule_versions crv "
+            "WHERE crv.owner_user_id=:owner AND crv.created_at>=:start "
+            f"AND crv.created_at<:end{rule_project_filter} GROUP BY crv.status",
+            params,
         )
         total = len(reviews)
         valid_clean = sum(

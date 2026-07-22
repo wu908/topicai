@@ -1,9 +1,12 @@
 """Contracts for privacy-safe MVP experiment instrumentation."""
 
 import json
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy import text
+
+from app.services.experiment_metrics import ExperimentMetricsService
 
 
 @pytest.mark.asyncio
@@ -231,3 +234,79 @@ async def test_invalid_exclusion_and_oversized_window_are_rejected(client):
         },
     )
     assert oversized.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_idempotency_key_cannot_replay_across_experiments(client):
+    body = {
+        "cohort": "control",
+        "status": "active",
+        "idempotency_key": "cross-experiment-key",
+    }
+    first = await client.put(
+        "/api/v2/internal/validation/experiments/E1/assignment", json=body
+    )
+    assert first.status_code == 201
+
+    conflicting = await client.put(
+        "/api/v2/internal/validation/experiments/E2/assignment", json=body
+    )
+    assert conflicting.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_calibration_scope_is_consistent_across_reviews_observations_and_rules():
+    class QueryRecorder:
+        def __init__(self):
+            self.queries = []
+
+        async def fetch_all(self, query, params):
+            self.queries.append((query, params))
+            return []
+
+    start = datetime(2026, 7, 1, tzinfo=UTC)
+    end = datetime(2026, 8, 1, tzinfo=UTC)
+
+    owner_wide = QueryRecorder()
+    await ExperimentMetricsService(owner_wide)._calibration(
+        "u1", ["p1"], start, end, require_projects=False
+    )
+    assert all("project_id IN" not in query for query, _ in owner_wide.queries)
+
+    experiment_scoped = QueryRecorder()
+    await ExperimentMetricsService(experiment_scoped)._calibration(
+        "u1", ["p1"], start, end, require_projects=True
+    )
+    assert len(experiment_scoped.queries) == 3
+    assert all("project_id IN" in query for query, _ in experiment_scoped.queries)
+    assert "json_each(crv.source_observation_ids_json)" in experiment_scoped.queries[2][0]
+
+
+@pytest.mark.asyncio
+async def test_project_scoped_calibration_query_executes_on_sqlite(client):
+    await client.put(
+        "/api/v2/internal/validation/experiments/E3/assignment",
+        json={
+            "cohort": "variant",
+            "status": "active",
+            "idempotency_key": "scoped-query-assignment",
+        },
+    )
+    project = (
+        await client.post(
+            "/api/v2/projects",
+            json={
+                "title": "Scoped metrics project",
+                "content_intent": "share",
+                "idempotency_key": "scoped-metrics-project",
+            },
+        )
+    ).json()["data"]
+    await client.get(f"/api/v2/projects/{project['id']}/next-action")
+
+    exported = await client.get(
+        "/api/v2/internal/validation/action-metrics",
+        params={"experiment_id": "E3", "cohort": "variant"},
+    )
+    assert exported.status_code == 200
+    assert exported.json()["data"]["action_funnel"]["offered"] == 1
