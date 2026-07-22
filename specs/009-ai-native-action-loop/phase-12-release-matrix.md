@@ -1,8 +1,8 @@
-# Phase 12-13 Action Protocol Release Matrix
+# Phase 12-14 Action Protocol Release Matrix
 
 **Date**: 2026-07-22
 
-**Status**: In progress; T049 and T050 remain open
+**Status**: In progress; T050 is complete and T049 remains open
 
 ## Decision
 
@@ -29,15 +29,15 @@ The existing `starter_sprint_id` column is an extension point, not a working sta
 | Offline editing and refresh | `ProjectWorkspace.test.tsx`; `intent-driven-loop.spec.ts` | Keep edits local, make no server save while offline, offer recovery after reload, and require user confirmation | Covered |
 | Version conflict | `test_stale_project_version_returns_typed_conflict`; candidate and rule version-conflict tests | Reject stale writes without overwriting the current version | Covered |
 | Revoked evidence | `test_revoked_evidence_blocks_candidate_lock` | Revoked evidence cannot lock an unpublished candidate | Covered |
-| Entity deletion | No v2 project/evidence deletion API or cascade contract exists | Delete or anonymize dependent actions, gates, traces and context without retaining user content | Blocked |
+| Entity deletion | `test_growth_creator_completes_confirmed_learning_loop`; `test_project_deletion_is_owner_scoped`; `phase-14-project-deletion.md` | Permanently remove owner-scoped project content, invalid derived context and orphan traces; retries do not disclose resource existence | Covered |
 | Calibration contamination | `test_contamination_invalidates_review_and_blocks_observation` | Mark review invalid and prevent observation/rule promotion | Covered |
 | Rule rollback | `test_creator_rule_requires_two_observations_and_supports_activation_and_rollback` | Restore the prior active version and preserve append-only history | Covered |
 
-T050 remains unchecked because revocation is not equivalent to deletion. The release gate requires a real v2 deletion contract and cascade test.
+T050 is complete. Every listed recovery journey now has executable evidence.
 
 ## Validation Evidence
 
-- Backend release matrix: 32 passed on Windows with Python 3.13, including the complete confirmed learning loop.
+- Backend release matrix: 33 passed on Windows with Python 3.13, including the complete confirmed learning and project-deletion loop.
 - Frontend Vitest: 357 passed and 2 skipped; lint and production build passed.
 - Intent-driven Playwright journey: 2 passed, including real browser offline recovery, publication-to-learning confirmation and the 390 x 844 mobile navigation check.
 - Rendered desktop QA reached the persisted next experiment without an application console error. The remaining console warnings are React Router v7 future-flag notices.
@@ -65,6 +65,5 @@ pnpm --dir frontend test:e2e -- intent-driven-loop.spec.ts
 
 ## Next Implementation Order
 
-1. Define v2 deletion scope, retention exceptions and cascade behavior before writing endpoints.
-2. Implement the bounded starter assessment and three-project experiment as an entry flow, not a second content lifecycle.
-3. Re-run this matrix and only then close T049/T050.
+1. Implement the bounded starter assessment and three-project experiment as an entry flow, not a second content lifecycle.
+2. Re-run this matrix and close T049 only after the starter journey uses the same action protocol.
