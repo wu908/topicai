@@ -84,7 +84,7 @@ class IntentOrchestratorService:
         return {"action": action, "creator_state": creator_state}
 
     @staticmethod
-    def _today_priority(action: dict[str, Any]) -> tuple[int, str, str]:
+    def _today_priority(action: dict[str, Any]) -> tuple[int, int, str, str]:
         context = action.get("expected_state_change", {})
         action_kind = (
             "series_opportunity"
@@ -92,9 +92,8 @@ class IntentOrchestratorService:
             else action["action_type"]
         )
         priority = TODAY_ACTION_PRIORITY.get(action_kind, 0)
-        if action.get("status") == "deferred":
-            priority -= 40
-        return priority, action.get("updated_at", ""), action["id"]
+        is_active = 0 if action.get("status") == "deferred" else 1
+        return is_active, priority, action.get("updated_at", ""), action["id"]
 
     async def _ensure_opportunity_action(
         self, owner_user_id: str, opportunity: dict[str, Any]
