@@ -3,13 +3,12 @@
  *
  * Covers:
  * 1. Renders the brand panel + form with 登录/注册 tabs
- * 2. Defaults to the login tab (no username/platform fields)
- * 3. Switching to 注册 tab reveals the username + platform fields
+ * 2. Defaults to the login tab (no username field)
+ * 3. Switching to 注册 tab reveals the username field
  * 4. Submitting the form calls login() with email + password
- * 5. Social-login buttons log a console warning (no navigation)
- * 6. Password show/hide toggles input type
+ * 5. Password show/hide toggles input type
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
@@ -34,9 +33,6 @@ vi.mock('@/store/authStore', () => ({
   }),
 }));
 
-// Silence the expected console.warn from the social-login stub.
-const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-
 import LoginPage from '../LoginPage';
 
 function renderPage() {
@@ -58,10 +54,6 @@ describe('LoginPage', () => {
     storeError = null;
   });
 
-  afterEach(() => {
-    warnSpy.mockClear();
-  });
-
   it('renders the brand panel and the login/register tabs', () => {
     renderPage();
     expect(screen.getByText('TopicAI')).toBeInTheDocument();
@@ -78,17 +70,16 @@ describe('LoginPage', () => {
     expect(screen.getByRole('button', { name: '登录' })).toBeInTheDocument();
   });
 
-  it('hides username and platform fields on the login tab', () => {
+  it('hides the username field on the login tab', () => {
     renderPage();
     expect(screen.queryByLabelText('姓名')).not.toBeInTheDocument();
-    expect(screen.queryByLabelText('你的主要创作平台')).not.toBeInTheDocument();
   });
 
-  it('switching to 注册 reveals username and platform fields', () => {
+  it('switching to 注册 reveals the username field without a multi-platform selector', () => {
     renderPage();
     fireEvent.click(screen.getByRole('tab', { name: '注册' }));
     expect(screen.getByLabelText('姓名')).toBeInTheDocument();
-    expect(screen.getByLabelText('你的主要创作平台')).toBeInTheDocument();
+    expect(screen.queryByLabelText('你的主要创作平台')).not.toBeInTheDocument();
   });
 
   it('switching to 注册 clears any prior error', () => {
@@ -127,9 +118,6 @@ describe('LoginPage', () => {
     fireEvent.change(screen.getByLabelText('姓名'), {
       target: { value: 'Alice' },
     });
-    // Pick a non-empty platform option.
-    const platformSelect = screen.getByLabelText('你的主要创作平台');
-    fireEvent.change(platformSelect, { target: { value: 'wechat-mp' } });
     fireEvent.change(screen.getByLabelText('密码'), {
       target: { value: 'hunter2hunter2' },
     });
@@ -159,12 +147,6 @@ describe('LoginPage', () => {
       expect(loginMock).toHaveBeenCalled();
     });
     expect(navigateMock).not.toHaveBeenCalled();
-  });
-
-  it('social-login buttons log a console warning', () => {
-    renderPage();
-    fireEvent.click(screen.getByRole('button', { name: /微信登录/ }));
-    expect(warnSpy).toHaveBeenCalled();
   });
 
   it('password show/hide toggle changes the input type', () => {
