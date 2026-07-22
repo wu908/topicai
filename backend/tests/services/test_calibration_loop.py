@@ -158,6 +158,27 @@ async def test_today_prioritizes_review_over_the_most_recent_early_draft(seeded_
     assert today["action"]["action_type"] == "review_result"
 
 
+def test_today_priority_always_prefers_an_active_action_over_a_deferred_one():
+    active = {
+        "id": "active",
+        "action_type": "create_project",
+        "status": "proposed",
+        "expected_state_change": {},
+        "updated_at": "2026-07-18T08:00:00Z",
+    }
+    deferred = {
+        "id": "deferred",
+        "action_type": "review_candidate",
+        "status": "deferred",
+        "expected_state_change": {},
+        "updated_at": "2026-07-21T08:00:00Z",
+    }
+
+    assert IntentOrchestratorService._today_priority(active) > (
+        IntentOrchestratorService._today_priority(deferred)
+    )
+
+
 @pytest.mark.asyncio
 async def test_clean_blind_review_creates_trace_and_provisional_observation(seeded_db):
     project, _, snapshot = await _published_with_snapshot(seeded_db)
