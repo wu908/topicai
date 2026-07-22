@@ -4,7 +4,7 @@
 
 - [ ] T001 Add v2 typed models for `CreatorState`, `ContentGenome`, `Evidence`, `NextBestAction`, `AITrace`, `HumanGate`, `ActionEvent`, and `Experiment`.
 - [x] T002 Add idempotency and optimistic-concurrency contracts for action lifecycle operations.
-- [ ] T003 Add migrations for state snapshots, evidence, actions, traces, gates, action events and experiments.
+- [x] T003 Add migrations for state snapshots, evidence, actions, traces, gates, action events and experiments.
 - [x] T004 Test fresh database migration, repeat migration, and upgrade from the 008 schema.
 - [ ] T005 Add owner-isolation and deletion/export coverage for every new entity.
 
@@ -13,7 +13,7 @@
 - [x] T006 Implement `CreatorStateService` with versioned snapshots and explicit uncertainty.
 - [x] T007 Implement deterministic action eligibility by project status, blocker, urgency, capacity and evidence readiness.
 - [x] T008 Implement action priority ordering and one-primary-action constraint.
-- [ ] T009 Implement `NextBestActionService` offer, accept, reject, execute, fail, expire and cancel operations.
+- [x] T009 Implement `NextBestActionService` offer, accept, reject, execute, fail, expire and cancel operations.
 - [x] T010 Enforce action idempotency and state-version checks in the service layer.
 - [ ] T011 Implement `AITraceService` and require traces for AI-generated actions.
 - [ ] T012 Implement `HumanGateService` for fact, version, publish, insight, privacy and deletion gates.
@@ -23,10 +23,10 @@
 ## Phase C - Today and project integration
 
 - [x] T015 Replace the Today primary task calculation with the action service while preserving the five-node navigation.
-- [ ] T016 Build the primary action card with reason, evidence, expected result, effort, expiry and fallback.
-- [ ] T017 Add accept, skip, reject-with-reason, pause and manual-continue UI states.
-- [ ] T018 Add action event instrumentation with experiment and cohort fields.
-- [ ] T019 Link project list recovery to pending and failed actions.
+- [x] T016 Build the primary action card with reason, evidence, expected result, effort, expiry and fallback.
+- [x] T017 Add accept, skip, reject-with-reason, pause and manual-continue UI states.
+- [x] T018 Add action event instrumentation with experiment and cohort fields.
+- [x] T019 Link project list recovery to pending and failed actions.
 - [x] T020 Add responsive and no-model UI tests for Today and action cards.
 
 ## Phase D - Evidence interview and creation
@@ -127,3 +127,23 @@ The feature is not complete until all P1 tasks are green, synthetic logic scenar
 - Selecting a direction idempotently creates exactly three linked projects. Every project enters the existing action protocol at `confirm_intent` and continues through the same evidence, candidate, publication and learning gates as growth projects.
 - Starter review requires at least one real publication and records only observed evidence, blockers and next experiments.
 - The Phase 12-15 backend release matrix passes `45` tests; the frontend suite passes `363` tests with `2` skipped, plus lint and production build. T049 and T050 are complete.
+
+## Phase 16 action-lifecycle progress (2026-07-22)
+
+- Added explicit rejected, failed, expired and cancelled action outcomes with idempotent, version-checked event records.
+- Failed and expired actions create a fresh recovery action; cancelled suggestions remain stopped until the project version changes.
+- Today now shows expected outcome and expiry, requires a reason to reject a suggestion, and preserves the manual path.
+- Existing phase-15 SQLite databases upgrade through migration 030 with indexes, experiment triggers and foreign keys restored.
+- Final validation: backend `779 passed`, `1 deselected`, `86.69%` coverage; frontend `364 passed`, `2 skipped`, plus lint and build.
+- T009, T016, T017 and T019 are complete. Remaining unchecked tasks still require a separate evidence audit or implementation.
+
+## Phase 17 completion-gate audit (2026-07-22)
+
+- Audited all 16 unchecked tasks against current models, migrations, services,
+  routes and executable tests.
+- T003 and T018 were stale checklist entries and are now closed with existing
+  migration-replay and metrics evidence.
+- Fourteen tasks remain open. They are grouped into contracts/provenance,
+  trust/privacy, synthetic scenarios and calibration completeness in
+  `phase-17-completion-gate-audit.md`.
+- Spec 009 is not complete and no unchecked item is represented as shipped.

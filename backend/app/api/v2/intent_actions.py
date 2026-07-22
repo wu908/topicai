@@ -7,6 +7,7 @@ from app.core.database import Database
 from app.core.llm import LLMClient
 from app.models.common import ApiResponse
 from app.models.v2.intent_actions import (
+    ActionLifecycleCommand,
     ActionResponse,
     AutomationPreference,
     HumanGateDecision,
@@ -133,6 +134,20 @@ async def respond_to_action(
     db: Database = Depends(get_db),
 ):
     result, replayed = await ActionResponseService(db, llm=_optional_llm()).respond(
+        user["id"], action_id, body
+    )
+    return _created_or_replayed(response, result, replayed)
+
+
+@router.post("/actions/{action_id}:transition", status_code=201)
+async def transition_action(
+    action_id: str,
+    body: ActionLifecycleCommand,
+    response: Response,
+    user=Depends(get_current_user),
+    db: Database = Depends(get_db),
+):
+    result, replayed = await ActionResponseService(db).transition(
         user["id"], action_id, body
     )
     return _created_or_replayed(response, result, replayed)

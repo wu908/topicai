@@ -65,7 +65,10 @@ CREATE TABLE IF NOT EXISTS next_best_actions (
     )),
     fallback_action_json TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'proposed'
-        CHECK (status IN ('proposed','accepted','deferred','completed','superseded')),
+        CHECK (status IN (
+            'proposed','accepted','deferred','completed','superseded',
+            'failed','expired','cancelled'
+        )),
     ai_trace_id TEXT,
     expires_at TEXT,
     version INTEGER NOT NULL DEFAULT 1 CHECK (version >= 1),
@@ -120,7 +123,8 @@ CREATE TABLE IF NOT EXISTS action_events (
     project_id TEXT,
     event_type TEXT NOT NULL CHECK (event_type IN (
         'proposed','accepted','deferred','manual_selected','completed','superseded',
-        'gate_confirmed','gate_rejected','fallback_used'
+        'gate_confirmed','gate_rejected','fallback_used',
+        'rejected','failed','expired','cancelled'
     )),
     from_status TEXT,
     to_status TEXT NOT NULL,

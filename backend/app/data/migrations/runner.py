@@ -171,10 +171,146 @@ def _post_step_003_effect_reviews(conn: sqlite3.Connection) -> None:
     )
 
 
+def _post_step_030_action_lifecycle(conn: sqlite3.Connection) -> None:
+    """Expand action status constraints for databases created before phase 16."""
+    action_sql_row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='next_best_actions'"
+    ).fetchone()
+    event_sql_row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='action_events'"
+    ).fetchone()
+    if not action_sql_row or not event_sql_row:
+        return
+    action_sql = action_sql_row[0]
+    event_sql = event_sql_row[0]
+    if "'failed','expired','cancelled'" in action_sql and "'rejected','failed'" in event_sql:
+        return
+
+    action_new = action_sql.replace(
+        "CREATE TABLE next_best_actions",
+        "CREATE TABLE next_best_actions_lifecycle_new",
+        1,
+    ).replace(
+        "'proposed','accepted','deferred','completed','superseded'",
+        "'proposed','accepted','deferred','completed','superseded','failed','expired','cancelled'",
+        1,
+    )
+    event_new = event_sql.replace(
+        "CREATE TABLE action_events",
+        "CREATE TABLE action_events_lifecycle_new",
+        1,
+    ).replace(
+        "'gate_confirmed','gate_rejected','fallback_used'",
+        "'gate_confirmed','gate_rejected','fallback_used','rejected','failed','expired','cancelled'",
+        1,
+    )
+    if action_new == action_sql or event_new == event_sql:
+        raise sqlite3.IntegrityError("action lifecycle constraints could not be expanded")
+
+    conn.commit()
+    conn.execute("PRAGMA foreign_keys=OFF")
+    try:
+        conn.execute("DROP TRIGGER IF EXISTS trg_next_best_actions_experiment_context")
+        conn.execute("DROP TRIGGER IF EXISTS trg_action_events_experiment_context")
+        for table, replacement_sql in (
+            ("next_best_actions", action_new),
+            ("action_events", event_new),
+        ):
+            new_table = f"{table}_lifecycle_new"
+            conn.execute(replacement_sql)
+            columns = [
+                row[1] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()
+            ]
+            column_list = ",".join(columns)
+            conn.execute(
+                f"INSERT INTO {new_table} ({column_list}) "
+                f"SELECT {column_list} FROM {table}"
+            )
+            conn.execute(f"DROP TABLE {table}")
+            conn.execute(f"ALTER TABLE {new_table} RENAME TO {table}")
+
+        conn.executescript(
+            """
+            CREATE UNIQUE INDEX uq_next_best_actions_owner_idempotency
+                ON next_best_actions(owner_user_id, idempotency_key);
+            CREATE INDEX idx_next_best_actions_owner_status
+                ON next_best_actions(owner_user_id, status, updated_at DESC);
+            CREATE INDEX idx_next_best_actions_project_status
+                ON next_best_actions(project_id, status, updated_at DESC);
+            CREATE UNIQUE INDEX uq_action_events_owner_idempotency
+                ON action_events(owner_user_id, idempotency_key);
+            CREATE INDEX idx_action_events_action_created
+                ON action_events(action_id, created_at);
+            CREATE INDEX idx_action_events_metrics_window
+                ON action_events(owner_user_id, created_at, experiment_id, cohort, event_type);
+            CREATE TRIGGER trg_next_best_actions_experiment_context
+            AFTER INSERT ON next_best_actions
+            WHEN NEW.experiment_id IS NULL
+            BEGIN
+                UPDATE next_best_actions
+                SET experiment_id = (
+                        SELECT experiment_id FROM experiment_assignments
+                        WHERE owner_user_id=NEW.owner_user_id AND status='active'
+                        ORDER BY activated_at DESC, assigned_at DESC LIMIT 1
+                    ),
+                    cohort = (
+                        SELECT cohort FROM experiment_assignments
+                        WHERE owner_user_id=NEW.owner_user_id AND status='active'
+                        ORDER BY activated_at DESC, assigned_at DESC LIMIT 1
+                    )
+                WHERE id=NEW.id;
+            END;
+            CREATE TRIGGER trg_action_events_experiment_context
+            AFTER INSERT ON action_events
+            BEGIN
+                UPDATE action_events
+                SET experiment_id = COALESCE(
+                        NEW.experiment_id,
+                        (SELECT experiment_id FROM next_best_actions WHERE id=NEW.action_id),
+                        (SELECT experiment_id FROM experiment_assignments
+                         WHERE owner_user_id=NEW.owner_user_id AND status='active'
+                         ORDER BY activated_at DESC, assigned_at DESC LIMIT 1)
+                    ),
+                    cohort = COALESCE(
+                        NEW.cohort,
+                        (SELECT cohort FROM next_best_actions WHERE id=NEW.action_id),
+                        (SELECT cohort FROM experiment_assignments
+                         WHERE owner_user_id=NEW.owner_user_id AND status='active'
+                         ORDER BY activated_at DESC, assigned_at DESC LIMIT 1)
+                    ),
+                    ai_trace_id = COALESCE(
+                        NEW.ai_trace_id,
+                        (SELECT ai_trace_id FROM next_best_actions WHERE id=NEW.action_id)
+                    ),
+                    model_version = COALESCE(
+                        NEW.model_version,
+                        (SELECT model_identifier FROM ai_traces_v2 WHERE id=(
+                            SELECT ai_trace_id FROM next_best_actions WHERE id=NEW.action_id
+                        ))
+                    ),
+                    prompt_version = COALESCE(
+                        NEW.prompt_version,
+                        (SELECT policy_version FROM ai_traces_v2 WHERE id=(
+                            SELECT ai_trace_id FROM next_best_actions WHERE id=NEW.action_id
+                        ))
+                    )
+                WHERE id=NEW.id;
+            END;
+            """
+        )
+        conn.commit()
+    finally:
+        conn.execute("PRAGMA foreign_keys=ON")
+    violations = conn.execute("PRAGMA foreign_key_check").fetchall()
+    if violations:
+        raise sqlite3.IntegrityError(f"action lifecycle migration broke foreign keys: {violations}")
+
+
 #: Migration stem -> post-step callable. Add an entry only when a
 #: migration needs Python-driven back-fill that pure SQL cannot express.
 MIGRATION_POST_STEPS: dict[str, PostStep] = {
     "003_effect_reviews": _post_step_003_effect_reviews,
+    "030_action_lifecycle": _post_step_030_action_lifecycle,
 }
 
 

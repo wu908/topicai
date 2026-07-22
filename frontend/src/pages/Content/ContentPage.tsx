@@ -272,7 +272,16 @@ export default function ContentPage() {
         key={workspace.current_version?.id ?? `project-${workspace.project.id}`}
         workspace={workspace}
         busy={busy}
-        actionPanel={workspace.orchestrated_action && (
+        actionPanel={workspace.orchestrated_action?.status === 'cancelled'
+          ? (
+            <Stack spacing={2}>
+              <Alert severity="info">
+                AI 已停止这条建议。你仍可使用下面的手动步骤；项目变化后，AI 会重新判断。
+              </Alert>
+              <StageAction workspace={workspace} busy={busy} runCommand={runCommand} />
+            </Stack>
+          )
+          : workspace.orchestrated_action && (
           ['confirm_intent', 'answer_key_question', 'review_candidate'].includes(workspace.orchestrated_action.action_type)
           || (workspace.orchestrated_action.action_type === 'confirm_learning' && workspace.next_action === 'create_observation')
         )

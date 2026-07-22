@@ -92,7 +92,7 @@ class IntentOrchestratorService:
             else action["action_type"]
         )
         priority = TODAY_ACTION_PRIORITY.get(action_kind, 0)
-        is_active = 0 if action.get("status") == "deferred" else 1
+        is_active = 0 if action.get("status") in {"deferred", "cancelled"} else 1
         return is_active, priority, action.get("updated_at", ""), action["id"]
 
     async def _ensure_opportunity_action(
@@ -104,6 +104,9 @@ class IntentOrchestratorService:
             "ORDER BY created_at DESC LIMIT 1",
             {"owner": owner_user_id},
         )
+        if current and self._is_expired(current):
+            await self._expire_action(owner_user_id, current)
+            current = None
         if current:
             expected = json.loads(current["expected_state_change_json"])
             if (
@@ -116,6 +119,20 @@ class IntentOrchestratorService:
                 "version=version+1 WHERE id=:id AND owner_user_id=:owner",
                 {"now": now(), "id": current["id"], "owner": owner_user_id},
             )
+
+        cancelled = await self.db.fetch_one(
+            "SELECT * FROM next_best_actions WHERE owner_user_id=:owner "
+            "AND project_id IS NULL "
+            "AND status='cancelled' ORDER BY updated_at DESC LIMIT 1",
+            {"owner": owner_user_id},
+        )
+        if cancelled:
+            expected = json.loads(cancelled["expected_state_change_json"])
+            if (
+                expected.get("opportunity_id") == opportunity["id"]
+                and expected.get("opportunity_version") == opportunity["version"]
+            ):
+                return await self._normalize_with_gate(owner_user_id, cancelled)
 
         action_id = str(uuid.uuid4())
         timestamp = now()
@@ -225,6 +242,59 @@ class IntentOrchestratorService:
                     )
                 ).mappings().first()
         return await self._normalize_with_gate(owner_user_id, created)
+
+    @staticmethod
+    def _is_expired(action: dict[str, Any]) -> bool:
+        if not action.get("expires_at"):
+            return False
+        expires_at = datetime.fromisoformat(action["expires_at"].replace("Z", "+00:00"))
+        return expires_at <= datetime.now(UTC)
+
+    async def _expire_action(self, owner: str, action: dict[str, Any]) -> None:
+        timestamp = now()
+        event_payload = {
+            "reason": "action_expired_before_completion",
+            "fallback_action": json.loads(action["fallback_action_json"]),
+        }
+        session = await self.db.get_session()
+        async with session:
+            async with session.begin():
+                updated = await session.execute(
+                    text(
+                        "UPDATE next_best_actions SET status='expired',updated_at=:now,"
+                        "version=version+1 WHERE id=:id AND owner_user_id=:owner "
+                        "AND version=:version AND status IN ('proposed','accepted','deferred')"
+                    ),
+                    {
+                        "now": timestamp,
+                        "id": action["id"],
+                        "owner": owner,
+                        "version": action["version"],
+                    },
+                )
+                if updated.rowcount != 1:
+                    return
+                await session.execute(
+                    text(
+                        "INSERT OR IGNORE INTO action_events "
+                        "(id,owner_user_id,action_id,project_id,event_type,from_status,"
+                        "to_status,payload_json,action_version,idempotency_key,request_hash,"
+                        "created_at) VALUES (:id,:owner,:action,:project,'expired',:from_status,"
+                        "'expired',:payload,:action_version,:key,:hash,:now)"
+                    ),
+                    {
+                        "id": str(uuid.uuid4()),
+                        "owner": owner,
+                        "action": action["id"],
+                        "project": action["project_id"],
+                        "from_status": action["status"],
+                        "payload": json.dumps(event_payload, ensure_ascii=False),
+                        "action_version": action["version"] + 1,
+                        "key": f"auto-expire:{action['id']}:{action['version']}",
+                        "hash": request_hash(event_payload),
+                        "now": timestamp,
+                    },
+                )
 
     async def _create_opportunity_trace(
         self,
@@ -342,6 +412,9 @@ class IntentOrchestratorService:
             "AND status IN ('proposed','accepted','deferred') ORDER BY created_at DESC LIMIT 1",
             {"owner": owner_user_id, "project": project_id},
         )
+        if current and self._is_expired(current):
+            await self._expire_action(owner_user_id, current)
+            current = None
         if current:
             expected = json.loads(current["expected_state_change_json"])
             based_on = expected.get("based_on_project_version")
@@ -355,6 +428,20 @@ class IntentOrchestratorService:
                 "version=version+1 WHERE id=:id AND owner_user_id=:owner",
                 {"now": now(), "id": current["id"], "owner": owner_user_id},
             )
+
+        cancelled = await self.db.fetch_one(
+            "SELECT * FROM next_best_actions WHERE owner_user_id=:owner "
+            "AND ((project_id=:project) OR (project_id IS NULL AND :project IS NULL)) "
+            "AND status='cancelled' ORDER BY updated_at DESC LIMIT 1",
+            {"owner": owner_user_id, "project": project_id},
+        )
+        if cancelled:
+            expected = json.loads(cancelled["expected_state_change_json"])
+            if cancelled["action_type"] == action_type and (
+                project is None
+                or expected.get("based_on_project_version") == project["version"]
+            ):
+                return await self._normalize_with_gate(owner_user_id, cancelled)
 
         spec = self._action_spec(action_type, project)
         genome_refs = [
@@ -589,6 +676,21 @@ class IntentOrchestratorService:
             {"action": result["id"], "owner": owner},
         )
         result["human_gate"] = self._normalize_gate(gate) if gate else None
+        event = await self.db.fetch_one(
+            "SELECT event_type,payload_json,created_at FROM action_events "
+            "WHERE action_id=:action AND owner_user_id=:owner "
+            "ORDER BY created_at DESC,id DESC LIMIT 1",
+            {"action": result["id"], "owner": owner},
+        )
+        result["last_event"] = (
+            {
+                "event_type": event["event_type"],
+                "payload": json.loads(event["payload_json"]),
+                "created_at": event["created_at"],
+            }
+            if event
+            else None
+        )
         return result
 
     @staticmethod
