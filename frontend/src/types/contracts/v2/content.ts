@@ -98,6 +98,7 @@ export interface ContentProject {
   success_signals: string[];
   automation_level: AutomationLevel;
   creator_state_version: number;
+  starter_sprint_id?: string | null;
   current_version_id: string | null;
   locked_publish_version_id: string | null;
   publish_hypothesis_id: string | null;
