@@ -54,6 +54,8 @@ const refLabels: Record<string, string> = {
 
 const readableRef = (value: string) => {
   if (value.startsWith('project:audience:')) return '你想到的目标读者';
+  if (value.startsWith('creator-series:')) return '你已确认的内容系列';
+  if (value.startsWith('content-opportunity:')) return '待确认的系列续篇机会';
   return refLabels[value] || value;
 };
 
@@ -87,6 +89,10 @@ export default function HomePage() {
   const startAction = () => {
     const action = data?.action;
     if (!action) return;
+    if (action.expected_state_change.source === 'series_opportunity') {
+      navigate('/opportunities');
+      return;
+    }
     if (action.action_type === 'create_project') {
       navigate('/content');
       return;
@@ -97,6 +103,12 @@ export default function HomePage() {
     }
     navigate(action.fallback_action.path || '/content');
   };
+
+  const actionPath = data?.action?.expected_state_change.source === 'series_opportunity'
+    ? '/opportunities'
+    : data?.action?.project_id
+      ? `/content/${data.action.project_id}`
+      : '/content';
 
   const deferAction = async () => {
     if (!data?.action) return;
@@ -150,10 +162,14 @@ export default function HomePage() {
           </div>
           <div className="today-action-controls">
             <Button variant="contained" startIcon={<ArrowForward />} disabled={busy} onClick={startAction}>
-              {deferred ? '回到内容项目' : actionLabels[action.action_type]}
+              {deferred
+                ? '回到对应页面'
+                : action.expected_state_change.source === 'series_opportunity'
+                  ? '查看并确认机会'
+                  : actionLabels[action.action_type]}
             </Button>
             {!deferred ? <Button variant="text" startIcon={<Pause />} disabled={busy} onClick={() => void deferAction()}>暂不做</Button> : null}
-            <Button variant="text" onClick={() => action.project_id ? navigate(`/content/${action.project_id}`) : navigate('/content')}>
+            <Button variant="text" onClick={() => navigate(actionPath)}>
               手动继续
             </Button>
           </div>
