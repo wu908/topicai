@@ -25,6 +25,7 @@ vi.mock('@/pages/Content/ContentPage', () => pageMock('page-content'));
 vi.mock('@/pages/Opportunities/OpportunitiesPage', () => pageMock('page-opportunities'));
 vi.mock('@/pages/Materials/MaterialsPage', () => pageMock('page-materials'));
 vi.mock('@/pages/Me/MePage', () => pageMock('page-me'));
+vi.mock('@/pages/Starter/StarterPage', () => pageMock('page-starter'));
 vi.mock('@/pages/NotFound/NotFoundPage', () => pageMock('page-notfound'));
 
 import App from '../App';
@@ -55,6 +56,9 @@ describe('App routing', () => {
     ['/opportunities', 'page-opportunities'],
     ['/materials', 'page-materials'],
     ['/me', 'page-me'],
+    ['/onboarding/assessment', 'page-starter'],
+    ['/onboarding/directions', 'page-starter'],
+    ['/onboarding/sprint', 'page-starter'],
   ])('renders primary route %s', async (path, testId) => {
     renderAt(path);
     expect(await screen.findByTestId(testId)).toBeInTheDocument();
