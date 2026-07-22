@@ -105,4 +105,18 @@ describe('HomePage', () => {
     expect(screen.getByText('这件事已暂缓')).toBeInTheDocument();
     expect(screen.queryByText('今日阅读')).not.toBeInTheDocument();
   });
+
+  it('restores a deferred action as a paused summary after reload', async () => {
+    api.getTodayWorkspace.mockResolvedValue({
+      action: { ...action, status: 'deferred' },
+      creator_state: { completed_project_count: 0 },
+    });
+
+    render(<MemoryRouter><HomePage /></MemoryRouter>);
+
+    expect(await screen.findByText('这件事已暂缓')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '暂不做' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '回到对应页面' }));
+    expect(navigateMock).toHaveBeenCalledWith('/content/p1');
+  });
 });
