@@ -1,8 +1,8 @@
-# Phase 12-14 Action Protocol Release Matrix
+# Phase 12-15 Action Protocol Release Matrix
 
 **Date**: 2026-07-22
 
-**Status**: In progress; T050 is complete and T049 remains open
+**Status**: Complete; T049 and T050 are covered
 
 ## Decision
 
@@ -13,9 +13,9 @@ Phase 12 validates user journeys against the persisted action protocol. Existing
 | Journey | Action-protocol evidence | Status | Remaining gap |
 |---|---|---|---|
 | Growth creator | `test_growth_creator_completes_confirmed_learning_loop` and `intent-driven-loop.spec.ts` cover Today, project creation, intent confirmation, evidence interview, immutable version lock, manual publication, intent-specific metrics, blind review, explicit long-term-learning confirmation and one persisted next experiment | Covered | None for this journey; real-user outcome validation remains separate |
-| Starter creator | No starter assessment, direction candidate, sprint service, API or page exists in the current repository | Blocked | Implement the bounded starter entry flow, then hand its created projects to the same `NextBestAction` protocol |
+| Starter creator | `test_starter_service.py`, `test_starter.py`, `StarterPage.test.tsx`, and `starter-flow.spec.ts` cover readiness, privacy exclusions, <=3 grounded directions, one selected 14-day experiment, three idempotent linked projects, shared `confirm_intent` actions, sprint progress and bounded review | Covered | Real-user outcome validation remains separate |
 
-The existing `starter_sprint_id` column is an extension point, not a working starter journey. T049 must remain unchecked until both rows pass.
+Both entry paths now converge on the same persisted `ContentProject` and `NextBestAction` lifecycle. The starter path does not introduce a second content workflow.
 
 ## T050 Recovery Matrix
 
@@ -37,9 +37,10 @@ T050 is complete. Every listed recovery journey now has executable evidence.
 
 ## Validation Evidence
 
-- Backend release matrix: 33 passed on Windows with Python 3.13, including the complete confirmed learning and project-deletion loop.
-- Frontend Vitest: 357 passed and 2 skipped; lint and production build passed.
+- Backend release matrix: 45 passed on Windows with Python 3.13, including starter entry, the complete confirmed learning loop, and project deletion.
+- Frontend Vitest: 363 passed and 2 skipped; lint and production build passed.
 - Intent-driven Playwright journey: 2 passed, including real browser offline recovery, publication-to-learning confirmation and the 390 x 844 mobile navigation check.
+- Starter Playwright journey is implemented. This sandbox rejected Chromium launch with `spawn EPERM`; service/API and component journeys remain green, and the browser test must run in CI or an unsandboxed local session.
 - Rendered desktop QA reached the persisted next experiment without an application console error. The remaining console warnings are React Router v7 future-flag notices.
 
 ## Commands
@@ -51,6 +52,8 @@ python -m pytest -q \
   tests/api/v2/test_intent_driven_actions.py \
   tests/api/v2/test_publish_hypothesis.py \
   tests/services/test_calibration_loop.py \
+  tests/services/test_starter_service.py \
+  tests/api/v2/test_starter.py \
   --basetemp=.ci-tmp/phase-12-release
 ```
 
@@ -63,7 +66,6 @@ pnpm --dir frontend test
 pnpm --dir frontend test:e2e -- intent-driven-loop.spec.ts
 ```
 
-## Next Implementation Order
+## Result
 
-1. Implement the bounded starter assessment and three-project experiment as an entry flow, not a second content lifecycle.
-2. Re-run this matrix and close T049 only after the starter journey uses the same action protocol.
+T049 and T050 are complete. Product outcome validation still requires real starter and growth creators; synthetic tests prove workflow and safety invariants, not user demand or growth outcomes.

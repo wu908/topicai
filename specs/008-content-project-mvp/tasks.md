@@ -1,4 +1,4 @@
-﻿# Tasks: 008 TopicAI Content Project MVP
+# Tasks: 008 TopicAI Content Project MVP
 
 **Input**: [spec.md](./spec.md), [plan.md](./plan.md), [research.md](./research.md), [data-model.md](./data-model.md), [contracts/api-v2.md](./contracts/api-v2.md), [quickstart.md](./quickstart.md)  
 **Method**: Test-first per Constitution v2.0.0. Every user-story phase is independently demonstrable.  
@@ -39,7 +39,7 @@
 ### Migrations and common services
 
 - [ ] T019 [P] Add user mode, timezone, weekly goal, onboarding state, and consent migration in `backend/app/data/migrations/009_user_product_mode.sql`
-- [ ] T020 [P] Add starter assessment/candidate/sprint migration in `backend/app/data/migrations/010_starter_domain.sql`
+- [x] T020 [P] Add starter assessment/candidate/sprint migration in `backend/app/data/migrations/029_starter_domain.sql`
 - [ ] T021 [P] Add opportunity migration and source-reference indexes in `backend/app/data/migrations/011_opportunities.sql`
 - [ ] T022 [P] Add project/state-event/brief/interview migration in `backend/app/data/migrations/012_content_projects.sql`
 - [ ] T023 [P] Add material extensions and project-material links in `backend/app/data/migrations/013_materials_v2.sql`
@@ -117,19 +117,19 @@
 
 ### Tests first
 
-- [ ] T065 [P] [US3] Add readiness, max-three-candidate, selection, and sprint lifecycle tests in `backend/tests/services/test_starter_service.py`
-- [ ] T066 [P] [US3] Add starter AI evidence/prohibited-claim tests in `backend/tests/services/test_direction_candidate_service.py`
-- [ ] T067 [P] [US3] Add starter v2 API tests in `backend/tests/api/v2/test_starter.py`
-- [ ] T068 [P] [US3] Add assessment/direction/sprint/review UI tests in `frontend/src/features/starter/__tests__/StarterFlow.test.tsx`
+- [x] T065 [P] [US3] Add readiness, max-three-candidate, selection, and sprint lifecycle tests in `backend/tests/services/test_starter_service.py`
+- [x] T066 [P] [US3] Add starter AI evidence/prohibited-claim tests in `backend/tests/services/test_starter_service.py`
+- [x] T067 [P] [US3] Add starter v2 API tests in `backend/tests/api/v2/test_starter.py`
+- [x] T068 [P] [US3] Add assessment/direction/sprint/review UI tests in `frontend/src/pages/Starter/__tests__/StarterPage.test.tsx`
 
 ### Implementation
 
-- [ ] T069 [US3] Implement starter assessment and readiness rules in `backend/app/services/starter_assessment.py`
-- [ ] T070 [P] [US3] Implement evidence-backed direction candidate generation in `backend/app/services/direction_candidate.py` and `backend/app/prompts/starter_direction/v1/system.md`
-- [ ] T071 [US3] Implement sprint creation, three idempotent experiment projects, progress, and graduation in `backend/app/services/starter_sprint.py`
-- [ ] T072 [US3] Expose starter assessment, directions, sprint, and review in `backend/app/api/v2/starter.py`
-- [ ] T073 [P] [US3] Add starter API client/store in `frontend/src/services/api/v2/starter.ts` and `frontend/src/store/starterStore.ts`
-- [ ] T074 [US3] Build assessment, directions, sprint, and review pages in `frontend/src/features/starter/AssessmentPage.tsx`, `DirectionPage.tsx`, `SprintPage.tsx`, and `StarterReviewPage.tsx`
+- [x] T069 [US3] Implement starter assessment and readiness rules in `backend/app/services/starter_assessment.py`
+- [x] T070 [P] [US3] Implement evidence-backed deterministic direction generation and AI trace in `backend/app/services/direction_candidate.py`
+- [x] T071 [US3] Implement sprint creation, three idempotent experiment projects, progress, and graduation in `backend/app/services/starter_sprint.py`
+- [x] T072 [US3] Expose starter assessment, directions, sprint, and review in `backend/app/api/v2/starter.py`
+- [x] T073 [P] [US3] Add starter API client in `frontend/src/services/api/v2/starter.ts`; keep resumable server state in the workspace instead of duplicating it in a client store
+- [x] T074 [US3] Build the resumable assessment, direction, sprint, and review flow in `frontend/src/pages/Starter/StarterPage.tsx`
 
 **Checkpoint**: Starter path reaches the shared ContentProject shell and is independently demoable.
 

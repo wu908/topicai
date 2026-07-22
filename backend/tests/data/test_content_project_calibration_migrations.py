@@ -101,10 +101,11 @@ def test_intent_action_migration_upgrades_from_019_and_replays(tmp_path):
         "026_creator_series",
         "027_content_opportunities",
         "028_action_experiment_metrics",
+        "029_starter_domain",
     ]
     assert replay == []
     with sqlite3.connect(db_path) as conn:
-        assert {"creator_states", "next_best_actions", "human_gates", "action_events", "evidence_items", "content_segments", "content_segment_decisions", "creator_rules", "creator_rule_versions", "creator_rule_events", "creator_rule_resolutions", "creator_viewpoints", "creator_viewpoint_events", "creator_series", "creator_series_events", "content_opportunities", "content_opportunity_events", "experiments", "experiment_assignments", "experiment_assignment_events"} <= _tables(conn)
+        assert {"creator_states", "next_best_actions", "human_gates", "action_events", "evidence_items", "content_segments", "content_segment_decisions", "creator_rules", "creator_rule_versions", "creator_rule_events", "creator_rule_resolutions", "creator_viewpoints", "creator_viewpoint_events", "creator_series", "creator_series_events", "content_opportunities", "content_opportunity_events", "experiments", "experiment_assignments", "experiment_assignment_events", "starter_assessments", "starter_direction_candidates", "starter_sprints"} <= _tables(conn)
         legacy_defaults = conn.execute(
             "SELECT sql FROM sqlite_master WHERE type='table' AND name='content_projects'"
         ).fetchone()[0]

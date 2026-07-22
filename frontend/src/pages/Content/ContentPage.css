@@ -29,6 +29,29 @@
   gap: 10px;
 }
 
+.starter-entry {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 22px;
+  padding: 18px 0;
+  border-bottom: 1px solid var(--v3-border);
+}
+
+.starter-entry h2 {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.4;
+  letter-spacing: 0;
+}
+
+.starter-entry p {
+  margin: 4px 0 0;
+  color: var(--v3-text-sec);
+  font-size: 13px;
+}
+
 .content-project-row {
   width: 100%;
   display: grid;
@@ -130,6 +153,15 @@
   .content-project-row {
     grid-template-columns: 1fr;
     gap: 8px;
+  }
+
+  .starter-entry {
+    grid-template-columns: 28px minmax(0, 1fr);
+  }
+
+  .starter-entry .MuiButton-root {
+    grid-column: 1 / -1;
+    justify-self: stretch;
   }
 }
 

@@ -13,6 +13,7 @@ from app.api.v2.creator_viewpoints import router as creator_viewpoints_router
 from app.api.v2.creator_series import router as creator_series_router
 from app.api.v2.content_opportunities import router as content_opportunities_router
 from app.api.v2.experiment_metrics import router as experiment_metrics_router
+from app.api.v2.starter import router as starter_router
 
 api_v2_router = APIRouter()
 api_v2_router.include_router(projects_router)
@@ -25,6 +26,7 @@ api_v2_router.include_router(creator_viewpoints_router)
 api_v2_router.include_router(creator_series_router)
 api_v2_router.include_router(content_opportunities_router)
 api_v2_router.include_router(experiment_metrics_router)
+api_v2_router.include_router(starter_router)
 
 
 @api_v2_router.get("/health", response_model=ApiResponse[dict])

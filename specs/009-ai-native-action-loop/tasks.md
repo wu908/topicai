@@ -68,7 +68,7 @@
 - [x] T046 Add E1-E4 experiment and cohort assignment fields without storing raw content in analytics.
 - [x] T047 Add metric queries with documented numerator, denominator, window and missing-data handling.
 - [x] T048 Add action funnel and calibration-quality export for internal validation only.
-- [ ] T049 Run existing 008 starter and growth journeys against the action protocol.
+- [x] T049 Run existing 008 starter and growth journeys against the action protocol.
 - [x] T050 Run no-model, timeout, offline recovery, version conflict, deletion, contamination and rule-rollback journeys.
 - [x] T051 Verify legacy routes redirect or become project-context compatibility shims.
 - [x] T052 Run cross-artifact consistency checks and update the release validation report in `release-validation-2026-07-22.md`.
@@ -118,3 +118,12 @@ The feature is not complete until all P1 tasks are green, synthetic logic scenar
 - CreatorState references, orphan AI traces and project-only screenshot assets are removed in the same transaction.
 - `test_growth_creator_completes_confirmed_learning_loop` now continues through deletion and proves that ContentGenome, Today and privacy-safe metrics no longer expose the deleted project.
 - The Phase 12-14 backend release matrix passes `33` tests. T050 is complete; T049 remains open for the bounded starter journey.
+
+## Phase 15 starter-experiment closure (2026-07-22)
+
+- Migration `029_starter_domain.sql` adds only the bounded assessment, direction and sprint records; generated content still uses the existing `ContentProject` aggregate.
+- Readiness requires time, publication intent, experiment consent and at least one user-supplied asset after privacy exclusions. It does not classify the user into a permanent niche.
+- Direction generation returns at most three evidence-referenced, low-cost experiments through a traced deterministic fallback and contains no traffic, virality, monetization or guaranteed-growth claim.
+- Selecting a direction idempotently creates exactly three linked projects. Every project enters the existing action protocol at `confirm_intent` and continues through the same evidence, candidate, publication and learning gates as growth projects.
+- Starter review requires at least one real publication and records only observed evidence, blockers and next experiments.
+- The Phase 12-15 backend release matrix passes `45` tests; the frontend suite passes `363` tests with `2` skipped, plus lint and production build. T049 and T050 are complete.

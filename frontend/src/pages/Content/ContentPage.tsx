@@ -11,7 +11,7 @@ import {
   Stack,
   TextField,
 } from '@mui/material';
-import { Add, ArrowForward, CheckCircleOutline } from '@mui/icons-material';
+import { Add, ArrowForward, CheckCircleOutline, ScienceOutlined } from '@mui/icons-material';
 import { extractErrorMessage } from '@/utils/error';
 import {
   appendSnapshot,
@@ -206,6 +206,16 @@ export default function ContentPage() {
           )}
         </header>
         {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
+        {empty ? (
+          <section className="starter-entry" aria-labelledby="starter-entry-title">
+            <ScienceOutlined />
+            <div>
+              <h2 id="starter-entry-title">还不知道第一篇做什么？</h2>
+              <p>盘点真实经历、兴趣和技能，选择一条方向做三篇 14 天实验。</p>
+            </div>
+            <Button variant="outlined" endIcon={<ArrowForward />} onClick={() => navigate('/onboarding/assessment')}>开始起步实验</Button>
+          </section>
+        ) : null}
         {empty || showCreate ? (
           <ProjectCreateForm
             busy={busy}
