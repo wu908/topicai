@@ -37,6 +37,20 @@ INTENT_CONFIG = {
 }
 
 
+TODAY_ACTION_PRIORITY = {
+    "review_candidate": 100,
+    "record_publication": 95,
+    "add_performance": 90,
+    "review_result": 85,
+    "confirm_learning": 80,
+    "confirm_intent": 75,
+    "manage_learning": 65,
+    "series_opportunity": 55,
+    "answer_key_question": 50,
+    "create_project": 10,
+}
+
+
 class IntentOrchestratorService:
     def __init__(self, db: Any):
         self.db = db
@@ -48,11 +62,175 @@ class IntentOrchestratorService:
             "AND deleted_at IS NULL AND archived_at IS NULL ORDER BY updated_at DESC",
             {"owner": owner_user_id},
         )
-        if not projects:
-            action = await self._ensure_action(owner_user_id, None, "create_project")
-        else:
-            action = await self.ensure_project_action(owner_user_id, projects[0])
+        candidates = []
+        for project in projects:
+            if project.get("status") == "settled":
+                continue
+            candidates.append(await self.ensure_project_action(owner_user_id, project))
+
+        opportunity = await self.db.fetch_one(
+            "SELECT * FROM content_opportunities WHERE owner_user_id=:owner "
+            "AND status='proposed' ORDER BY updated_at DESC LIMIT 1",
+            {"owner": owner_user_id},
+        )
+        if opportunity:
+            candidates.append(
+                await self._ensure_opportunity_action(owner_user_id, opportunity)
+            )
+
+        action = max(candidates, key=self._today_priority) if candidates else (
+            await self._ensure_action(owner_user_id, None, "create_project")
+        )
         return {"action": action, "creator_state": creator_state}
+
+    @staticmethod
+    def _today_priority(action: dict[str, Any]) -> tuple[int, str, str]:
+        context = action.get("expected_state_change", {})
+        action_kind = (
+            "series_opportunity"
+            if context.get("source") == "series_opportunity"
+            else action["action_type"]
+        )
+        priority = TODAY_ACTION_PRIORITY.get(action_kind, 0)
+        if action.get("status") == "deferred":
+            priority -= 40
+        return priority, action.get("updated_at", ""), action["id"]
+
+    async def _ensure_opportunity_action(
+        self, owner_user_id: str, opportunity: dict[str, Any]
+    ) -> dict[str, Any]:
+        current = await self.db.fetch_one(
+            "SELECT * FROM next_best_actions WHERE owner_user_id=:owner "
+            "AND project_id IS NULL AND status IN ('proposed','accepted','deferred') "
+            "ORDER BY created_at DESC LIMIT 1",
+            {"owner": owner_user_id},
+        )
+        if current:
+            expected = json.loads(current["expected_state_change_json"])
+            if (
+                expected.get("opportunity_id") == opportunity["id"]
+                and expected.get("opportunity_version") == opportunity["version"]
+            ):
+                return await self._normalize_with_gate(owner_user_id, current)
+            await self.db.execute(
+                "UPDATE next_best_actions SET status='superseded',updated_at=:now,"
+                "version=version+1 WHERE id=:id AND owner_user_id=:owner",
+                {"now": now(), "id": current["id"], "owner": owner_user_id},
+            )
+
+        action_id = str(uuid.uuid4())
+        timestamp = now()
+        expected_change = {
+            "action_type": "review_opportunity",
+            "source": "series_opportunity",
+            "opportunity_id": opportunity["id"],
+            "opportunity_version": opportunity["version"],
+        }
+        fallback = {"action_type": "review_opportunity", "path": "/opportunities"}
+        key = f"orchestrator:opportunity:{opportunity['id']}:{opportunity['version']}"
+        existing = await self.db.fetch_one(
+            "SELECT id FROM next_best_actions WHERE owner_user_id=:owner "
+            "AND idempotency_key=:key",
+            {"owner": owner_user_id, "key": key},
+        )
+        if existing:
+            key = f"{key}:retry:{uuid.uuid4()}"
+        trace_id = await self._create_opportunity_trace(
+            owner_user_id, action_id, opportunity
+        )
+        payload = {
+            "owner": owner_user_id,
+            "project": None,
+            "action_type": "create_project",
+            "content_intent": opportunity["content_intent"],
+            "title": f"确认下一篇：{opportunity['proposed_title']}",
+            "reason": opportunity["proposed_rationale"],
+            "evidence": json.loads(opportunity["evidence_refs_json"] or "[]"),
+            "unknown": json.loads(opportunity["unknown_refs_json"] or "[]"),
+            "change": expected_change,
+            "effort": 5,
+            "automation": "guided",
+            "gate": None,
+            "fallback": fallback,
+        }
+        await self.db.execute(
+            "INSERT INTO next_best_actions (id,owner_user_id,project_id,action_type,"
+            "content_intent,title,reason,evidence_refs_json,unknown_refs_json,"
+            "expected_state_change_json,estimated_effort_minutes,automation_level,"
+            "human_gate_type,fallback_action_json,status,ai_trace_id,expires_at,version,"
+            "idempotency_key,request_hash,created_at,updated_at) VALUES "
+            "(:id,:owner,NULL,:action_type,:content_intent,:title,:reason,:evidence,"
+            ":unknown,:change,:effort,:automation,NULL,:fallback,'proposed',:trace,"
+            "NULL,1,:key,:hash,:now,:now)",
+            {
+                "id": action_id,
+                **payload,
+                "evidence": json.dumps(payload["evidence"], ensure_ascii=False),
+                "unknown": json.dumps(payload["unknown"], ensure_ascii=False),
+                "change": json.dumps(expected_change, ensure_ascii=False),
+                "fallback": json.dumps(fallback, ensure_ascii=False),
+                "trace": trace_id,
+                "key": key,
+                "hash": request_hash(payload),
+                "now": timestamp,
+            },
+        )
+        await self._insert_event(
+            owner_user_id,
+            action_id,
+            None,
+            "proposed",
+            None,
+            "proposed",
+            1,
+            f"{key}:proposed",
+            {"source": "series_opportunity", "opportunity_id": opportunity["id"]},
+        )
+        created = await self.db.fetch_one(
+            "SELECT * FROM next_best_actions WHERE id=:id", {"id": action_id}
+        )
+        return await self._normalize_with_gate(owner_user_id, created)
+
+    async def _create_opportunity_trace(
+        self, owner: str, action_id: str, opportunity: dict[str, Any]
+    ) -> str:
+        trace_id = str(uuid.uuid4())
+        evidence_refs = json.loads(opportunity["evidence_refs_json"] or "[]")
+        await self.db.execute(
+            "INSERT INTO ai_traces_v2 (id,owner_user_id,task_type,input_refs_json,"
+            "evidence_refs_json,policy_version,model_identifier,capability,"
+            "visibility_boundary_json,source_snapshot_ids_json,contamination_check_json,"
+            "calibration_state,limitations_json,output_ref,generated_at) VALUES "
+            "(:id,:owner,'next_best_action',:inputs,:evidence,'today-priority-v1',"
+            "NULL,'deterministic_fallback',:boundary,'[]',:check,'insufficient',"
+            ":limitations,:output,:now)",
+            {
+                "id": trace_id,
+                "owner": owner,
+                "inputs": json.dumps(
+                    [f"content-opportunity:{opportunity['id']}"], ensure_ascii=False
+                ),
+                "evidence": json.dumps(evidence_refs, ensure_ascii=False),
+                "boundary": json.dumps(
+                    {
+                        "allowed": ["user_confirmed_series", "confirmed_evidence"],
+                        "forbidden": ["other_users", "unconfirmed_series"],
+                        "actual": ["user_confirmed_series"],
+                    },
+                    ensure_ascii=False,
+                ),
+                "check": json.dumps(
+                    {"status": "clean", "unexpected_classes": [], "missing_classes": []},
+                    ensure_ascii=False,
+                ),
+                "limitations": json.dumps(
+                    ["机会必须由用户确认后才创建内容项目"], ensure_ascii=False
+                ),
+                "output": f"next_best_action:{action_id}",
+                "now": now(),
+            },
+        )
+        return trace_id
 
     async def ensure_project_action(
         self, owner_user_id: str, project: dict[str, Any] | str
