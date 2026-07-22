@@ -126,17 +126,17 @@ class IntentOrchestratorService:
             "opportunity_version": opportunity["version"],
         }
         fallback = {"action_type": "review_opportunity", "path": "/opportunities"}
-        key = f"orchestrator:opportunity:{opportunity['id']}:{opportunity['version']}"
-        existing = await self.db.fetch_one(
+        base_key = f"orchestrator:opportunity:{opportunity['id']}:{opportunity['version']}"
+        key = base_key
+        retry_number = 0
+        while await self.db.fetch_one(
             "SELECT id FROM next_best_actions WHERE owner_user_id=:owner "
             "AND idempotency_key=:key",
             {"owner": owner_user_id, "key": key},
-        )
-        if existing:
-            key = f"{key}:retry:{uuid.uuid4()}"
-        trace_id = await self._create_opportunity_trace(
-            owner_user_id, action_id, opportunity
-        )
+        ):
+            retry_number += 1
+            key = f"{base_key}:retry:{retry_number}"
+        trace_id = str(uuid.uuid4())
         payload = {
             "owner": owner_user_id,
             "project": None,
@@ -152,57 +152,99 @@ class IntentOrchestratorService:
             "gate": None,
             "fallback": fallback,
         }
-        await self.db.execute(
-            "INSERT INTO next_best_actions (id,owner_user_id,project_id,action_type,"
-            "content_intent,title,reason,evidence_refs_json,unknown_refs_json,"
-            "expected_state_change_json,estimated_effort_minutes,automation_level,"
-            "human_gate_type,fallback_action_json,status,ai_trace_id,expires_at,version,"
-            "idempotency_key,request_hash,created_at,updated_at) VALUES "
-            "(:id,:owner,NULL,:action_type,:content_intent,:title,:reason,:evidence,"
-            ":unknown,:change,:effort,:automation,NULL,:fallback,'proposed',:trace,"
-            "NULL,1,:key,:hash,:now,:now)",
-            {
-                "id": action_id,
-                **payload,
-                "evidence": json.dumps(payload["evidence"], ensure_ascii=False),
-                "unknown": json.dumps(payload["unknown"], ensure_ascii=False),
-                "change": json.dumps(expected_change, ensure_ascii=False),
-                "fallback": json.dumps(fallback, ensure_ascii=False),
-                "trace": trace_id,
-                "key": key,
-                "hash": request_hash(payload),
-                "now": timestamp,
-            },
-        )
-        await self._insert_event(
-            owner_user_id,
-            action_id,
-            None,
-            "proposed",
-            None,
-            "proposed",
-            1,
-            f"{key}:proposed",
-            {"source": "series_opportunity", "opportunity_id": opportunity["id"]},
-        )
-        created = await self.db.fetch_one(
-            "SELECT * FROM next_best_actions WHERE id=:id", {"id": action_id}
-        )
+        action_params = {
+            "id": action_id,
+            **payload,
+            "evidence": json.dumps(payload["evidence"], ensure_ascii=False),
+            "unknown": json.dumps(payload["unknown"], ensure_ascii=False),
+            "change": json.dumps(expected_change, ensure_ascii=False),
+            "fallback": json.dumps(fallback, ensure_ascii=False),
+            "trace": trace_id,
+            "key": key,
+            "hash": request_hash(payload),
+            "now": timestamp,
+        }
+        event_payload = {
+            "source": "series_opportunity",
+            "opportunity_id": opportunity["id"],
+        }
+        session = await self.db.get_session()
+        async with session:
+            async with session.begin():
+                await self._create_opportunity_trace(
+                    session, owner_user_id, action_id, opportunity, trace_id
+                )
+                inserted = await session.execute(
+                    text(
+                        "INSERT INTO next_best_actions (id,owner_user_id,project_id,action_type,"
+                        "content_intent,title,reason,evidence_refs_json,unknown_refs_json,"
+                        "expected_state_change_json,estimated_effort_minutes,automation_level,"
+                        "human_gate_type,fallback_action_json,status,ai_trace_id,expires_at,version,"
+                        "idempotency_key,request_hash,created_at,updated_at) VALUES "
+                        "(:id,:owner,NULL,:action_type,:content_intent,:title,:reason,:evidence,"
+                        ":unknown,:change,:effort,:automation,NULL,:fallback,'proposed',:trace,"
+                        "NULL,1,:key,:hash,:now,:now) "
+                        "ON CONFLICT(owner_user_id,idempotency_key) DO NOTHING"
+                    ),
+                    action_params,
+                )
+                if inserted.rowcount == 1:
+                    await session.execute(
+                        text(
+                            "INSERT INTO action_events (id,owner_user_id,action_id,project_id,"
+                            "event_type,from_status,to_status,payload_json,action_version,"
+                            "idempotency_key,request_hash,created_at) VALUES "
+                            "(:id,:owner,:action,NULL,'proposed',NULL,'proposed',:payload,"
+                            "1,:key,:hash,:now)"
+                        ),
+                        {
+                            "id": str(uuid.uuid4()),
+                            "owner": owner_user_id,
+                            "action": action_id,
+                            "payload": json.dumps(event_payload, ensure_ascii=False),
+                            "key": f"{key}:proposed",
+                            "hash": request_hash(event_payload),
+                            "now": timestamp,
+                        },
+                    )
+                else:
+                    await session.execute(
+                        text(
+                            "DELETE FROM ai_traces_v2 WHERE id=:trace "
+                            "AND NOT EXISTS (SELECT 1 FROM next_best_actions WHERE ai_trace_id=:trace)"
+                        ),
+                        {"trace": trace_id},
+                    )
+                created = (
+                    await session.execute(
+                        text(
+                            "SELECT * FROM next_best_actions WHERE owner_user_id=:owner "
+                            "AND idempotency_key=:key"
+                        ),
+                        {"owner": owner_user_id, "key": key},
+                    )
+                ).mappings().first()
         return await self._normalize_with_gate(owner_user_id, created)
 
     async def _create_opportunity_trace(
-        self, owner: str, action_id: str, opportunity: dict[str, Any]
+        self,
+        session: Any,
+        owner: str,
+        action_id: str,
+        opportunity: dict[str, Any],
+        trace_id: str,
     ) -> str:
-        trace_id = str(uuid.uuid4())
         evidence_refs = json.loads(opportunity["evidence_refs_json"] or "[]")
-        await self.db.execute(
-            "INSERT INTO ai_traces_v2 (id,owner_user_id,task_type,input_refs_json,"
-            "evidence_refs_json,policy_version,model_identifier,capability,"
-            "visibility_boundary_json,source_snapshot_ids_json,contamination_check_json,"
-            "calibration_state,limitations_json,output_ref,generated_at) VALUES "
-            "(:id,:owner,'next_best_action',:inputs,:evidence,'today-priority-v1',"
-            "NULL,'deterministic_fallback',:boundary,'[]',:check,'insufficient',"
-            ":limitations,:output,:now)",
+        await session.execute(
+            text(
+                "INSERT INTO ai_traces_v2 (id,owner_user_id,task_type,input_refs_json,"
+                "evidence_refs_json,policy_version,model_identifier,capability,"
+                "visibility_boundary_json,source_snapshot_ids_json,contamination_check_json,"
+                "calibration_state,limitations_json,output_ref,generated_at) VALUES "
+                "(:id,:owner,'next_best_action',:inputs,:evidence,'today-priority-v1',"
+                "NULL,'deterministic_fallback',:boundary,'[]',:check,'insufficient',"
+                ":limitations,:output,:now)"
+            ),
             {
                 "id": trace_id,
                 "owner": owner,

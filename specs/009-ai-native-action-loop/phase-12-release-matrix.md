@@ -24,7 +24,7 @@ The existing `starter_sprint_id` column is an extension point, not a working sta
 | No model | `test_new_creator_can_go_from_intent_to_publish_gate`; `intent-driven-loop.spec.ts` | Confirmed user evidence produces a marked deterministic candidate and never invents facts | Covered |
 | Model timeout | `test_model_failure_after_fact_confirmation_preserves_input_and_uses_fallback[TimeoutError]` | Preserve confirmed input and return the same reviewable fallback candidate | Covered |
 | Malformed model output | `test_model_failure_after_fact_confirmation_preserves_input_and_uses_fallback[ValueError]` | Preserve confirmed input and return the same reviewable fallback candidate | Covered |
-| Concurrent workspace loads | `test_concurrent_project_action_creation_is_idempotent` | Concurrent reads create one action, one proposed event and one referenced AI trace without returning 500 | Covered |
+| Concurrent workspace loads | `test_concurrent_project_action_creation_is_idempotent`; `test_concurrent_opportunity_action_creation_is_idempotent` | Concurrent project or series-opportunity reads create one action, one proposed event and one referenced AI trace without returning 500 | Covered |
 | Offline editing and refresh | `ProjectWorkspace.test.tsx`; `intent-driven-loop.spec.ts` | Keep edits local, make no server save while offline, offer recovery after reload, and require user confirmation | Covered |
 | Version conflict | `test_stale_project_version_returns_typed_conflict`; candidate and rule version-conflict tests | Reject stale writes without overwriting the current version | Covered |
 | Revoked evidence | `test_revoked_evidence_blocks_candidate_lock` | Revoked evidence cannot lock an unpublished candidate | Covered |
@@ -36,7 +36,7 @@ T050 remains unchecked because revocation is not equivalent to deletion. The rel
 
 ## Validation Evidence
 
-- Backend release matrix: 31 passed on Windows with Python 3.13.
+- Backend release matrix: 32 passed on Windows with Python 3.13.
 - Intent-driven Playwright journey: 2 passed, including real browser offline mode and the 390 x 844 mobile navigation check.
 - Frontend lint and production build: passed.
 - Rendered desktop QA reached the manual-publication boundary without an application console error. The remaining console warnings are React Router v7 future-flag notices.
