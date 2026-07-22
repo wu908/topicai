@@ -1,10 +1,8 @@
 /**
  * Login / Register page — V3 design (topicai-v3-login-meta.html).
  * Two-column layout: 380px form (left) + 480px brand panel (right).
- * Tabs switch between 登录 and 注册. 注册 has an extra 平台 select.
- * Social login buttons (微信 / 手机) are decorative; the backend OAuth
- * endpoints are not yet implemented so they log a console warning and
- * do not navigate.
+ * Tabs switch between 登录 and 注册 for the Xiaohongshu-focused MVP.
+ * Only implemented authentication methods are presented.
  */
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -12,22 +10,11 @@ import { useAuthStore } from '@/store/authStore';
 
 type TabValue = 'login' | 'register';
 
-const PLATFORMS = [
-  { value: '', label: '选择平台' },
-  { value: 'wechat-mp', label: '微信公众号' },
-  { value: 'xhs', label: '小红书' },
-  { value: 'wechat-video', label: '视频号' },
-  { value: 'bilibili', label: 'B 站' },
-  { value: 'douyin', label: '抖音' },
-  { value: 'zhihu', label: '知乎' },
-];
-
 const FEATURES = [
-  { icon: '✦', label: 'AI 选题推荐 — 基于实时热点与你的定位精准匹配' },
-  { icon: '✎', label: '智能写作助手 — 6 种 AI 工具提升创作效率' },
-  { icon: '◉', label: '爆款内容拆解 — 学习高传播内容的底层结构' },
-  { icon: '↗', label: '全链路数据分析 — 从发布到复盘一站式洞察' },
-  { icon: '⏱', label: '最佳发布时机 — 粉丝活跃数据驱动排期建议' },
+  { icon: '1', label: '确认这条内容想给读者带来的变化' },
+  { icon: '2', label: '补齐你亲自经历过的事实和素材' },
+  { icon: '3', label: '逐段确认候选内容与公开范围' },
+  { icon: '4', label: '发布后只保留一个下一轮实验' },
 ];
 
 const LoginPage: React.FC = () => {
@@ -38,10 +25,8 @@ const LoginPage: React.FC = () => {
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [platform, setPlatform] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
-  const [socialPending, setSocialPending] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault();
@@ -56,15 +41,6 @@ const LoginPage: React.FC = () => {
     } catch {
       // Error is rendered from the store; nothing else to do here.
     }
-  };
-
-  const handleSocialLogin = (provider: 'wechat' | 'phone'): void => {
-    setSocialPending(provider);
-     
-    console.warn(`[LoginPage] ${provider} OAuth not implemented in backend`);
-    // Reset pending state after a short delay so the buttons don't stay
-    // disabled forever when the backend OAuth flow is a no-op stub.
-    window.setTimeout(() => setSocialPending(null), 1500);
   };
 
   return (
@@ -88,18 +64,6 @@ const LoginPage: React.FC = () => {
         }}
       >
         <div
-          aria-hidden="true"
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: 'linear-gradient(135deg, rgba(44,44,44,0.02) 0%, rgba(44,44,44,0.04) 100%)',
-            pointerEvents: 'none',
-          }}
-        />
-        <div
           style={{
             width: 380,
             position: 'relative',
@@ -110,7 +74,7 @@ const LoginPage: React.FC = () => {
             style={{
               fontSize: 28,
               fontWeight: 700,
-              letterSpacing: '-0.5px',
+              letterSpacing: 0,
               marginBottom: 8,
               color: 'var(--v3-text)',
             }}
@@ -124,7 +88,7 @@ const LoginPage: React.FC = () => {
               marginBottom: 36,
             }}
           >
-            AI 驱动的内容创作运营平台
+            小红书知识与经验创作者的内容操作系统
           </div>
 
           {/* Tabs */}
@@ -273,51 +237,6 @@ const LoginPage: React.FC = () => {
                   />
                 </div>
 
-                <div style={{ marginBottom: 18 }}>
-                  <label
-                    htmlFor="login-platform"
-                    style={{
-                      display: 'block',
-                      fontSize: 12.5,
-                      fontWeight: 500,
-                      color: 'var(--v3-text-sec)',
-                      marginBottom: 6,
-                    }}
-                  >
-                    你的主要创作平台
-                  </label>
-                  <select
-                    id="login-platform"
-                    value={platform}
-                    onChange={(e) => setPlatform(e.target.value)}
-                    required
-                    style={{
-                      width: '100%',
-                      height: 42,
-                      fontSize: 14,
-                      padding: '0 12px',
-                      borderRadius: 6,
-                      border: '1px solid var(--v3-border)',
-                      background: 'var(--v3-surface)',
-                      color: 'var(--v3-text)',
-                      fontFamily: 'inherit',
-                      outline: 'none',
-                      boxSizing: 'border-box',
-                    }}
-                    onFocus={(e) => {
-                      e.currentTarget.style.borderColor = 'var(--v3-text)';
-                    }}
-                    onBlur={(e) => {
-                      e.currentTarget.style.borderColor = 'var(--v3-border)';
-                    }}
-                  >
-                    {PLATFORMS.map((p) => (
-                      <option key={p.value} value={p.value}>
-                        {p.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
               </>
             )}
 
@@ -388,7 +307,7 @@ const LoginPage: React.FC = () => {
             <div
               style={{
                 display: 'flex',
-                justifyContent: 'space-between',
+                justifyContent: 'flex-start',
                 alignItems: 'center',
                 marginBottom: 4,
               }}
@@ -411,22 +330,6 @@ const LoginPage: React.FC = () => {
                 />
                 记住我
               </label>
-              <a
-                href="#"
-                onClick={(e) => {
-                  e.preventDefault();
-                  // No password recovery endpoint implemented yet.
-                   
-                  console.warn('[LoginPage] password recovery not implemented');
-                }}
-                style={{
-                  fontSize: 12.5,
-                  color: 'var(--v3-text)',
-                  textDecoration: 'underline',
-                }}
-              >
-                忘记密码？
-              </a>
             </div>
 
             <button
@@ -451,88 +354,6 @@ const LoginPage: React.FC = () => {
             </button>
           </form>
 
-          {/* Divider */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 16,
-              margin: '24px 0',
-              fontSize: 12,
-              color: 'var(--v3-text-ter)',
-            }}
-          >
-            <span style={{ flex: 1, height: 1, background: 'var(--v3-border)' }} />
-            或
-            <span style={{ flex: 1, height: 1, background: 'var(--v3-border)' }} />
-          </div>
-
-          {/* Social login */}
-          <div style={{ display: 'flex', gap: 10 }}>
-            <button
-              type="button"
-              onClick={() => handleSocialLogin('wechat')}
-              disabled={socialPending !== null}
-              style={{
-                flex: 1,
-                height: 42,
-                border: '1px solid var(--v3-border)',
-                borderRadius: 6,
-                background: 'var(--v3-surface)',
-                cursor: socialPending === 'wechat' ? 'wait' : 'pointer',
-                fontSize: 13,
-                fontWeight: 500,
-                color: 'var(--v3-text)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 8,
-                fontFamily: 'inherit',
-                transition: 'border-color 0.15s',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = 'var(--v3-text)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = 'var(--v3-border)';
-              }}
-            >
-              <span aria-hidden="true" style={{ fontSize: 16, fontWeight: 700 }}>微</span>
-              {socialPending === 'wechat' ? '跳转中...' : '微信登录'}
-            </button>
-            <button
-              type="button"
-              onClick={() => handleSocialLogin('phone')}
-              disabled={socialPending !== null}
-              style={{
-                flex: 1,
-                height: 42,
-                border: '1px solid var(--v3-border)',
-                borderRadius: 6,
-                background: 'var(--v3-surface)',
-                cursor: socialPending === 'phone' ? 'wait' : 'pointer',
-                fontSize: 13,
-                fontWeight: 500,
-                color: 'var(--v3-text)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 8,
-                fontFamily: 'inherit',
-                transition: 'border-color 0.15s',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = 'var(--v3-text)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = 'var(--v3-border)';
-              }}
-            >
-              <span aria-hidden="true" style={{ fontSize: 16 }}>📱</span>
-              {socialPending === 'phone' ? '发送中...' : '手机验证码'}
-            </button>
-          </div>
-
           {/* Terms */}
           <div
             style={{
@@ -542,22 +363,7 @@ const LoginPage: React.FC = () => {
               textAlign: 'center',
             }}
           >
-            登录即代表同意{' '}
-            <a
-              href="#"
-              onClick={(e) => e.preventDefault()}
-              style={{ color: 'var(--v3-text)', textDecoration: 'underline' }}
-            >
-              服务条款
-            </a>{' '}
-            和{' '}
-            <a
-              href="#"
-              onClick={(e) => e.preventDefault()}
-              style={{ color: 'var(--v3-text)', textDecoration: 'underline' }}
-            >
-              隐私政策
-            </a>
+            当前 MVP 仅支持邮箱登录与注册
           </div>
         </div>
       </div>
@@ -576,38 +382,12 @@ const LoginPage: React.FC = () => {
           overflow: 'hidden',
         }}
       >
-        {/* Decorative blobs */}
-        <div
-          aria-hidden="true"
-          style={{
-            position: 'absolute',
-            right: -80,
-            bottom: -80,
-            width: 320,
-            height: 320,
-            borderRadius: '50%',
-            background: 'rgba(255,255,255,0.04)',
-          }}
-        />
-        <div
-          aria-hidden="true"
-          style={{
-            position: 'absolute',
-            right: 40,
-            top: -40,
-            width: 200,
-            height: 200,
-            borderRadius: '50%',
-            background: 'rgba(255,255,255,0.03)',
-          }}
-        />
-
         <h2
           style={{
             fontSize: 32,
             fontWeight: 700,
             marginBottom: 12,
-            letterSpacing: '-0.5px',
+            letterSpacing: 0,
             lineHeight: 1.25,
             position: 'relative',
           }}
@@ -625,7 +405,7 @@ const LoginPage: React.FC = () => {
             margin: '0 0 28px 0',
           }}
         >
-          从选题发现、AI 写作、标题优化到数据分析，TopicAI 帮助内容创作者用数据驱动每一个决策。
+          AI 负责理解意图、找到证据缺口并准备下一步；你只确认事实、表达与不可逆决定。
         </p>
 
         <ul

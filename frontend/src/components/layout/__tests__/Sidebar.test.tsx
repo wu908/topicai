@@ -46,7 +46,7 @@ describe('Sidebar', () => {
     }
   });
 
-  it('opens the profile from the user card', () => {
+  it('opens the creator state from the user card', () => {
     render(
       <MemoryRouter initialEntries={['/']}>
         <Sidebar />
@@ -54,7 +54,7 @@ describe('Sidebar', () => {
       </MemoryRouter>,
     );
     fireEvent.click(screen.getByRole('button', { name: '个人资料' }));
-    expect(screen.getByTestId('current-path')).toHaveTextContent('/profile');
+    expect(screen.getByTestId('current-path')).toHaveTextContent('/me');
   });
 
   it('logs out and navigates to login', () => {

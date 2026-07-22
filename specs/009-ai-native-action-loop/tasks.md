@@ -11,8 +11,8 @@
 ## Phase B - Action policy and service
 
 - [x] T006 Implement `CreatorStateService` with versioned snapshots and explicit uncertainty.
-- [ ] T007 Implement deterministic action eligibility by project status, blocker, urgency, capacity and evidence readiness.
-- [ ] T008 Implement action priority ordering and one-primary-action constraint.
+- [x] T007 Implement deterministic action eligibility by project status, blocker, urgency, capacity and evidence readiness.
+- [x] T008 Implement action priority ordering and one-primary-action constraint.
 - [ ] T009 Implement `NextBestActionService` offer, accept, reject, execute, fail, expire and cancel operations.
 - [x] T010 Enforce action idempotency and state-version checks in the service layer.
 - [ ] T011 Implement `AITraceService` and require traces for AI-generated actions.
@@ -27,14 +27,14 @@
 - [ ] T017 Add accept, skip, reject-with-reason, pause and manual-continue UI states.
 - [ ] T018 Add action event instrumentation with experiment and cohort fields.
 - [ ] T019 Link project list recovery to pending and failed actions.
-- [ ] T020 Add responsive and no-model UI tests for Today and action cards.
+- [x] T020 Add responsive and no-model UI tests for Today and action cards.
 
 ## Phase D - Evidence interview and creation
 
-- [ ] T021 Implement evidence-gap classification from Brief and ContentProject context.
+- [x] T021 Implement evidence-gap classification from Brief and ContentProject context.
 - [x] T022 Implement targeted interview actions with per-answer confirmation.
-- [ ] T023 Bind evidence references to Brief fields and ContentVersion segments.
-- [ ] T024 Block fact-based complete drafts when evidence is insufficient unless the user chooses a marked generic structure.
+- [x] T023 Bind evidence references to Brief fields and ContentVersion segments.
+- [x] T024 Block fact-based complete drafts when evidence is insufficient unless the user chooses a marked generic structure.
 - [x] T025 Implement evidence revocation and downstream invalidation.
 - [x] T026 Implement candidate versions, segment acceptance/rejection, comparison and immutable confirmed versions.
 - [ ] T027 Add synthetic scenario tests C-01 through C-04.
@@ -57,11 +57,11 @@
 - [x] T038 Add `AITrace.visibility_boundary`, source snapshot ids, contamination check, and calibration state.
 - [ ] T039 Mark insufficient, contaminated, revoked-evidence, and legacy reviews as ineligible for rule upgrades.
 - [x] T040 Implement Observation create, continue-testing, absorb, refute, archive, and workbench cleanup transitions.
-- [ ] T041 Implement CreatorRule candidate, full-sample reevaluation, consistency threshold, approval, rejection, rollback, and audit history.
+- [x] T041 Implement CreatorRule candidate, full-sample reevaluation, consistency threshold, approval, rejection, rollback, and audit history.
 - [ ] T042 Add BenchmarkSample inclusion/exclusion and unknown-metric handling without performance prediction.
-- [ ] T043 Extend Today with pending publication, pending review, active observation, refuted judgment, and resumable-project summaries.
-- [ ] T044 Add tests proving one sample cannot activate a rule and failed reevaluation leaves the active version unchanged.
-- [ ] T045 Add tests proving result leakage produces `calibration_invalid` and cannot influence future actions.
+- [x] T043 Extend Today with pending publication, pending review, active observation, refuted judgment, resumable-project summaries, and pending series opportunities.
+- [x] T044 Add tests proving one sample cannot activate a rule and failed reevaluation leaves the active version unchanged.
+- [x] T045 Add tests proving result leakage produces `calibration_invalid` and cannot influence future actions.
 
 ## Phase G - Experiments and release validation
 
@@ -70,9 +70,18 @@
 - [ ] T048 Add action funnel and calibration-quality export for internal validation only.
 - [ ] T049 Run existing 008 starter and growth journeys against the action protocol.
 - [ ] T050 Run no-model, timeout, offline recovery, version conflict, deletion, contamination and rule-rollback journeys.
-- [ ] T051 Verify legacy routes redirect or become project-context compatibility shims.
-- [ ] T052 Run cross-artifact consistency checks and update the release validation report.
+- [x] T051 Verify legacy routes redirect or become project-context compatibility shims.
+- [x] T052 Run cross-artifact consistency checks and update the release validation report in `release-validation-2026-07-22.md`.
 
 ## Completion Gate
 
 The feature is not complete until all P1 tasks are green, synthetic logic scenarios are automated, no confirmed content, hypothesis, insight, or active rule can be silently overwritten, contaminated calibration is blocked, the no-model manual path works, and action metrics can be calculated with stable denominators.
+
+## Phase 10 closure evidence (2026-07-22)
+
+- `IntentOrchestratorService.today` now ranks all active projects plus the latest pending series opportunity and returns one deterministic primary action.
+- Pending series opportunities are persisted as auditable `create_project` actions with `source=series_opportunity`; accepting the opportunity remains a separate user decision.
+- Primary navigation is frozen to `今日｜内容｜机会｜素材｜我的`; legacy tool routes redirect into those five nodes.
+- Playwright covers the no-model path from a share idea through intent confirmation, evidence confirmation, deterministic candidate review and version lock, and verifies the product stops before publishing.
+- The same Playwright suite verifies the five-node navigation at `390x844`.
+- Remaining unchecked items are still real scope: full action failure/expiry/cancel lifecycle, deletion/export guarantees across every entity, stable analytics denominators, and the complete release-validation matrix.

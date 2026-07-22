@@ -67,7 +67,9 @@ async def _published_project(test_db, suffix):
 
 
 @pytest.mark.asyncio
-async def test_series_candidate_confirm_list_workspace_and_revoke(client, test_db):
+async def test_series_candidate_confirm_list_workspace_and_revoke(
+    client, client_as_u2, test_db
+):
     first = await _published_project(test_db, "one")
     second = await _published_project(test_db, "two")
     candidate_body = {
@@ -125,6 +127,31 @@ async def test_series_candidate_confirm_list_workspace_and_revoke(client, test_d
     opportunity_data = opportunity.json()["data"]
     assert opportunity_data["status"] == "proposed"
     assert opportunity_data["created_project_id"] is None
+
+    await test_db.execute(
+        "UPDATE content_projects SET status='settled' WHERE id IN (:first,:second)",
+        {"first": first["id"], "second": second["id"]},
+    )
+    today = await client.get("/api/v2/today")
+    assert today.status_code == 200
+    today_action = today.json()["data"]["action"]
+    assert today_action["action_type"] == "create_project"
+    assert today_action["expected_state_change"] == {
+        "action_type": "review_opportunity",
+        "source": "series_opportunity",
+        "opportunity_id": opportunity_data["id"],
+        "opportunity_version": opportunity_data["version"],
+    }
+    assert today_action["fallback_action"]["path"] == "/opportunities"
+
+    other_owner_today = await client_as_u2.get("/api/v2/today")
+    assert other_owner_today.status_code == 200
+    other_owner_change = other_owner_today.json()["data"]["action"][
+        "expected_state_change"
+    ]
+    assert other_owner_change["action_type"] == "create_project"
+    assert other_owner_change.get("source") != "series_opportunity"
+    assert "opportunity_id" not in other_owner_change
 
     accepted = await client.post(
         f"/api/v2/content-opportunities/{opportunity_data['id']}:decide",

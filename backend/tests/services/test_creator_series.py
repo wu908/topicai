@@ -546,3 +546,54 @@ async def test_confirmed_series_opportunity_requires_acceptance_and_replays_proj
                 idempotency_key="series-extension-too-soon",
             ),
         )
+
+
+@pytest.mark.asyncio
+async def test_today_surfaces_a_pending_series_opportunity_after_active_work_is_settled(
+    series_db,
+):
+    first = await _published_project(series_db, suffix="today-opportunity-one")
+    second = await _published_project(series_db, suffix="today-opportunity-two")
+    series_service = CreatorSeriesService(series_db)
+    candidate, _ = await series_service.propose(
+        "u1", _candidate_input(first, second, "today-opportunity-series")
+    )
+    series, _ = await series_service.decide(
+        "u1",
+        candidate["id"],
+        SeriesDecision(
+            decision="confirm",
+            confirmed_name="稳定更新后续",
+            confirmed_promise="让读者持续看到真实变化",
+            confirmed_continuation_prompt="记录稳定更新机制下一次如何调整",
+            expected_series_version=candidate["version"],
+            idempotency_key="today-opportunity-confirm",
+        ),
+    )
+    opportunity, _ = await ContentOpportunityService(
+        series_db
+    ).propose_series_extension(
+        "u1",
+        series["id"],
+        SeriesExtensionCreate(
+            expected_series_version=series["version"],
+            idempotency_key="today-opportunity-propose",
+        ),
+    )
+    await series_db.execute(
+        "UPDATE content_projects SET status='settled' WHERE id IN (:first,:second)",
+        {"first": first["id"], "second": second["id"]},
+    )
+
+    today = await IntentOrchestratorService(series_db).today("u1")
+
+    assert today["action"]["project_id"] is None
+    assert today["action"]["action_type"] == "create_project"
+    assert today["action"]["expected_state_change"] == {
+        "action_type": "review_opportunity",
+        "source": "series_opportunity",
+        "opportunity_id": opportunity["id"],
+        "opportunity_version": opportunity["version"],
+    }
+    assert today["action"]["fallback_action"]["path"] == "/opportunities"
+    assert f"creator-series:{series['id']}" in today["action"]["evidence_refs"]

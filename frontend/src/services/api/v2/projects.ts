@@ -42,6 +42,7 @@ import type {
   SeriesRevocationInput,
   SeriesExtensionCreateInput,
   OpportunityDecisionInput,
+  CreatorState,
 } from '@/types/contracts/v2/content';
 
 async function getData<T>(promise: Promise<{ data: ApiEnvelope<T> }>): Promise<T> {
@@ -110,6 +111,9 @@ export const restoreCandidateVersion = (projectId: string, input: CandidateResto
 
 export const getTodayWorkspace = () =>
   getData(v2Client.get<ApiEnvelope<TodayWorkspace>>('/today'));
+
+export const getCreatorState = () =>
+  getData(v2Client.get<ApiEnvelope<CreatorState>>('/creator-state'));
 
 export const getProjectNextAction = (projectId: string) =>
   getData(v2Client.get<ApiEnvelope<IntentAction>>(`/projects/${projectId}/next-action`));
@@ -224,6 +228,13 @@ export const decideContentOpportunity = (
     v2Client.post<ApiEnvelope<ContentOpportunity>>(
       `/content-opportunities/${opportunityId}:decide`,
       input,
+    ),
+  );
+
+export const listContentOpportunities = () =>
+  getData(
+    v2Client.get<ApiEnvelope<{ items: ContentOpportunity[] }>>(
+      '/content-opportunities',
     ),
   );
 

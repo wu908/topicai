@@ -650,7 +650,12 @@ function CandidateReviewPanel({
           const decision = segment.decision;
           const label = segment.segment_type === 'title' ? '标题' : `正文 ${segment.ordinal}`;
           return (
-            <Box key={segment.id} sx={{ borderTop: '1px solid var(--v3-border-light)', pt: 2 }}>
+            <Box
+              key={segment.id}
+              data-testid="candidate-segment"
+              data-status={decision?.decision ?? 'pending'}
+              sx={{ borderTop: '1px solid var(--v3-border-light)', pt: 2 }}
+            >
               <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" spacing={1}>
                 <strong>{label}</strong>
                 <Chip size="small" color={decision?.decision === 'rejected' ? 'warning' : decision ? 'success' : 'default'} label={decisionLabel(decision?.decision)} />

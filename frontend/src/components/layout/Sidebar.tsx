@@ -18,9 +18,9 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { to: '/', label: '今日', icon: <HomeOutlined /> },
   { to: '/content', label: '内容', icon: <ArticleOutlined /> },
-  { to: '/topics', label: '机会', icon: <LightbulbOutlined /> },
-  { to: '/assets', label: '素材', icon: <FolderOutlined /> },
-  { to: '/profile', label: '我的', icon: <PersonOutline /> },
+  { to: '/opportunities', label: '机会', icon: <LightbulbOutlined /> },
+  { to: '/materials', label: '素材', icon: <FolderOutlined /> },
+  { to: '/me', label: '我的', icon: <PersonOutline /> },
 ];
 
 const navLinkStyle = (active: boolean): CSSProperties => ({
@@ -100,7 +100,7 @@ export default function Sidebar() {
       <button
         type="button"
         className="v3-sidebar-user"
-        onClick={() => navigate('/profile')}
+        onClick={() => navigate('/me')}
         aria-label="个人资料"
         style={userCardStyle}
       >

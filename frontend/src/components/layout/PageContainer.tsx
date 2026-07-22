@@ -34,7 +34,7 @@ const PageContainer: React.FC<PageContainerProps> = ({
             style={{
               fontSize: 22,
               fontWeight: 600,
-              letterSpacing: '-0.3px',
+              letterSpacing: 0,
               color: 'var(--v3-text)',
               margin: 0,
               lineHeight: 1.2,
