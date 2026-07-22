@@ -840,3 +840,174 @@ async def test_model_failure_after_fact_confirmation_preserves_input_and_uses_fa
     assert answer in result["candidate_version"]["body_text"]
     assert "请在发布前补充并确认具体细节" in result["candidate_version"]["body_text"]
     assert result["next_action"]["action_type"] == "review_candidate"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("response_payload", [{}, {"reason": "   "}])
+async def test_rejecting_action_requires_reason(client, response_payload):
+    project = (
+        await client.post(
+            "/api/v2/projects",
+            json={"title": "reject reason", "idempotency_key": "reject-reason-project"},
+        )
+    ).json()["data"]
+    action = (
+        await client.get(f"/api/v2/projects/{project['id']}/next-action")
+    ).json()["data"]
+
+    response = await client.post(
+        f"/api/v2/actions/{action['id']}:respond",
+        json={
+            "decision": "reject",
+            "response_payload": response_payload,
+            "expected_action_version": action["version"],
+            "idempotency_key": "reject-without-reason",
+        },
+    )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_rejecting_action_keeps_cancelled_state_until_project_changes(client):
+    project = (
+        await client.post(
+            "/api/v2/projects",
+            json={"title": "reject action", "idempotency_key": "reject-action-project"},
+        )
+    ).json()["data"]
+    action = (
+        await client.get(f"/api/v2/projects/{project['id']}/next-action")
+    ).json()["data"]
+    payload = {
+        "decision": "reject",
+        "response_payload": {"reason": "This direction does not fit my current goal."},
+        "expected_action_version": action["version"],
+        "idempotency_key": "reject-action-once",
+    }
+
+    rejected = await client.post(f"/api/v2/actions/{action['id']}:respond", json=payload)
+    assert rejected.status_code == 201
+    cancelled = rejected.json()["data"]["action"]
+    assert cancelled["status"] == "cancelled"
+    assert cancelled["last_event"]["event_type"] == "rejected"
+    assert (await client.post(f"/api/v2/actions/{action['id']}:respond", json=payload)).status_code == 200
+
+    current = await client.get(f"/api/v2/projects/{project['id']}/next-action")
+    assert current.json()["data"]["id"] == action["id"]
+    assert current.json()["data"]["status"] == "cancelled"
+
+
+@pytest.mark.asyncio
+async def test_failed_action_creates_one_auditable_recovery_action(client, test_db):
+    project = (
+        await client.post(
+            "/api/v2/projects",
+            json={"title": "recover action", "idempotency_key": "recover-action-project"},
+        )
+    ).json()["data"]
+    action = (
+        await client.get(f"/api/v2/projects/{project['id']}/next-action")
+    ).json()["data"]
+
+    failure_payload = {
+        "operation": "fail",
+        "reason": "The model response could not be validated.",
+        "error_code": "malformed_output",
+        "expected_action_version": action["version"],
+        "idempotency_key": "fail-action-once",
+    }
+    failed = await client.post(
+        f"/api/v2/actions/{action['id']}:transition", json=failure_payload
+    )
+    assert failed.status_code == 201
+    data = failed.json()["data"]
+    assert data["action"]["status"] == "failed"
+    assert data["recovery_action"]["id"] != action["id"]
+    assert data["recovery_action"]["action_type"] == action["action_type"]
+    current = await client.get(f"/api/v2/projects/{project['id']}/next-action")
+    assert current.json()["data"]["id"] == data["recovery_action"]["id"]
+    replay = await client.post(
+        f"/api/v2/actions/{action['id']}:transition", json=failure_payload
+    )
+    assert replay.status_code == 200
+    assert replay.json()["data"]["recovery_action"]["id"] == data["recovery_action"]["id"]
+    event = await test_db.fetch_one(
+        "SELECT event_type,success,error_code FROM action_events "
+        "WHERE owner_user_id='u1' AND idempotency_key='fail-action-once'"
+    )
+    assert event == {
+        "event_type": "failed",
+        "success": 0,
+        "error_code": "malformed_output",
+    }
+
+
+@pytest.mark.asyncio
+async def test_due_action_expires_automatically_and_is_replaced(client, test_db):
+    project = (
+        await client.post(
+            "/api/v2/projects",
+            json={"title": "expire action", "idempotency_key": "expire-action-project"},
+        )
+    ).json()["data"]
+    action = (
+        await client.get(f"/api/v2/projects/{project['id']}/next-action")
+    ).json()["data"]
+    await test_db.execute(
+        "UPDATE next_best_actions SET expires_at='2000-01-01T00:00:00Z' WHERE id=:id",
+        {"id": action["id"]},
+    )
+
+    replacement = (
+        await client.get(f"/api/v2/projects/{project['id']}/next-action")
+    ).json()["data"]
+    assert replacement["id"] != action["id"]
+    assert replacement["action_type"] == action["action_type"]
+    expired = await test_db.fetch_one(
+        "SELECT status FROM next_best_actions WHERE id=:id", {"id": action["id"]}
+    )
+    assert expired["status"] == "expired"
+    events = await test_db.fetch_all(
+        "SELECT event_type FROM action_events WHERE action_id=:id AND event_type='expired'",
+        {"id": action["id"]},
+    )
+    assert events == [{"event_type": "expired"}]
+
+
+@pytest.mark.asyncio
+async def test_terminal_action_cannot_confirm_an_old_human_gate(client):
+    project = (
+        await client.post(
+            "/api/v2/projects",
+            json={"title": "stale gate", "idempotency_key": "stale-gate-project"},
+        )
+    ).json()["data"]
+    action = (
+        await client.get(f"/api/v2/projects/{project['id']}/next-action")
+    ).json()["data"]
+    gate = (
+        await client.post(f"/api/v2/actions/{action['id']}/human-gate")
+    ).json()["data"]
+    failed = await client.post(
+        f"/api/v2/actions/{action['id']}:transition",
+        json={
+            "operation": "fail",
+            "reason": "The action could not continue.",
+            "error_code": "execution_failed",
+            "expected_action_version": action["version"],
+            "idempotency_key": "stale-gate-failure",
+        },
+    )
+    assert failed.status_code == 201
+
+    stale_decision = await client.post(
+        f"/api/v2/human-gates/{gate['id']}:decide",
+        json={
+            "decision": "confirm",
+            "decision_payload": {},
+            "expected_gate_version": gate["version"],
+            "idempotency_key": "stale-gate-confirm",
+        },
+    )
+    assert stale_decision.status_code == 400

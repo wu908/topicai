@@ -67,9 +67,14 @@ export interface IntentAction {
   human_gate_type: HumanGate['gate_type'] | null;
   human_gate: HumanGate | null;
   fallback_action: { action_type: string; path?: string; title?: string };
-  status: 'proposed' | 'accepted' | 'deferred' | 'completed' | 'superseded';
+  status: 'proposed' | 'accepted' | 'deferred' | 'completed' | 'superseded' | 'failed' | 'expired' | 'cancelled';
   version: number;
   expires_at: string | null;
+  last_event: {
+    event_type: string;
+    payload: { reason?: string; error_code?: string | null };
+    created_at: string;
+  } | null;
 }
 
 export type NextAction =
@@ -578,8 +583,16 @@ export interface IntentConfirmationInput {
 }
 
 export interface ActionResponseInput {
-  decision: 'accept' | 'defer' | 'manual';
+  decision: 'accept' | 'defer' | 'reject' | 'manual';
   response_payload?: Record<string, unknown>;
+  expected_action_version: number;
+  idempotency_key: string;
+}
+
+export interface ActionLifecycleInput {
+  operation: 'fail' | 'expire' | 'cancel';
+  reason: string;
+  error_code?: string;
   expected_action_version: number;
   idempotency_key: string;
 }

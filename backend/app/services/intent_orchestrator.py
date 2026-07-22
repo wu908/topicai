@@ -1,5 +1,6 @@
 """Persisted next-best-action orchestration with an auditable manual fallback."""
 
+import asyncio
 import json
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -55,6 +56,14 @@ class IntentOrchestratorService:
     def __init__(self, db: Any):
         self.db = db
 
+    def _creation_lock(self) -> asyncio.Lock:
+        lock = getattr(self.db, "_intent_action_creation_lock", None)
+        if lock is None:
+            # ponytail: one lock per SQLite DB; split by owner if throughput matters.
+            lock = asyncio.Lock()
+            self.db._intent_action_creation_lock = lock
+        return lock
+
     async def today(self, owner_user_id: str) -> dict[str, Any]:
         creator_state = await CreatorStateService(self.db).refresh_trust(owner_user_id)
         projects = await self.db.fetch_all(
@@ -92,10 +101,18 @@ class IntentOrchestratorService:
             else action["action_type"]
         )
         priority = TODAY_ACTION_PRIORITY.get(action_kind, 0)
-        is_active = 0 if action.get("status") == "deferred" else 1
+        is_active = 0 if action.get("status") in {"deferred", "cancelled"} else 1
         return is_active, priority, action.get("updated_at", ""), action["id"]
 
     async def _ensure_opportunity_action(
+        self, owner_user_id: str, opportunity: dict[str, Any]
+    ) -> dict[str, Any]:
+        async with self._creation_lock():
+            return await self._ensure_opportunity_action_locked(
+                owner_user_id, opportunity
+            )
+
+    async def _ensure_opportunity_action_locked(
         self, owner_user_id: str, opportunity: dict[str, Any]
     ) -> dict[str, Any]:
         current = await self.db.fetch_one(
@@ -104,6 +121,9 @@ class IntentOrchestratorService:
             "ORDER BY created_at DESC LIMIT 1",
             {"owner": owner_user_id},
         )
+        if current and self._is_expired(current):
+            await self._expire_action(owner_user_id, current)
+            current = None
         if current:
             expected = json.loads(current["expected_state_change_json"])
             if (
@@ -116,6 +136,20 @@ class IntentOrchestratorService:
                 "version=version+1 WHERE id=:id AND owner_user_id=:owner",
                 {"now": now(), "id": current["id"], "owner": owner_user_id},
             )
+
+        cancelled = await self.db.fetch_one(
+            "SELECT * FROM next_best_actions WHERE owner_user_id=:owner "
+            "AND project_id IS NULL "
+            "AND status='cancelled' ORDER BY updated_at DESC LIMIT 1",
+            {"owner": owner_user_id},
+        )
+        if cancelled:
+            expected = json.loads(cancelled["expected_state_change_json"])
+            if (
+                expected.get("opportunity_id") == opportunity["id"]
+                and expected.get("opportunity_version") == opportunity["version"]
+            ):
+                return await self._normalize_with_gate(owner_user_id, cancelled)
 
         action_id = str(uuid.uuid4())
         timestamp = now()
@@ -159,7 +193,6 @@ class IntentOrchestratorService:
             "unknown": json.dumps(payload["unknown"], ensure_ascii=False),
             "change": json.dumps(expected_change, ensure_ascii=False),
             "fallback": json.dumps(fallback, ensure_ascii=False),
-            "trace": trace_id,
             "key": key,
             "hash": request_hash(payload),
             "now": timestamp,
@@ -169,11 +202,7 @@ class IntentOrchestratorService:
             "opportunity_id": opportunity["id"],
         }
         session = await self.db.get_session()
-        async with session:
-            async with session.begin():
-                await self._create_opportunity_trace(
-                    session, owner_user_id, action_id, opportunity, trace_id
-                )
+        async with session, session.begin():
                 inserted = await session.execute(
                     text(
                         "INSERT INTO next_best_actions (id,owner_user_id,project_id,action_type,"
@@ -182,13 +211,22 @@ class IntentOrchestratorService:
                         "human_gate_type,fallback_action_json,status,ai_trace_id,expires_at,version,"
                         "idempotency_key,request_hash,created_at,updated_at) VALUES "
                         "(:id,:owner,NULL,:action_type,:content_intent,:title,:reason,:evidence,"
-                        ":unknown,:change,:effort,:automation,NULL,:fallback,'proposed',:trace,"
+                        ":unknown,:change,:effort,:automation,NULL,:fallback,'proposed',NULL,"
                         "NULL,1,:key,:hash,:now,:now) "
-                        "ON CONFLICT(owner_user_id,idempotency_key) DO NOTHING"
+                        "ON CONFLICT(owner_user_id,idempotency_key) DO NOTHING RETURNING id"
                     ),
                     action_params,
                 )
-                if inserted.rowcount == 1:
+                if inserted.scalar_one_or_none() == action_id:
+                    await self._create_opportunity_trace(
+                        session, owner_user_id, action_id, opportunity, trace_id
+                    )
+                    await session.execute(
+                        text(
+                            "UPDATE next_best_actions SET ai_trace_id=:trace WHERE id=:id"
+                        ),
+                        {"trace": trace_id, "id": action_id},
+                    )
                     await session.execute(
                         text(
                             "INSERT INTO action_events (id,owner_user_id,action_id,project_id,"
@@ -207,14 +245,6 @@ class IntentOrchestratorService:
                             "now": timestamp,
                         },
                     )
-                else:
-                    await session.execute(
-                        text(
-                            "DELETE FROM ai_traces_v2 WHERE id=:trace "
-                            "AND NOT EXISTS (SELECT 1 FROM next_best_actions WHERE ai_trace_id=:trace)"
-                        ),
-                        {"trace": trace_id},
-                    )
                 created = (
                     await session.execute(
                         text(
@@ -225,6 +255,58 @@ class IntentOrchestratorService:
                     )
                 ).mappings().first()
         return await self._normalize_with_gate(owner_user_id, created)
+
+    @staticmethod
+    def _is_expired(action: dict[str, Any]) -> bool:
+        if not action.get("expires_at"):
+            return False
+        expires_at = datetime.fromisoformat(action["expires_at"].replace("Z", "+00:00"))
+        return expires_at <= datetime.now(UTC)
+
+    async def _expire_action(self, owner: str, action: dict[str, Any]) -> None:
+        timestamp = now()
+        event_payload = {
+            "reason": "action_expired_before_completion",
+            "fallback_action": json.loads(action["fallback_action_json"]),
+        }
+        session = await self.db.get_session()
+        async with session, session.begin():
+                updated = await session.execute(
+                    text(
+                        "UPDATE next_best_actions SET status='expired',updated_at=:now,"
+                        "version=version+1 WHERE id=:id AND owner_user_id=:owner "
+                        "AND version=:version AND status IN ('proposed','accepted','deferred')"
+                    ),
+                    {
+                        "now": timestamp,
+                        "id": action["id"],
+                        "owner": owner,
+                        "version": action["version"],
+                    },
+                )
+                if updated.rowcount != 1:
+                    return
+                await session.execute(
+                    text(
+                        "INSERT OR IGNORE INTO action_events "
+                        "(id,owner_user_id,action_id,project_id,event_type,from_status,"
+                        "to_status,payload_json,action_version,idempotency_key,request_hash,"
+                        "created_at) VALUES (:id,:owner,:action,:project,'expired',:from_status,"
+                        "'expired',:payload,:action_version,:key,:hash,:now)"
+                    ),
+                    {
+                        "id": str(uuid.uuid4()),
+                        "owner": owner,
+                        "action": action["id"],
+                        "project": action["project_id"],
+                        "from_status": action["status"],
+                        "payload": json.dumps(event_payload, ensure_ascii=False),
+                        "action_version": action["version"] + 1,
+                        "key": f"auto-expire:{action['id']}:{action['version']}",
+                        "hash": request_hash(event_payload),
+                        "now": timestamp,
+                    },
+                )
 
     async def _create_opportunity_trace(
         self,
@@ -274,6 +356,12 @@ class IntentOrchestratorService:
         return trace_id
 
     async def ensure_project_action(
+        self, owner_user_id: str, project: dict[str, Any] | str
+    ) -> dict[str, Any]:
+        async with self._creation_lock():
+            return await self._ensure_project_action_locked(owner_user_id, project)
+
+    async def _ensure_project_action_locked(
         self, owner_user_id: str, project: dict[str, Any] | str
     ) -> dict[str, Any]:
         if isinstance(project, str):
@@ -342,6 +430,9 @@ class IntentOrchestratorService:
             "AND status IN ('proposed','accepted','deferred') ORDER BY created_at DESC LIMIT 1",
             {"owner": owner_user_id, "project": project_id},
         )
+        if current and self._is_expired(current):
+            await self._expire_action(owner_user_id, current)
+            current = None
         if current:
             expected = json.loads(current["expected_state_change_json"])
             based_on = expected.get("based_on_project_version")
@@ -355,6 +446,20 @@ class IntentOrchestratorService:
                 "version=version+1 WHERE id=:id AND owner_user_id=:owner",
                 {"now": now(), "id": current["id"], "owner": owner_user_id},
             )
+
+        cancelled = await self.db.fetch_one(
+            "SELECT * FROM next_best_actions WHERE owner_user_id=:owner "
+            "AND ((project_id=:project) OR (project_id IS NULL AND :project IS NULL)) "
+            "AND status='cancelled' ORDER BY updated_at DESC LIMIT 1",
+            {"owner": owner_user_id, "project": project_id},
+        )
+        if cancelled:
+            expected = json.loads(cancelled["expected_state_change_json"])
+            if cancelled["action_type"] == action_type and (
+                project is None
+                or expected.get("based_on_project_version") == project["version"]
+            ):
+                return await self._normalize_with_gate(owner_user_id, cancelled)
 
         spec = self._action_spec(action_type, project)
         genome_refs = [
@@ -413,7 +518,6 @@ class IntentOrchestratorService:
             "unknown": json.dumps(payload["unknown"], ensure_ascii=False),
             "change": json.dumps(payload["change"], ensure_ascii=False),
             "fallback": json.dumps(payload["fallback"], ensure_ascii=False),
-            "trace": trace_id,
             "expires": expires,
             "key": key,
             "hash": request_hash(payload),
@@ -422,15 +526,6 @@ class IntentOrchestratorService:
         session = await self.db.get_session()
         async with session:
             async with session.begin():
-                await self._create_trace(
-                    session,
-                    owner_user_id,
-                    project,
-                    action_id,
-                    action_type,
-                    content_genome,
-                    trace_id,
-                )
                 inserted = await session.execute(
                     text(
                         "INSERT INTO next_best_actions (id,owner_user_id,project_id,action_type,"
@@ -439,13 +534,28 @@ class IntentOrchestratorService:
                         "human_gate_type,fallback_action_json,status,ai_trace_id,expires_at,version,"
                         "idempotency_key,request_hash,created_at,updated_at) VALUES "
                         "(:id,:owner,:project,:action_type,:content_intent,:title,:reason,:evidence,"
-                        ":unknown,:change,:effort,:automation,:gate,:fallback,'proposed',:trace,"
+                        ":unknown,:change,:effort,:automation,:gate,:fallback,'proposed',NULL,"
                         ":expires,1,:key,:hash,:now,:now) "
-                        "ON CONFLICT(owner_user_id,idempotency_key) DO NOTHING"
+                        "ON CONFLICT(owner_user_id,idempotency_key) DO NOTHING RETURNING id"
                     ),
                     action_params,
                 )
-                if inserted.rowcount == 1:
+                if inserted.scalar_one_or_none() == action_id:
+                    await self._create_trace(
+                        session,
+                        owner_user_id,
+                        project,
+                        action_id,
+                        action_type,
+                        content_genome,
+                        trace_id,
+                    )
+                    await session.execute(
+                        text(
+                            "UPDATE next_best_actions SET ai_trace_id=:trace WHERE id=:id"
+                        ),
+                        {"trace": trace_id, "id": action_id},
+                    )
                     event_payload = {"source": "deterministic_orchestrator"}
                     await session.execute(
                         text(
@@ -465,14 +575,6 @@ class IntentOrchestratorService:
                             "hash": request_hash(event_payload),
                             "now": timestamp,
                         },
-                    )
-                else:
-                    await session.execute(
-                        text(
-                            "DELETE FROM ai_traces_v2 WHERE id=:trace "
-                            "AND NOT EXISTS (SELECT 1 FROM next_best_actions WHERE ai_trace_id=:trace)"
-                        ),
-                        {"trace": trace_id},
                     )
                 created = (
                     await session.execute(
@@ -589,6 +691,21 @@ class IntentOrchestratorService:
             {"action": result["id"], "owner": owner},
         )
         result["human_gate"] = self._normalize_gate(gate) if gate else None
+        event = await self.db.fetch_one(
+            "SELECT event_type,payload_json,created_at FROM action_events "
+            "WHERE action_id=:action AND owner_user_id=:owner "
+            "ORDER BY created_at DESC,id DESC LIMIT 1",
+            {"action": result["id"], "owner": owner},
+        )
+        result["last_event"] = (
+            {
+                "event_type": event["event_type"],
+                "payload": json.loads(event["payload_json"]),
+                "created_at": event["created_at"],
+            }
+            if event
+            else None
+        )
         return result
 
     @staticmethod

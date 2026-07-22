@@ -7,6 +7,7 @@ from app.models.v2.calibration import (
     PublishRecordCreate,
 )
 from app.models.v2.intent_actions import (
+    ActionLifecycleCommand,
     ActionResponse,
     AutomationLevel,
     ContentIntent,
@@ -41,6 +42,7 @@ __all__ = [
     "PerformanceSnapshotCreate",
     "PublishRecordCreate",
     "ActionResponse",
+    "ActionLifecycleCommand",
     "AutomationLevel",
     "ContentIntent",
     "HumanGateDecision",

@@ -316,7 +316,8 @@ class ExperimentMetricsService:
         rejected = {
             row["action_id"]
             for row in rows
-            if row["event_type"] in ("deferred", "manual_selected", "gate_rejected")
+            if row["event_type"]
+            in ("deferred", "manual_selected", "gate_rejected", "rejected", "cancelled")
         }
         completed = {row["action_id"] for row in rows if row["to_status"] == "completed"}
         failed = {row["action_id"] for row in rows if not row["success"]}
@@ -341,7 +342,7 @@ class ExperimentMetricsService:
             "accepted": metric(len(accepted), "offered actions with accepted or gate_confirmed event"),
             "rejected": metric(
                 len(rejected),
-                "offered actions with deferred, manual_selected, or gate_rejected event",
+                "offered actions with deferred, manual_selected, gate_rejected, rejected, or cancelled event",
             ),
             "completed": metric(len(completed), "offered actions that reached completed status"),
             "failed": metric(len(failed), "offered actions with success=false"),

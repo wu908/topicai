@@ -13,6 +13,7 @@ import type {
   SnapshotInput,
   VersionCreateInput,
   ActionResponseInput,
+  ActionLifecycleInput,
   HumanGate,
   HumanGateDecisionInput,
   Evidence,
@@ -123,6 +124,9 @@ export const confirmProjectIntent = (projectId: string, input: IntentConfirmatio
 
 export const respondToAction = (actionId: string, input: ActionResponseInput) =>
   getData(v2Client.post<ApiEnvelope<unknown>>(`/actions/${actionId}:respond`, input));
+
+export const transitionAction = (actionId: string, input: ActionLifecycleInput) =>
+  getData(v2Client.post<ApiEnvelope<unknown>>(`/actions/${actionId}:transition`, input));
 
 export const openHumanGate = (actionId: string) =>
   getData(v2Client.post<ApiEnvelope<HumanGate>>(`/actions/${actionId}/human-gate`));

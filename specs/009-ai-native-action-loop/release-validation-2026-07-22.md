@@ -113,3 +113,22 @@ Phase 13 closes the executable growth publication-to-learning journey through ex
 - Phase 12-14 backend release matrix: `33 passed`.
 - Backend CI equivalent: `761 passed`, `1 deselected`, `86.54%` coverage.
 - T050 is complete. T049 remains open until the bounded starter journey exists.
+
+## Phase 16 Action Lifecycle Addendum
+
+The action protocol now has explicit rejection, failure, expiry and cancellation
+outcomes. Failed and expired actions retain their audit event and recover to one
+fresh action; a cancelled suggestion remains stopped for the same project
+version and exposes the manual path. Pending HumanGates cannot confirm terminal
+or expired actions.
+
+Migration 030 upgrades phase-15 SQLite databases by rebuilding the constrained
+action tables, restoring experiment triggers and indexes, and checking foreign
+keys. The rejection-rate numerator now includes explicit rejection and
+cancellation without treating expiry as a user rejection or technical failure.
+
+Validation:
+
+- Backend CI equivalent: `779 passed`, `1 deselected`, `86.69%` coverage.
+- Frontend Vitest: `364 passed`, `2 skipped`; lint and production build passed.
+- T009, T016, T017 and T019 are complete.

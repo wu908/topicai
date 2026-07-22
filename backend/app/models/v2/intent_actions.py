@@ -59,12 +59,28 @@ class IntentConfirmation(StrictModel):
     idempotency_key: str = Field(min_length=1, max_length=200)
 
 
-ActionDecision = Literal["accept", "defer", "manual"]
+ActionDecision = Literal["accept", "defer", "reject", "manual"]
 
 
 class ActionResponse(StrictModel):
     decision: ActionDecision
     response_payload: dict[str, Any] = Field(default_factory=dict)
+    expected_action_version: int = Field(ge=1)
+    idempotency_key: str = Field(min_length=1, max_length=200)
+
+    @model_validator(mode="after")
+    def require_rejection_reason(self):
+        if self.decision == "reject" and not str(
+            self.response_payload.get("reason", "")
+        ).strip():
+            raise ValueError("rejection reason is required")
+        return self
+
+
+class ActionLifecycleCommand(StrictModel):
+    operation: Literal["fail", "expire", "cancel"]
+    reason: str = Field(min_length=1, max_length=500)
+    error_code: str | None = Field(default=None, max_length=100)
     expected_action_version: int = Field(ge=1)
     idempotency_key: str = Field(min_length=1, max_length=200)
 

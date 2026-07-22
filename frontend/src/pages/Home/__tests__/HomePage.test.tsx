@@ -66,6 +66,7 @@ describe('HomePage', () => {
     expect(screen.getByText('这条内容想让读者先理解你的经历。')).toBeInTheDocument();
     expect(screen.getByText('AI 依据')).toBeInTheDocument();
     expect(screen.getByText('还不知道')).toBeInTheDocument();
+    expect(screen.getByText(/后续提问、结构和复盘信号/)).toBeInTheDocument();
   });
 
   it('opens the related project from the primary action', async () => {
@@ -118,5 +119,23 @@ describe('HomePage', () => {
     expect(screen.queryByRole('button', { name: '暂不做' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '回到对应页面' }));
     expect(navigateMock).toHaveBeenCalledWith('/content/p1');
+  });
+
+  it('requires a reason before stopping an unsuitable AI suggestion', async () => {
+    render(<MemoryRouter><HomePage /></MemoryRouter>);
+    await screen.findByText(action.title);
+
+    fireEvent.click(screen.getByRole('button', { name: '不适合我' }));
+    const reason = screen.getByLabelText('为什么这条建议不适合你');
+    const submit = screen.getByRole('button', { name: '停止这条建议' });
+    expect(submit).toBeDisabled();
+    fireEvent.change(reason, { target: { value: '这不是我本周想处理的内容。' } });
+    fireEvent.click(submit);
+
+    await waitFor(() => expect(api.respondToAction).toHaveBeenCalledWith('a1', expect.objectContaining({
+      decision: 'reject',
+      response_payload: { reason: '这不是我本周想处理的内容。' },
+    })));
+    expect(screen.getByText('AI 不再推进这条建议')).toBeInTheDocument();
   });
 });

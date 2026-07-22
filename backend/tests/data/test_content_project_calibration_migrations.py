@@ -102,6 +102,7 @@ def test_intent_action_migration_upgrades_from_019_and_replays(tmp_path):
         "027_content_opportunities",
         "028_action_experiment_metrics",
         "029_starter_domain",
+        "030_action_lifecycle",
     ]
     assert replay == []
     with sqlite3.connect(db_path) as conn:
@@ -123,6 +124,50 @@ def test_intent_action_migration_upgrades_from_019_and_replays(tmp_path):
             "model_version",
             "prompt_version",
         } <= event_columns
+        action_sql = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='next_best_actions'"
+        ).fetchone()[0]
+        event_sql = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='action_events'"
+        ).fetchone()[0]
+        assert all(status in action_sql for status in ("'failed'", "'expired'", "'cancelled'"))
+        assert all(event in event_sql for event in ("'rejected'", "'failed'", "'expired'", "'cancelled'"))
+
+
+def test_action_lifecycle_migration_rebuilds_phase_15_constraints(tmp_path):
+    db_path = tmp_path / "phase-15.db"
+    phase_15_dir = tmp_path / "through-029"
+    phase_15_dir.mkdir()
+    for path in DEFAULT_MIGRATIONS_DIR.glob("[0-9][0-9][0-9]_*.sql"):
+        if int(path.name[:3]) <= 29:
+            target = phase_15_dir / path.name
+            shutil.copy2(path, target)
+            if path.name.startswith("020_"):
+                sql = target.read_text(encoding="utf-8")
+                sql = sql.replace(
+                    "'proposed','accepted','deferred','completed','superseded',\n"
+                    "            'failed','expired','cancelled'",
+                    "'proposed','accepted','deferred','completed','superseded'",
+                ).replace(
+                    "'gate_confirmed','gate_rejected','fallback_used',\n"
+                    "        'rejected','failed','expired','cancelled'",
+                    "'gate_confirmed','gate_rejected','fallback_used'",
+                )
+                target.write_text(sql, encoding="utf-8")
+
+    apply(db_path, phase_15_dir)
+    upgraded = apply(db_path, DEFAULT_MIGRATIONS_DIR)
+    assert [item.version for item in upgraded] == ["030_action_lifecycle"]
+    with sqlite3.connect(db_path) as conn:
+        action_sql = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='next_best_actions'"
+        ).fetchone()[0]
+        event_sql = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='action_events'"
+        ).fetchone()[0]
+        assert "'failed','expired','cancelled'" in action_sql
+        assert "'rejected','failed','expired','cancelled'" in event_sql
+        assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
 
 
 def test_publish_hypothesis_is_unique_per_project_version(tmp_path):

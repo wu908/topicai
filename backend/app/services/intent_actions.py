@@ -3,6 +3,7 @@
 import asyncio
 import json
 import uuid
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import text
@@ -12,6 +13,7 @@ from app.core.llm import LLMClient, wrap_user_input
 from app.models.v2.content_project import ContentVersionCreate
 from app.models.v2.evidence import EvidenceCreate, EvidenceDecision
 from app.models.v2.intent_actions import (
+    ActionLifecycleCommand,
     ActionResponse,
     AutomationPreference,
     CandidateDraft,
@@ -228,6 +230,9 @@ class ActionResponseService:
         elif body.decision == "defer":
             event_type, to_status = "deferred", "deferred"
             event_payload = {"reason": body.response_payload.get("reason")}
+        elif body.decision == "reject":
+            event_type, to_status = "rejected", "cancelled"
+            event_payload = {"reason": body.response_payload.get("reason")}
         elif body.decision == "manual":
             event_type, to_status = "manual_selected", "completed"
             event_payload = {"fallback_action": action["fallback_action"]}
@@ -276,6 +281,131 @@ class ActionResponseService:
             "action": updated_action,
             "event": {"id": event_id, "event_type": event_type, "payload": event_payload},
             "next_action": updated_action if updated_action.get("human_gate") else None,
+        }, False
+
+    async def transition(
+        self, owner_user_id: str, action_id: str, body: ActionLifecycleCommand
+    ) -> tuple[dict[str, Any], bool]:
+        """Apply an explicit terminal transition and return a safe recovery action."""
+        digest = request_hash(body)
+        replay = await self.db.fetch_one(
+            "SELECT * FROM action_events WHERE owner_user_id=:owner AND idempotency_key=:key",
+            {"owner": owner_user_id, "key": body.idempotency_key},
+        )
+        if replay:
+            if replay["request_hash"] != digest:
+                raise IdempotencyConflictException()
+            action = await self._action(owner_user_id, action_id)
+            recovery_action = None
+            if action["status"] in {"failed", "expired"}:
+                if action["project_id"]:
+                    recovery_action = await IntentOrchestratorService(
+                        self.db
+                    ).ensure_project_action(owner_user_id, action["project_id"])
+                else:
+                    recovery_action = (
+                        await IntentOrchestratorService(self.db).today(owner_user_id)
+                    )["action"]
+            return {
+                "action": action,
+                "event": self._normalize_event(replay),
+                "recovery_action": recovery_action,
+            }, True
+
+        action = await self._action(owner_user_id, action_id)
+        if action["version"] != body.expected_action_version:
+            raise VersionConflictException(action["version"], body.expected_action_version)
+        if action["status"] not in ("proposed", "accepted", "deferred"):
+            raise ValueError("action is no longer active")
+        if body.operation == "expire":
+            if not action["expires_at"]:
+                raise ValueError("action has no expiry")
+            expires_at = datetime.fromisoformat(action["expires_at"].replace("Z", "+00:00"))
+            if expires_at > datetime.now(UTC):
+                raise ValueError("action has not expired")
+
+        to_status = {
+            "fail": "failed",
+            "expire": "expired",
+            "cancel": "cancelled",
+        }[body.operation]
+        event_payload = {
+            "reason": body.reason,
+            "error_code": body.error_code,
+            "fallback_action": action["fallback_action"],
+        }
+        timestamp = now()
+        next_version = action["version"] + 1
+        event_id = str(uuid.uuid4())
+        session = await self.db.get_session()
+        async with session:
+            async with session.begin():
+                updated = await session.execute(
+                    text(
+                        "UPDATE next_best_actions SET status=:status,updated_at=:now,"
+                        "version=:version WHERE id=:id AND owner_user_id=:owner "
+                        "AND version=:expected AND status IN ('proposed','accepted','deferred')"
+                    ),
+                    {
+                        "status": to_status,
+                        "now": timestamp,
+                        "version": next_version,
+                        "id": action_id,
+                        "owner": owner_user_id,
+                        "expected": action["version"],
+                    },
+                )
+                if updated.rowcount != 1:
+                    raise VersionConflictException(next_version, action["version"])
+                await session.execute(
+                    text(
+                        "INSERT INTO action_events (id,owner_user_id,action_id,project_id,"
+                        "event_type,from_status,to_status,payload_json,action_version,"
+                        "idempotency_key,request_hash,created_at,success,error_code) VALUES "
+                        "(:id,:owner,:action,:project,:event,:from_status,:to_status,:payload,"
+                        ":version,:key,:hash,:now,:success,:error_code)"
+                    ),
+                    {
+                        "id": event_id,
+                        "owner": owner_user_id,
+                        "action": action_id,
+                        "project": action["project_id"],
+                        "event": {
+                            "fail": "failed",
+                            "expire": "expired",
+                            "cancel": "cancelled",
+                        }[body.operation],
+                        "from_status": action["status"],
+                        "to_status": to_status,
+                        "payload": json.dumps(event_payload, ensure_ascii=False),
+                        "version": next_version,
+                        "key": body.idempotency_key,
+                        "hash": digest,
+                        "now": timestamp,
+                        "success": 0 if body.operation == "fail" else 1,
+                        "error_code": body.error_code,
+                    },
+                )
+
+        recovery_action = None
+        if to_status in {"failed", "expired"}:
+            if action["project_id"]:
+                recovery_action = await IntentOrchestratorService(
+                    self.db
+                ).ensure_project_action(owner_user_id, action["project_id"])
+            else:
+                recovery_action = (
+                    await IntentOrchestratorService(self.db).today(owner_user_id)
+                )["action"]
+        updated_action = await self._action(owner_user_id, action_id)
+        return {
+            "action": updated_action,
+            "event": {
+                "id": event_id,
+                "event_type": to_status,
+                "payload": event_payload,
+            },
+            "recovery_action": recovery_action,
         }, False
 
     async def _prepare_candidate(
@@ -358,6 +488,21 @@ class ActionResponseService:
         result = dict(row)
         for field in ("evidence_refs_json", "unknown_refs_json", "expected_state_change_json", "fallback_action_json"):
             result[field.removesuffix("_json")] = json.loads(result.pop(field))
+        last_event = await self.db.fetch_one(
+            "SELECT event_type,payload_json,created_at FROM action_events "
+            "WHERE action_id=:action AND owner_user_id=:owner "
+            "ORDER BY created_at DESC,id DESC LIMIT 1",
+            {"action": action_id, "owner": owner},
+        )
+        result["last_event"] = (
+            {
+                "event_type": last_event["event_type"],
+                "payload": json.loads(last_event["payload_json"]),
+                "created_at": last_event["created_at"],
+            }
+            if last_event
+            else None
+        )
         return result
 
     @staticmethod
@@ -463,6 +608,12 @@ class HumanGateService:
         if gate["status"] != "pending":
             raise ValueError("human gate is no longer pending")
         action = await ActionResponseService(self.db)._action(owner, gate["action_id"])
+        if action["status"] not in {"proposed", "accepted"}:
+            raise ValueError("action is no longer active")
+        if action["expires_at"]:
+            expires_at = datetime.fromisoformat(action["expires_at"].replace("Z", "+00:00"))
+            if expires_at <= datetime.now(UTC):
+                raise ValueError("action has expired")
 
         candidate = None
         evidence = None

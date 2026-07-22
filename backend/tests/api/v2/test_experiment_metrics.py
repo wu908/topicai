@@ -9,6 +9,19 @@ from sqlalchemy import text
 from app.services.experiment_metrics import ExperimentMetricsService
 
 
+def test_action_funnel_counts_explicit_rejection_and_cancellation():
+    rows = [
+        {"action_id": "rejected", "event_type": "rejected", "to_status": "cancelled", "success": 1, "latency_ms": None},
+        {"action_id": "cancelled", "event_type": "cancelled", "to_status": "cancelled", "success": 1, "latency_ms": None},
+        {"action_id": "expired", "event_type": "expired", "to_status": "expired", "success": 1, "latency_ms": None},
+    ]
+    funnel = ExperimentMetricsService._funnel(
+        {"rejected", "cancelled", "expired"}, rows
+    )
+    assert funnel["rejected"]["numerator"] == 2
+    assert funnel["failed"]["numerator"] == 0
+
+
 @pytest.mark.asyncio
 async def test_active_assignment_is_frozen_on_actions_and_events(client, test_db):
     assigned = await client.put(

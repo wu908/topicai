@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ArrowForward, AutoAwesomeOutlined, Check, Pause } from '@mui/icons-material';
-import { Alert, Button, Chip, CircularProgress, Stack } from '@mui/material';
+import { Alert, Button, Chip, CircularProgress, Stack, TextField } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import PageContainer from '@/components/layout/PageContainer';
 import { getTodayWorkspace, respondToAction } from '@/services/api/v2/projects';
@@ -31,6 +31,19 @@ const actionLabels: Record<IntentAction['action_type'], string> = {
   review_result: '对照发布结果',
   confirm_learning: '确认下一轮实验',
   manage_learning: '处理一条待验证经验',
+};
+
+const outcomeLabels: Record<IntentAction['action_type'], string> = {
+  create_project: '得到一个可以继续推进的内容项目',
+  confirm_intent: '后续提问、结构和复盘信号会按这个目的调整',
+  answer_key_question: 'AI 可以基于你确认的事实准备候选内容',
+  review_candidate: '锁定一个不会被重新生成覆盖的发布版本',
+  confirm_publish_scope: '明确哪些内容可以公开',
+  record_publication: '把真实发布结果接入后续观察',
+  add_performance: '获得基于真实数据的复盘',
+  review_result: '区分事实、可能原因和下一轮实验',
+  confirm_learning: '只沉淀一条经过你确认的下一轮实验',
+  manage_learning: '决定这条经验继续验证、吸收还是停止',
 };
 
 const refLabels: Record<string, string> = {
@@ -67,6 +80,9 @@ export default function HomePage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [deferred, setDeferred] = useState(false);
+  const [rejected, setRejected] = useState(false);
+  const [showReject, setShowReject] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -128,6 +144,25 @@ export default function HomePage() {
     }
   };
 
+  const rejectAction = async () => {
+    if (!data?.action || !rejectReason.trim()) return;
+    setBusy(true);
+    try {
+      await respondToAction(data.action.id, {
+        decision: 'reject',
+        response_payload: { reason: rejectReason.trim() },
+        expected_action_version: data.action.version,
+        idempotency_key: `today-reject-${data.action.id}-${data.action.version}`,
+      });
+      setRejected(true);
+      setShowReject(false);
+    } catch (err) {
+      setError(extractErrorMessage(err, '停止建议失败，请重试'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   if (loading) {
     return (
       <PageContainer title="今日" subtitle="先完成一个真正能推进内容的动作">
@@ -138,6 +173,10 @@ export default function HomePage() {
 
   const action = data?.action;
   const isDeferred = deferred || action?.status === 'deferred';
+  const isCancelled = rejected || action?.status === 'cancelled';
+  const terminalReason = rejected
+    ? rejectReason.trim()
+    : action?.last_event?.payload.reason;
   return (
     <PageContainer
       title={`你好，${user?.username || '创作者'}`}
@@ -150,12 +189,20 @@ export default function HomePage() {
             <span className="today-eyebrow"><AutoAwesomeOutlined fontSize="small" /> 现在先做</span>
             {action.content_intent ? <Chip size="small" label={`${intentLabels[action.content_intent]}内容`} /> : null}
           </div>
-          <h2 id="today-action-title">{isDeferred ? '这件事已暂缓' : action.title}</h2>
-          <p className="today-action-reason">{isDeferred ? '它仍会保留在对应内容项目中，你可以稍后继续。' : action.reason}</p>
+          <h2 id="today-action-title">{isCancelled ? 'AI 不再推进这条建议' : isDeferred ? '这件事已暂缓' : action.title}</h2>
+          <p className="today-action-reason">
+            {isCancelled
+              ? terminalReason || '你可以继续手动处理；项目发生变化后，AI 才会重新判断。'
+              : isDeferred
+                ? '它仍会保留在对应内容项目中，你可以稍后继续。'
+                : action.reason}
+          </p>
+          {!isCancelled ? <p className="today-action-outcome"><strong>完成后</strong> {outcomeLabels[action.action_type]}</p> : null}
           <div className="today-action-meta">
             <span>预计 {action.estimated_effort_minutes} 分钟</span>
             <span>{modeLabels[action.automation_level]}</span>
             {action.human_gate_type ? <span>需要你确认</span> : <span>可直接继续</span>}
+            {action.expires_at && !isCancelled ? <span>建议有效至 {new Date(action.expires_at).toLocaleDateString('zh-CN')}</span> : null}
           </div>
           <div className="today-evidence-grid">
             <div><strong>AI 依据</strong>{action.evidence_refs.length ? <ul>{action.evidence_refs.map((item) => <li key={item}>{readableRef(item)}</li>)}</ul> : <p>当前项目状态</p>}</div>
@@ -163,17 +210,35 @@ export default function HomePage() {
           </div>
           <div className="today-action-controls">
             <Button variant="contained" startIcon={<ArrowForward />} disabled={busy} onClick={startAction}>
-              {isDeferred
+              {isCancelled
+                ? '手动继续'
+                : isDeferred
                 ? '回到对应页面'
                 : action.expected_state_change.source === 'series_opportunity'
                   ? '查看并确认机会'
                   : actionLabels[action.action_type]}
             </Button>
-            {!isDeferred ? <Button variant="text" startIcon={<Pause />} disabled={busy} onClick={() => void deferAction()}>暂不做</Button> : null}
-            <Button variant="text" onClick={() => navigate(actionPath)}>
+            {!isDeferred && !isCancelled ? <Button variant="text" startIcon={<Pause />} disabled={busy} onClick={() => void deferAction()}>暂不做</Button> : null}
+            {!isDeferred && !isCancelled ? <Button variant="text" color="inherit" disabled={busy} onClick={() => setShowReject(true)}>不适合我</Button> : null}
+            {!isCancelled ? <Button variant="text" onClick={() => navigate(actionPath)}>
               手动继续
-            </Button>
+            </Button> : null}
           </div>
+          {showReject && !isCancelled ? (
+            <Stack spacing={1.5} className="today-reject-form">
+              <TextField
+                label="为什么这条建议不适合你"
+                value={rejectReason}
+                onChange={(event) => setRejectReason(event.target.value)}
+                multiline
+                minRows={2}
+              />
+              <Stack direction="row" spacing={1}>
+                <Button color="error" disabled={busy || !rejectReason.trim()} onClick={() => void rejectAction()}>停止这条建议</Button>
+                <Button color="inherit" disabled={busy} onClick={() => setShowReject(false)}>返回</Button>
+              </Stack>
+            </Stack>
+          ) : null}
           <div className="today-trust-note"><Check fontSize="small" /> AI 只会准备到发布前；发布、公开范围和长期经验都需要你确认。</div>
         </section>
       ) : (
