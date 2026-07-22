@@ -88,6 +88,9 @@ _EXPECTED_TABLES: frozenset[str] = frozenset(
         "creator_series_events",
         "content_opportunities",
         "content_opportunity_events",
+        "experiments",
+        "experiment_assignments",
+        "experiment_assignment_events",
     }
 )
 

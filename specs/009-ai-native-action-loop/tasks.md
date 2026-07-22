@@ -65,9 +65,9 @@
 
 ## Phase G - Experiments and release validation
 
-- [ ] T046 Add E1-E4 experiment and cohort assignment fields without storing raw content in analytics.
-- [ ] T047 Add metric queries with documented numerator, denominator, window and missing-data handling.
-- [ ] T048 Add action funnel and calibration-quality export for internal validation only.
+- [x] T046 Add E1-E4 experiment and cohort assignment fields without storing raw content in analytics.
+- [x] T047 Add metric queries with documented numerator, denominator, window and missing-data handling.
+- [x] T048 Add action funnel and calibration-quality export for internal validation only.
 - [ ] T049 Run existing 008 starter and growth journeys against the action protocol.
 - [ ] T050 Run no-model, timeout, offline recovery, version conflict, deletion, contamination and rule-rollback journeys.
 - [x] T051 Verify legacy routes redirect or become project-context compatibility shims.
@@ -85,3 +85,11 @@ The feature is not complete until all P1 tasks are green, synthetic logic scenar
 - Playwright covers the no-model path from a share idea through intent confirmation, evidence confirmation, deterministic candidate review and version lock, and verifies the product stops before publishing.
 - The same Playwright suite verifies the five-node navigation at `390x844`.
 - Remaining unchecked items are still real scope: full action failure/expiry/cancel lifecycle, deletion/export guarantees across every entity, stable analytics denominators, and the complete release-validation matrix.
+
+## Phase 11 instrumentation evidence (2026-07-22)
+
+- Migration `028_action_experiment_metrics.sql` defines E1-E4, append-only assignment events, one active experiment per owner, and frozen experiment/cohort context on actions and events.
+- `GET /api/v2/internal/validation/action-metrics` uses distinct actions with an in-window `proposed` event as the stable denominator for accepted, rejected, completed, and failed rates.
+- The export is owner-scoped and omits all action payloads, raw content, material content, email, credentials, API keys, and platform tokens. User identifiers are domain-separated SHA-256 pseudonyms.
+- Every rate includes numerator, denominator, a half-open UTC window, and explicit zero/missing-data handling. Calibration output separately reports valid-clean reviews, contamination, upgrade eligibility, observation states, and rule-version states.
+- These changes make E1-E4 measurable; they do not supply real-user samples or prove any experiment hypothesis. T049 and T050 remain open.

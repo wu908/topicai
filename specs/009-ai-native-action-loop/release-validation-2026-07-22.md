@@ -69,9 +69,29 @@ This report does not close the full Spec 009 completion gate. The following rema
 
 - Complete action `failed`, `expired`, and `cancelled` lifecycle behavior.
 - Deletion and export guarantees for every new entity and dependent reference.
-- Experiment/cohort instrumentation and action metrics with stable denominators.
 - Full no-model, timeout, offline recovery, conflict, deletion, contamination, and rollback release matrix.
 - Benchmark inclusion/exclusion and all invalid-review eligibility rules.
+
+## Phase 11 Instrumentation Addendum
+
+The MVP now has internal, owner-scoped instrumentation for E1-E4 experiment assignments and action/calibration exports. This closes the previous schema and denominator gap, not the experiments themselves.
+
+| Contract | Implemented behavior |
+|---|---|
+| Experiment assignment | E1-E4 only; control, variant, observational, or excluded cohort; starter, growth, or unknown segment; one active experiment per owner |
+| Assignment audit | Every explicit assignment and automatic completion is append-only and idempotent |
+| Action context | Experiment, cohort, trace, latency, success, error, model, and prompt fields are available; action/event triggers freeze active context |
+| Stable denominator | Distinct actions with `proposed` inside `[start_at, end_at)` UTC; actions offered outside the window are excluded |
+| Missing data | Zero denominators return `null`; missing latency is counted and never imputed |
+| Privacy | Export never selects `payload_json` or product content; user ID is pseudonymized; access remains authenticated and owner-scoped |
+| Calibration quality | Reports clean-valid reviews, contamination, rule-upgrade eligibility, observation states, and rule-version states |
+
+Focused validation:
+
+- Experiment metrics API and privacy contracts: 5 passed.
+- Migration and schema authority contracts: 26 passed.
+
+No real-user experiment data exists yet. E1-E4 remain hypotheses and must not be presented as validated product outcomes.
 
 ## Decision
 
