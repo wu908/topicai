@@ -75,6 +75,28 @@ describe('HomePage', () => {
     expect(navigateMock).toHaveBeenCalledWith('/content/p1');
   });
 
+  it('opens the opportunities page for a series-derived action', async () => {
+    api.getTodayWorkspace.mockResolvedValue({
+      action: {
+        ...action,
+        project_id: null,
+        action_type: 'create_project',
+        title: '确认系列的下一篇内容',
+        evidence_refs: ['creator-series:s1', 'content-opportunity:o1'],
+        expected_state_change: {
+          source: 'series_opportunity',
+          opportunity_id: 'o1',
+        },
+      },
+      creator_state: { completed_project_count: 2 },
+    });
+
+    render(<MemoryRouter><HomePage /></MemoryRouter>);
+    expect(await screen.findByText('你已确认的内容系列')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '查看并确认机会' }));
+    expect(navigateMock).toHaveBeenCalledWith('/opportunities');
+  });
+
   it('can defer the action without inventing dashboard metrics', async () => {
     render(<MemoryRouter><HomePage /></MemoryRouter>);
     await screen.findByText('确认这是一条“分享”内容吗？');
