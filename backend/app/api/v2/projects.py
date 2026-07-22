@@ -50,6 +50,16 @@ async def get_project(
     return ApiResponse(data=project)
 
 
+@router.delete("/{project_id}", status_code=204)
+async def delete_project(
+    project_id: str,
+    user=Depends(get_current_user),
+    db: Database = Depends(get_db),
+):
+    await ContentProjectService(db).delete(user["id"], project_id)
+    return Response(status_code=204)
+
+
 @router.post("/{project_id}/versions", status_code=201)
 async def create_version(
     project_id: str,
