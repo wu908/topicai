@@ -129,6 +129,36 @@ async def _published_with_snapshot(db, *, expected_behaviors=None, suffix="1"):
 
 
 @pytest.mark.asyncio
+async def test_today_prioritizes_review_over_the_most_recent_early_draft(seeded_db):
+    review_project, _, _ = await _published_with_snapshot(
+        seeded_db, suffix="today-priority-review"
+    )
+    await seeded_db.execute(
+        "UPDATE content_projects SET intent_status='confirmed',"
+        "updated_at='2026-07-18T08:00:00Z' WHERE id=:id",
+        {"id": review_project["id"]},
+    )
+    recent_project, _ = await ContentProjectService(seeded_db).create(
+        "u1",
+        ContentProjectCreate(
+            title="A newer but less urgent idea",
+            primary_goal="stable_publish",
+            target_audience="Xiaohongshu knowledge creators",
+            idempotency_key="today-priority-recent",
+        ),
+    )
+    await seeded_db.execute(
+        "UPDATE content_projects SET updated_at='2026-07-21T08:00:00Z' WHERE id=:id",
+        {"id": recent_project["id"]},
+    )
+
+    today = await IntentOrchestratorService(seeded_db).today("u1")
+
+    assert today["action"]["project_id"] == review_project["id"]
+    assert today["action"]["action_type"] == "review_result"
+
+
+@pytest.mark.asyncio
 async def test_clean_blind_review_creates_trace_and_provisional_observation(seeded_db):
     project, _, snapshot = await _published_with_snapshot(seeded_db)
     review, replayed = await BlindReviewService(seeded_db).create(
