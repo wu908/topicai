@@ -94,7 +94,7 @@ export default function HomePage() {
       return;
     }
     if (action.action_type === 'create_project') {
-      navigate('/content');
+      navigate(action.fallback_action.path || '/content');
       return;
     }
     if (action.project_id) {
@@ -108,7 +108,7 @@ export default function HomePage() {
     ? '/opportunities'
     : data?.action?.project_id
       ? `/content/${data.action.project_id}`
-      : '/content';
+      : data?.action?.fallback_action.path || '/content';
 
   const deferAction = async () => {
     if (!data?.action) return;
