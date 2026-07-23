@@ -11,12 +11,14 @@ from sqlalchemy import text
 
 from app.core.exceptions import IdempotencyConflictException, VersionConflictException
 from app.core.llm import LLMClient, wrap_user_input
+from app.models.v2.action_domain import AITraceCreate
 from app.models.v2.creator_series import (
     SeriesCandidateCreate,
     SeriesDecision,
     SeriesDraft,
     SeriesRevocation,
 )
+from app.services.ai_trace import AITraceService
 from app.services.creator_state import CreatorStateService
 from app.services.v2_utils import now, request_hash
 
@@ -74,41 +76,44 @@ class CreatorSeriesService:
         session = await self.db.get_session()
         async with session:
             async with session.begin():
-                await session.execute(
-                    text(
-                        "INSERT INTO ai_traces_v2 (id,owner_user_id,task_type,input_refs_json,"
-                        "evidence_refs_json,policy_version,model_identifier,capability,"
-                        "visibility_boundary_json,source_snapshot_ids_json,contamination_check_json,"
-                        "calibration_state,limitations_json,output_ref,generated_at) VALUES "
-                        "(:id,:owner,'series_candidate',:inputs,:evidence,'series-candidate-v1',"
-                        ":model,'structured_proposal',:boundary,'[]',:check,'insufficient',"
-                        ":limitations,:output,:now)"
+                await AITraceService.create(
+                    session,
+                    owner,
+                    AITraceCreate(
+                        id=trace_id,
+                        task_type="series_candidate",
+                        input_refs=[
+                            *[f"content-project:{item}" for item in source_ids],
+                            *publish_refs,
+                        ],
+                        evidence_refs=publish_refs,
+                        policy_version="series-candidate-v1",
+                        model_identifier=(
+                            "configured-text-model" if proposal_source == "ai" else None
+                        ),
+                        capability="structured_proposal",
+                        visibility_boundary={
+                            "allowed": [
+                                "owner_published_projects",
+                                "confirmed_project_intent",
+                            ],
+                            "forbidden": [
+                                "draft_projects",
+                                "other_users",
+                                "deleted_projects",
+                            ],
+                            "actual": ["owner_published_projects"],
+                        },
+                        contamination_check={
+                            "status": "clean",
+                            "unexpected_classes": [],
+                            "missing_classes": [],
+                        },
+                        calibration_state="insufficient",
+                        limitations=draft.limitations,
+                        output_ref=f"creator-series:{series_id}",
+                        generated_at=timestamp,
                     ),
-                    {
-                        "id": trace_id,
-                        "owner": owner,
-                        "inputs": json.dumps(
-                            [*[f"content-project:{item}" for item in source_ids], *publish_refs],
-                            ensure_ascii=False,
-                        ),
-                        "evidence": json.dumps(publish_refs, ensure_ascii=False),
-                        "model": "configured-text-model" if proposal_source == "ai" else None,
-                        "boundary": json.dumps(
-                            {
-                                "allowed": ["owner_published_projects", "confirmed_project_intent"],
-                                "forbidden": ["draft_projects", "other_users", "deleted_projects"],
-                                "actual": ["owner_published_projects"],
-                            },
-                            ensure_ascii=False,
-                        ),
-                        "check": json.dumps(
-                            {"status": "clean", "unexpected_classes": [], "missing_classes": []},
-                            ensure_ascii=False,
-                        ),
-                        "limitations": json.dumps(draft.limitations, ensure_ascii=False),
-                        "output": f"creator-series:{series_id}",
-                        "now": timestamp,
-                    },
                 )
                 await session.execute(
                     text(

@@ -11,12 +11,14 @@ from sqlalchemy import text
 
 from app.core.exceptions import IdempotencyConflictException, VersionConflictException
 from app.core.llm import LLMClient, wrap_user_input
+from app.models.v2.action_domain import AITraceCreate
 from app.models.v2.content_opportunity import (
     OpportunityDecision,
     OpportunityDraft,
     SeriesExtensionCreate,
 )
 from app.models.v2.content_project import ContentProjectCreate
+from app.services.ai_trace import AITraceService
 from app.services.content_genome import ContentGenomeService
 from app.services.content_project import ContentProjectService
 from app.services.creator_series import CreatorSeriesService
@@ -82,40 +84,46 @@ class ContentOpportunityService:
         session = await self.db.get_session()
         async with session:
             async with session.begin():
-                await session.execute(
-                    text(
-                        "INSERT INTO ai_traces_v2 (id,owner_user_id,task_type,input_refs_json,"
-                        "evidence_refs_json,policy_version,model_identifier,capability,"
-                        "visibility_boundary_json,source_snapshot_ids_json,contamination_check_json,"
-                        "calibration_state,limitations_json,output_ref,generated_at) VALUES "
-                        "(:id,:owner,'series_extension_opportunity',:inputs,:evidence,"
-                        "'series-extension-v1',:model,'structured_proposal',:boundary,'[]',"
-                        ":check,'insufficient',:limitations,:output,:now)"
+                await AITraceService.create(
+                    session,
+                    owner,
+                    AITraceCreate(
+                        id=trace_id,
+                        task_type="series_extension_opportunity",
+                        input_refs=evidence_refs,
+                        evidence_refs=evidence_refs,
+                        policy_version="series-extension-v1",
+                        model_identifier=(
+                            "configured-text-model" if proposal_source == "ai" else None
+                        ),
+                        capability="structured_proposal",
+                        visibility_boundary={
+                            "allowed": [
+                                "user_confirmed_series",
+                                "confirmed_evidence",
+                                "confirmed_viewpoints",
+                            ],
+                            "forbidden": [
+                                "unconfirmed_series",
+                                "revoked_evidence",
+                                "other_users",
+                            ],
+                            "actual": [
+                                "user_confirmed_series",
+                                *(["confirmed_evidence"] if evidence_context else []),
+                                *(["confirmed_viewpoints"] if viewpoint_context else []),
+                            ],
+                        },
+                        contamination_check={
+                            "status": "clean",
+                            "unexpected_classes": [],
+                            "missing_classes": [],
+                        },
+                        calibration_state="insufficient",
+                        limitations=draft.limitations,
+                        output_ref=f"content-opportunity:{opportunity_id}",
+                        generated_at=timestamp,
                     ),
-                    {
-                        "id": trace_id,
-                        "owner": owner,
-                        "inputs": json.dumps(evidence_refs, ensure_ascii=False),
-                        "evidence": json.dumps(evidence_refs, ensure_ascii=False),
-                        "model": "configured-text-model" if proposal_source == "ai" else None,
-                        "boundary": json.dumps(
-                            {
-                                "allowed": ["user_confirmed_series", "confirmed_evidence", "confirmed_viewpoints"],
-                                "forbidden": ["unconfirmed_series", "revoked_evidence", "other_users"],
-                                "actual": ["user_confirmed_series", *(
-                                    ["confirmed_evidence"] if evidence_context else []
-                                ), *(["confirmed_viewpoints"] if viewpoint_context else [])],
-                            },
-                            ensure_ascii=False,
-                        ),
-                        "check": json.dumps(
-                            {"status": "clean", "unexpected_classes": [], "missing_classes": []},
-                            ensure_ascii=False,
-                        ),
-                        "limitations": json.dumps(draft.limitations, ensure_ascii=False),
-                        "output": f"content-opportunity:{opportunity_id}",
-                        "now": timestamp,
-                    },
                 )
                 await session.execute(
                     text(

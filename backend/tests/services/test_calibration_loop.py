@@ -7,6 +7,16 @@ import pytest
 import pytest_asyncio
 from sqlalchemy import text
 
+from app.models.v2.action_domain import (
+    AITrace,
+    ActionEvent,
+    ContentGenome,
+    CreatorState,
+    Evidence,
+    Experiment,
+    HumanGate,
+    NextBestAction,
+)
 from app.models.v2.calibration import (
     BlindReviewCreate,
     ObservationCreate,
@@ -127,6 +137,76 @@ async def _published_with_snapshot(db, *, expected_behaviors=None, suffix="1"):
         ),
     )
     return snapshot["project"], publication["record"], snapshot["snapshot"]
+
+
+@pytest.mark.asyncio
+async def test_action_domain_read_contracts_validate_runtime_records(seeded_db):
+    project, _ = await ContentProjectService(seeded_db).create(
+        "u1",
+        ContentProjectCreate(
+            title="Typed action domain",
+            primary_goal="stable_publish",
+            target_audience="Xiaohongshu knowledge creators",
+            idempotency_key="typed-domain-project",
+        ),
+    )
+    evidence, _ = await EvidenceService(seeded_db).create_proposed(
+        "u1",
+        EvidenceCreate(
+            project_id=project["id"],
+            statement="I tested a smaller weekly publishing target first.",
+            source_ref="test:typed-domain",
+            idempotency_key="typed-domain-evidence",
+        ),
+    )
+    action = await IntentOrchestratorService(seeded_db).ensure_project_action(
+        "u1", project
+    )
+    gate = await HumanGateService(seeded_db).ensure_for_action("u1", action["id"])
+    action = await IntentOrchestratorService(seeded_db).ensure_project_action(
+        "u1", project
+    )
+
+    CreatorState.model_validate(await CreatorStateService(seeded_db).get("u1"))
+    ContentGenome.model_validate(
+        await ContentGenomeService(seeded_db).for_project("u1", project["id"])
+    )
+    Evidence.model_validate(evidence)
+    HumanGate.model_validate(gate)
+    NextBestAction.model_validate(action)
+
+    event = await seeded_db.fetch_one(
+        "SELECT * FROM action_events WHERE action_id=:action "
+        "ORDER BY created_at,id LIMIT 1",
+        {"action": action["id"]},
+    )
+    event = dict(event)
+    event["payload"] = json.loads(event.pop("payload_json"))
+    ActionEvent.model_validate(event)
+
+    trace = dict(
+        await seeded_db.fetch_one(
+            "SELECT * FROM ai_traces_v2 WHERE id=:id", {"id": action["ai_trace_id"]}
+        )
+    )
+    for field in (
+        "input_refs_json",
+        "evidence_refs_json",
+        "visibility_boundary_json",
+        "source_snapshot_ids_json",
+        "contamination_check_json",
+        "limitations_json",
+    ):
+        trace[field.removesuffix("_json")] = json.loads(trace.pop(field))
+    AITrace.model_validate(trace)
+
+    experiment = dict(
+        await seeded_db.fetch_one("SELECT * FROM experiments WHERE id='E1'")
+    )
+    experiment["metric_definitions"] = json.loads(
+        experiment.pop("metric_definitions_json")
+    )
+    Experiment.model_validate(experiment)
 
 
 @pytest.mark.asyncio

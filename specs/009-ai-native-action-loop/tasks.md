@@ -2,7 +2,7 @@
 
 ## Phase A - Contracts and persistence
 
-- [ ] T001 Add v2 typed models for `CreatorState`, `ContentGenome`, `Evidence`, `NextBestAction`, `AITrace`, `HumanGate`, `ActionEvent`, and `Experiment`.
+- [x] T001 Add v2 typed models for `CreatorState`, `ContentGenome`, `Evidence`, `NextBestAction`, `AITrace`, `HumanGate`, `ActionEvent`, and `Experiment`.
 - [x] T002 Add idempotency and optimistic-concurrency contracts for action lifecycle operations.
 - [x] T003 Add migrations for state snapshots, evidence, actions, traces, gates, action events and experiments.
 - [x] T004 Test fresh database migration, repeat migration, and upgrade from the 008 schema.
@@ -15,10 +15,10 @@
 - [x] T008 Implement action priority ordering and one-primary-action constraint.
 - [x] T009 Implement `NextBestActionService` offer, accept, reject, execute, fail, expire and cancel operations.
 - [x] T010 Enforce action idempotency and state-version checks in the service layer.
-- [ ] T011 Implement `AITraceService` and require traces for AI-generated actions.
+- [x] T011 Implement `AITraceService` and require traces for AI-generated actions.
 - [ ] T012 Implement `HumanGateService` for fact, version, publish, insight, privacy and deletion gates.
-- [ ] T013 Add source-integrity tests proving the action engine never calls legacy hotspot sources.
-- [ ] T014 Add timeout, malformed output, missing capability and manual fallback tests.
+- [x] T013 Add source-integrity tests proving the action engine never calls legacy hotspot sources.
+- [x] T014 Add timeout, malformed output, missing capability and manual fallback tests.
 
 ## Phase C - Today and project integration
 

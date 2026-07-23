@@ -11,12 +11,14 @@ from sqlalchemy import text
 
 from app.core.exceptions import IdempotencyConflictException, VersionConflictException
 from app.core.llm import LLMClient, wrap_user_input
+from app.models.v2.action_domain import AITraceCreate
 from app.models.v2.creator_viewpoint import (
     ViewpointCandidateCreate,
     ViewpointDecision,
     ViewpointDraft,
     ViewpointRevocation,
 )
+from app.services.ai_trace import AITraceService
 from app.services.content_genome import ContentGenomeService
 from app.services.creator_state import CreatorStateService
 from app.services.v2_utils import now, request_hash
@@ -101,43 +103,42 @@ class CreatorViewpointService:
         session = await self.db.get_session()
         async with session:
             async with session.begin():
-                await session.execute(
-                    text(
-                        "INSERT INTO ai_traces_v2 (id,owner_user_id,task_type,input_refs_json,"
-                        "evidence_refs_json,policy_version,model_identifier,capability,"
-                        "visibility_boundary_json,source_snapshot_ids_json,contamination_check_json,"
-                        "calibration_state,limitations_json,output_ref,generated_at) VALUES "
-                        "(:id,:owner,'viewpoint_candidate',:inputs,:evidence,'viewpoint-candidate-v1',"
-                        ":model,'structured_proposal',:boundary,'[]',:check,'insufficient',"
-                        ":limitations,:output,:now)"
+                evidence_refs = [f"evidence:{item}" for item in source_ids]
+                await AITraceService.create(
+                    session,
+                    owner,
+                    AITraceCreate(
+                        id=trace_id,
+                        task_type="viewpoint_candidate",
+                        input_refs=[f"project:{project_id}", *evidence_refs],
+                        evidence_refs=evidence_refs,
+                        policy_version="viewpoint-candidate-v1",
+                        model_identifier=(
+                            "configured-text-model" if proposal_source == "ai" else None
+                        ),
+                        capability="structured_proposal",
+                        visibility_boundary={
+                            "allowed": [
+                                "confirmed_evidence",
+                                "current_content_version",
+                            ],
+                            "forbidden": [
+                                "unconfirmed_evidence",
+                                "revoked_evidence",
+                                "other_users",
+                            ],
+                            "actual": ["confirmed_evidence"],
+                        },
+                        contamination_check={
+                            "status": "clean",
+                            "unexpected_classes": [],
+                            "missing_classes": [],
+                        },
+                        calibration_state="insufficient",
+                        limitations=draft.limitations,
+                        output_ref=f"creator-viewpoint:{viewpoint_id}",
+                        generated_at=timestamp,
                     ),
-                    {
-                        "id": trace_id,
-                        "owner": owner,
-                        "inputs": json.dumps(
-                            [f"project:{project_id}", *[f"evidence:{item}" for item in source_ids]],
-                            ensure_ascii=False,
-                        ),
-                        "evidence": json.dumps(
-                            [f"evidence:{item}" for item in source_ids], ensure_ascii=False
-                        ),
-                        "model": "configured-text-model" if proposal_source == "ai" else None,
-                        "boundary": json.dumps(
-                            {
-                                "allowed": ["confirmed_evidence", "current_content_version"],
-                                "forbidden": ["unconfirmed_evidence", "revoked_evidence", "other_users"],
-                                "actual": ["confirmed_evidence"],
-                            },
-                            ensure_ascii=False,
-                        ),
-                        "check": json.dumps(
-                            {"status": "clean", "unexpected_classes": [], "missing_classes": []},
-                            ensure_ascii=False,
-                        ),
-                        "limitations": json.dumps(draft.limitations, ensure_ascii=False),
-                        "output": f"creator-viewpoint:{viewpoint_id}",
-                        "now": timestamp,
-                    },
                 )
                 await session.execute(
                     text(

@@ -7,7 +7,9 @@ from typing import Any
 from sqlalchemy import text
 
 from app.core.exceptions import IdempotencyConflictException, VersionConflictException
+from app.models.v2.action_domain import AITraceCreate
 from app.models.v2.calibration import BlindReviewCreate
+from app.services.ai_trace import AITraceService
 from app.services.v2_utils import decode_json_fields, now, request_hash
 
 
@@ -179,39 +181,31 @@ class BlindReviewService:
                     "Observed metrics do not establish causal attribution.",
                     "Missing metrics remain unknown and are never treated as zero.",
                 ]
-                await session.execute(
-                    text(
-                        "INSERT INTO ai_traces_v2 ("
-                        "id,owner_user_id,task_type,input_refs_json,evidence_refs_json,"
-                        "policy_version,model_identifier,capability,visibility_boundary_json,"
-                        "source_snapshot_ids_json,contamination_check_json,calibration_state,"
-                        "limitations_json,output_ref,generated_at) VALUES ("
-                        ":id,:owner,'blind_review_initial_comparison',:inputs,:evidence,"
-                        "'blind-review-v1',NULL,'deterministic',:boundary,:snapshots,"
-                        ":contamination,:state,:limitations,:output,:now)"
+                await AITraceService.create(
+                    session,
+                    owner_user_id,
+                    AITraceCreate(
+                        id=trace_id,
+                        task_type="blind_review_initial_comparison",
+                        input_refs=[
+                            f"publish_hypothesis:{hypothesis['id']}",
+                            f"content_version:{hypothesis['content_version_id']}",
+                            *[
+                                f"performance_snapshot:{item['id']}"
+                                for item in snapshots
+                            ],
+                        ],
+                        evidence_refs=json.loads(hypothesis["basis_refs_json"]),
+                        policy_version="blind-review-v1",
+                        capability="deterministic",
+                        visibility_boundary=visibility_boundary,
+                        source_snapshot_ids=body.result_snapshot_ids,
+                        contamination_check=contamination_check,
+                        calibration_state=calibration_state,
+                        limitations=limitations,
+                        output_ref=f"blind_review:{review_id}",
+                        generated_at=timestamp,
                     ),
-                    {
-                        "id": trace_id,
-                        "owner": owner_user_id,
-                        "inputs": json.dumps(
-                            [
-                                f"publish_hypothesis:{hypothesis['id']}",
-                                f"content_version:{hypothesis['content_version_id']}",
-                                *[
-                                    f"performance_snapshot:{item['id']}"
-                                    for item in snapshots
-                                ],
-                            ]
-                        ),
-                        "evidence": hypothesis["basis_refs_json"],
-                        "boundary": json.dumps(visibility_boundary),
-                        "snapshots": json.dumps(body.result_snapshot_ids),
-                        "contamination": json.dumps(contamination_check),
-                        "state": calibration_state,
-                        "limitations": json.dumps(limitations),
-                        "output": f"blind_review:{review_id}",
-                        "now": timestamp,
-                    },
                 )
                 await session.execute(
                     text(
