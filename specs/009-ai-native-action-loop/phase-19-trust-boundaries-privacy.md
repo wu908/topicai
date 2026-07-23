@@ -23,7 +23,8 @@ scenario coverage, benchmark calibration or automatic publication.
   hypothesis, Xiaohongshu public scope and originating action AITrace in the gate
   payload.
 - Recording publication requires that same owner-scoped, confirmed gate. The
-  server rejects a missing gate or a mismatch in version, hypothesis or trace.
+  server rejects a missing gate or a mismatch in version, hypothesis, public
+  scope or trace.
 - The publish record stores `publication_gate_id` and `ai_trace_id`, preserving a
   direct audit path from the public release to the AI action that prepared it.
 - The frontend opens and confirms this gate before recording the manual release.
