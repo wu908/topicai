@@ -52,12 +52,23 @@ function OpportunityRow({ item, onChanged }: { item: ContentOpportunity; onChang
       <div className="operations-row-header">
         <div>
           <h2>{item.confirmed_title || item.proposed_title}</h2>
-          <p className="operations-meta">{intentLabels[item.content_intent]}内容 · 来自已确认系列</p>
+          <p className="operations-meta">
+            {intentLabels[item.content_intent]}内容 · {item.opportunity_type === 'series_extension' ? '来自已确认系列' : '用户提交来源'}
+          </p>
         </div>
-        <Chip size="small" label={statusLabels[item.status]} color={item.status === 'accepted' ? 'success' : 'default'} />
+        <Chip
+          size="small"
+          label={item.verification_status === 'pending_verification' ? '待核验' : statusLabels[item.status]}
+          color={item.status === 'accepted' ? 'success' : 'default'}
+        />
       </div>
       <p className="operations-row-copy">{item.proposed_rationale}</p>
-      {item.status === 'proposed' ? (
+      {item.status === 'proposed' && item.verification_status === 'pending_verification' ? (
+        <Alert severity="warning">
+          来源尚未核验，暂时不能据此创建内容。请先补充原始链接、发布时间和权威来源。
+        </Alert>
+      ) : null}
+      {item.status === 'proposed' && item.verification_status !== 'pending_verification' ? (
         <div className="operations-form">
           <TextField label="这篇内容的标题" value={title} onChange={(event) => setTitle(event.target.value)} fullWidth />
           <TextField label="希望读者看完发生什么变化" value={audienceChange} onChange={(event) => setAudienceChange(event.target.value)} multiline minRows={2} fullWidth />
@@ -103,7 +114,7 @@ export default function OpportunitiesPage() {
   const visible = filter === 'all' ? items : items.filter((item) => item.status === filter);
 
   return (
-    <PageContainer title="机会" subtitle="AI 从你已确认的内容系列和真实结果中，提出值得继续的一篇。">
+    <PageContainer title="机会" subtitle="查看基于已确认系列的内容机会，以及仍需核验的用户来源。">
       {loading ? <div className="operations-loading"><CircularProgress size={26} /></div> : (
         <>
           {error ? <Alert severity="error" action={<Button onClick={() => void load()}>重试</Button>}>{error}</Alert> : null}

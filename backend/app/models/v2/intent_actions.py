@@ -76,6 +76,12 @@ class ActionResponse(StrictModel):
             self.response_payload.get("reason", "")
         ).strip():
             raise ValueError("rejection reason is required")
+        if "available_minutes" in self.response_payload:
+            value = self.response_payload["available_minutes"]
+            if self.decision != "reject":
+                raise ValueError("available_minutes is only accepted with a rejection")
+            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                raise ValueError("available_minutes must be a non-negative integer")
         return self
 
 

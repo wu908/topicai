@@ -201,7 +201,12 @@ class ActionResponseService:
                     action_id,
                     gate_payload,
                 )
-            return {"action": action, "event": event}, True
+            result = {"action": action, "event": event}
+            if "available_minutes" in event["payload"]:
+                result["creator_state"] = await CreatorStateService(self.db).get(
+                    owner_user_id
+                )
+            return result, True
 
         action = await self._action(owner_user_id, action_id)
         if action["version"] != body.expected_action_version:
@@ -234,7 +239,19 @@ class ActionResponseService:
             event_payload = {"reason": body.response_payload.get("reason")}
         elif body.decision == "reject":
             event_type, to_status = "rejected", "cancelled"
-            event_payload = {"reason": body.response_payload.get("reason")}
+            event_payload = {
+                "reason": body.response_payload.get("reason"),
+                "fallback_action": action["fallback_action"],
+                "next_option": {
+                    "action_type": "defer",
+                    "title": "延后当前项目",
+                    "project_id": action["project_id"],
+                },
+            }
+            if "available_minutes" in body.response_payload:
+                event_payload["available_minutes"] = body.response_payload[
+                    "available_minutes"
+                ]
         elif body.decision == "manual":
             event_type, to_status = "manual_selected", "completed"
             event_payload = {"fallback_action": action["fallback_action"]}
@@ -245,6 +262,8 @@ class ActionResponseService:
         timestamp = now()
         next_version = action["version"] + 1
         event_id = str(uuid.uuid4())
+        if "available_minutes" in event_payload:
+            await CreatorStateService(self.db).get(owner_user_id)
         session = await self.db.get_session()
         async with session:
             async with session.begin():
@@ -268,6 +287,19 @@ class ActionResponseService:
                     ),
                     {"id": event_id, "owner": owner_user_id, "action": action_id, "project": action["project_id"], "event": event_type, "from_status": action["status"], "to_status": to_status, "payload": json.dumps(event_payload, ensure_ascii=False), "version": next_version, "key": body.idempotency_key, "hash": digest, "now": timestamp},
                 )
+                if "available_minutes" in event_payload:
+                    await session.execute(
+                        text(
+                            "UPDATE creator_states SET available_minutes=:minutes,"
+                            "updated_at=:now,version=version+1 "
+                            "WHERE owner_user_id=:owner AND available_minutes IS NOT :minutes"
+                        ),
+                        {
+                            "minutes": event_payload["available_minutes"],
+                            "now": timestamp,
+                            "owner": owner_user_id,
+                        },
+                    )
         updated_action = await self._action(owner_user_id, action_id)
         if (
             body.decision == "accept"
@@ -279,11 +311,14 @@ class ActionResponseService:
                 action_id,
                 {**event_payload, "statement": answer},
             )
-        return {
+        result = {
             "action": updated_action,
             "event": {"id": event_id, "event_type": event_type, "payload": event_payload},
             "next_action": updated_action if updated_action.get("human_gate") else None,
-        }, False
+        }
+        if "available_minutes" in event_payload:
+            result["creator_state"] = await CreatorStateService(self.db).get(owner_user_id)
+        return result, False
 
     async def transition(
         self, owner_user_id: str, action_id: str, body: ActionLifecycleCommand

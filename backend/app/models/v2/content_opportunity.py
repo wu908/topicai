@@ -21,6 +21,15 @@ class SeriesExtensionCreate(StrictModel):
     idempotency_key: str = Field(min_length=1, max_length=200)
 
 
+class UserSourceOpportunityCreate(StrictModel):
+    pasted_text: str = Field(min_length=1, max_length=10000)
+    original_url: str | None = Field(default=None, max_length=2000)
+    published_at: str | None = Field(default=None, max_length=100)
+    authoritative_source: str | None = Field(default=None, max_length=500)
+    content_intent: Literal["solve", "share", "record"] = "share"
+    idempotency_key: str = Field(min_length=1, max_length=200)
+
+
 class OpportunityDecision(StrictModel):
     decision: Literal["accept", "reject"]
     confirmed_title: str | None = Field(default=None, max_length=200)

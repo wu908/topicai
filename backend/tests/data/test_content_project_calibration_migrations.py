@@ -32,6 +32,7 @@ def test_content_project_calibration_schema_applies_and_replays(tmp_path):
     assert any(item.version == "025_creator_viewpoints" for item in first)
     assert any(item.version == "026_creator_series" for item in first)
     assert any(item.version == "028_action_experiment_metrics" for item in first)
+    assert any(item.version == "032_source_verification_opportunities" for item in first)
 
     with sqlite3.connect(db_path) as conn:
         tables = _tables(conn)
@@ -104,6 +105,7 @@ def test_intent_action_migration_upgrades_from_019_and_replays(tmp_path):
         "029_starter_domain",
         "030_action_lifecycle",
         "031_trust_boundaries_privacy",
+        "032_source_verification_opportunities",
     ]
     assert replay == []
     with sqlite3.connect(db_path) as conn:
@@ -161,6 +163,7 @@ def test_action_lifecycle_migration_rebuilds_phase_15_constraints(tmp_path):
     assert [item.version for item in upgraded] == [
         "030_action_lifecycle",
         "031_trust_boundaries_privacy",
+        "032_source_verification_opportunities",
     ]
     with sqlite3.connect(db_path) as conn:
         action_sql = conn.execute(
@@ -171,6 +174,70 @@ def test_action_lifecycle_migration_rebuilds_phase_15_constraints(tmp_path):
         ).fetchone()[0]
         assert "'failed','expired','cancelled'" in action_sql
         assert "'rejected','failed','expired','cancelled'" in event_sql
+        assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
+
+
+def test_source_verification_migration_preserves_series_opportunities(tmp_path):
+    db_path = tmp_path / "source-opportunity-upgrade.db"
+    through_031 = tmp_path / "through-031"
+    through_031.mkdir()
+    for path in DEFAULT_MIGRATIONS_DIR.glob("[0-9][0-9][0-9]_*.sql"):
+        if int(path.name[:3]) <= 31:
+            shutil.copy2(path, through_031 / path.name)
+
+    apply(db_path, through_031)
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("PRAGMA foreign_keys=ON")
+        conn.execute(
+            "INSERT INTO users (id,email,username,password_hash,ai_calls_reset_at,created_at) "
+            "VALUES ('u1','u1@example.com','u1','hash','2026-07-24T00:00:00Z',"
+            "'2026-07-23T00:00:00Z')"
+        )
+        conn.execute(
+            "INSERT INTO ai_traces_v2 (id,owner_user_id,task_type,input_refs_json,"
+            "policy_version,capability,visibility_boundary_json,contamination_check_json,"
+            "calibration_state,output_ref,generated_at) VALUES "
+            "('trace-1','u1','series_extension','[]','v1','structured_proposal','{}','{}',"
+            "'insufficient','content-opportunity:op-1','2026-07-23T00:00:00Z')"
+        )
+        conn.execute(
+            "INSERT INTO content_opportunities (id,owner_user_id,opportunity_type,source_ref,"
+            "content_intent,content_format,proposed_title,proposed_audience_change,"
+            "proposed_rationale,proposed_material_requirements_json,evidence_refs_json,"
+            "unknown_refs_json,status,proposal_source,ai_trace_id,limitations_json,version,"
+            "idempotency_key,request_hash,created_at,updated_at) VALUES "
+            "('op-1','u1','series_extension','creator-series:s1','share','graphic_note',"
+            "'Next note','Reader change','Series continuation','[]','[]','[]','proposed',"
+            "'deterministic_fallback','trace-1','[]',1,'op-key','op-hash',"
+            "'2026-07-23T00:00:00Z','2026-07-23T00:00:00Z')"
+        )
+        conn.execute(
+            "INSERT INTO content_opportunity_events (id,owner_user_id,opportunity_id,"
+            "event_type,to_status,opportunity_version,idempotency_key,request_hash,created_at) "
+            "VALUES ('event-1','u1','op-1','proposed','proposed',1,'event-key','event-hash',"
+            "'2026-07-23T00:00:00Z')"
+        )
+        conn.commit()
+
+    upgraded = apply(db_path, DEFAULT_MIGRATIONS_DIR)
+    assert [item.version for item in upgraded] == [
+        "032_source_verification_opportunities"
+    ]
+    with sqlite3.connect(db_path) as conn:
+        opportunity = conn.execute(
+            "SELECT opportunity_type,verification_status FROM content_opportunities "
+            "WHERE id='op-1'"
+        ).fetchone()
+        event_count = conn.execute(
+            "SELECT COUNT(*) FROM content_opportunity_events WHERE opportunity_id='op-1'"
+        ).fetchone()[0]
+        table_sql = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='content_opportunities'"
+        ).fetchone()[0]
+        assert opportunity == ("series_extension", "verified")
+        assert event_count == 1
+        assert "'user_source'" in table_sql
+        assert "'pending_verification'" in table_sql
         assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
 
 

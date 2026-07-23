@@ -122,10 +122,13 @@ class EvidenceService:
     ) -> tuple[dict[str, Any], bool]:
         digest = request_hash(body)
         evidence = await self.get(owner_user_id, evidence_id)
+        impact = await self._invalidation_impact(
+            owner_user_id, evidence["project_id"], evidence_id
+        )
         if evidence["decision_idempotency_key"] == body.idempotency_key:
             if evidence["decision_request_hash"] != digest:
                 raise IdempotencyConflictException()
-            return evidence, True
+            return {**evidence, "invalidation": impact}, True
         if evidence["version"] != body.expected_evidence_version:
             raise VersionConflictException(evidence["version"], body.expected_evidence_version)
         if evidence["confirmation_status"] != "confirmed":
@@ -157,9 +160,14 @@ class EvidenceService:
                         evidence["version"] + 1, body.expected_evidence_version
                     )
                 await self._invalidate_unpublished_candidates(
-                    session, owner_user_id, evidence["project_id"], evidence_id, timestamp
+                    session,
+                    owner_user_id,
+                    evidence["project_id"],
+                    impact["content_version_ids"],
+                    timestamp,
                 )
-        return await self.get(owner_user_id, evidence_id), False
+        revoked = await self.get(owner_user_id, evidence_id)
+        return {**revoked, "invalidation": impact}, False
 
     async def assert_reusable(self, owner_user_id: str, evidence_id: str) -> dict[str, Any]:
         evidence = await self.get(owner_user_id, evidence_id)
@@ -221,23 +229,9 @@ class EvidenceService:
         session: Any,
         owner_user_id: str,
         project_id: str,
-        evidence_id: str,
+        version_ids: list[str],
         timestamp: str,
     ) -> None:
-        versions = (
-            await session.execute(
-                text(
-                    "SELECT id FROM content_versions WHERE owner_user_id=:owner "
-                    "AND project_id=:project AND evidence_snapshot_json LIKE :needle"
-                ),
-                {
-                    "owner": owner_user_id,
-                    "project": project_id,
-                    "needle": f"%{evidence_id}%",
-                },
-            )
-        ).fetchall()
-        version_ids = [row[0] for row in versions]
         if not version_ids:
             return
         placeholders = ",".join(f":version_{i}" for i in range(len(version_ids)))
@@ -245,7 +239,7 @@ class EvidenceService:
         params.update({"owner": owner_user_id, "project": project_id, "now": timestamp})
         await session.execute(
             text(
-                        "UPDATE publish_hypotheses SET status='superseded' "
+                "UPDATE publish_hypotheses SET status='superseded' "
                 f"WHERE owner_user_id=:owner AND project_id=:project "
                 f"AND content_version_id IN ({placeholders}) AND status='locked'"
             ),
@@ -258,10 +252,41 @@ class EvidenceService:
                 "status=CASE WHEN status='ready_to_publish' THEN 'creating' ELSE status END,"
                 "last_action='evidence_revoked',last_action_at=:now,updated_at=:now,"
                 "version=version+1 WHERE id=:project AND owner_user_id=:owner "
-                "AND current_version_id IN (" + placeholders + ")"
+                "AND locked_publish_version_id IN (" + placeholders + ")"
             ),
             params,
         )
+
+    async def _invalidation_impact(
+        self, owner_user_id: str, project_id: str, evidence_id: str
+    ) -> dict[str, Any]:
+        versions = await self.db.fetch_all(
+            "SELECT id FROM content_versions WHERE owner_user_id=:owner "
+            "AND project_id=:project AND evidence_snapshot_json LIKE :needle",
+            {
+                "owner": owner_user_id,
+                "project": project_id,
+                "needle": f"%{evidence_id}%",
+            },
+        )
+        version_ids = [row["id"] for row in versions]
+        segments = await self.db.fetch_all(
+            "SELECT cs.id,cs.segment_key,cs.content_version_id FROM content_segments cs "
+            "JOIN content_versions cv ON cv.id=cs.content_version_id "
+            "WHERE cs.owner_user_id=:owner AND cs.project_id=:project "
+            "AND cv.evidence_snapshot_json LIKE :needle ORDER BY cs.ordinal",
+            {
+                "owner": owner_user_id,
+                "project": project_id,
+                "needle": f"%{evidence_id}%",
+            },
+        )
+        return {
+            "content_version_ids": version_ids,
+            "affected_segments": [dict(row) for row in segments],
+            "publication_lock_blocked": bool(version_ids),
+            "required_action": "replace_evidence_or_answer_key_question",
+        }
 
     @staticmethod
     def _normalize(row: Any) -> dict[str, Any]:

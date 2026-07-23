@@ -50,6 +50,16 @@ export interface Evidence {
   created_at: string;
   updated_at: string;
   revoked_at: string | null;
+  invalidation?: {
+    content_version_ids: string[];
+    affected_segments: Array<{
+      id: string;
+      segment_key: string;
+      content_version_id: string;
+    }>;
+    publication_lock_blocked: boolean;
+    required_action: 'replace_evidence_or_answer_key_question';
+  };
 }
 
 export interface IntentAction {
@@ -66,7 +76,13 @@ export interface IntentAction {
   automation_level: AutomationLevel;
   human_gate_type: HumanGate['gate_type'] | null;
   human_gate: HumanGate | null;
-  fallback_action: { action_type: string; path?: string; title?: string };
+  fallback_action: {
+    action_type: string;
+    path?: string;
+    title?: string;
+    mode?: 'generic_structure';
+    limitations?: string[];
+  };
   status: 'proposed' | 'accepted' | 'deferred' | 'completed' | 'superseded' | 'failed' | 'expired' | 'cancelled';
   version: number;
   expires_at: string | null;
@@ -332,8 +348,13 @@ export interface CreatorSeries {
 
 export interface ContentOpportunity {
   id: string;
-  opportunity_type: 'series_extension';
+  opportunity_type: 'series_extension' | 'user_source';
   source_ref: string;
+  source_excerpt: string | null;
+  source_url: string | null;
+  source_published_at: string | null;
+  source_authority: string | null;
+  verification_status: 'verified' | 'pending_verification';
   content_intent: ContentIntent;
   content_format: ContentFormat;
   proposed_title: string;
@@ -354,6 +375,12 @@ export interface ContentOpportunity {
   created_at: string;
   updated_at: string;
   decided_at: string | null;
+  required_action: {
+    action_type: 'verify_source';
+    reason: string;
+    accepted_inputs: Array<'original_url' | 'published_at' | 'authoritative_source'>;
+    fallback: 'manual_verification';
+  } | null;
   project?: ContentProject;
 }
 
