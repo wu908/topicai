@@ -16,6 +16,7 @@ from app.models.v2.content_opportunity import (
     OpportunityDecision,
     OpportunityDraft,
     SeriesExtensionCreate,
+    UserSourceOpportunityCreate,
 )
 from app.models.v2.content_project import ContentProjectCreate
 from app.services.ai_trace import AITraceService
@@ -45,6 +46,123 @@ class ContentOpportunityService:
             {"owner": owner},
         )
         return [self._normalize(row) for row in rows]
+
+    async def create_user_source(
+        self, owner: str, body: UserSourceOpportunityCreate
+    ) -> tuple[dict[str, Any], bool]:
+        digest = request_hash(body)
+        existing = await self.db.fetch_one(
+            "SELECT * FROM content_opportunities WHERE owner_user_id=:owner "
+            "AND idempotency_key=:key",
+            {"owner": owner, "key": body.idempotency_key},
+        )
+        if existing:
+            if existing["request_hash"] != digest:
+                raise IdempotencyConflictException()
+            return self._normalize(existing), True
+
+        opportunity_id = str(uuid.uuid4())
+        trace_id = str(uuid.uuid4())
+        timestamp = now()
+        missing = [
+            name
+            for name, value in (
+                ("original_url", body.original_url),
+                ("published_at", body.published_at),
+                ("authoritative_source", body.authoritative_source),
+            )
+            if not value
+        ]
+        unknown_refs = [*missing, "manual_source_verification"]
+        limitations = [
+            "来源尚未核验，不能标记为实时热点",
+            "不生成热度分、流量预测或涨粉概率",
+        ]
+        session = await self.db.get_session()
+        async with session:
+            async with session.begin():
+                await AITraceService.create(
+                    session,
+                    owner,
+                    AITraceCreate(
+                        id=trace_id,
+                        task_type="user_source_verification",
+                        input_refs=[f"user-source:{opportunity_id}"],
+                        evidence_refs=[],
+                        policy_version="user-source-verification-v1",
+                        model_identifier=None,
+                        capability="source_verification",
+                        visibility_boundary={
+                            "allowed": ["user_submitted_excerpt", "source_metadata"],
+                            "forbidden": [
+                                "realtime_claim",
+                                "invented_news_context",
+                                "growth_prediction",
+                            ],
+                            "actual": ["user_submitted_excerpt", "source_metadata"],
+                        },
+                        contamination_check={
+                            "status": "clean",
+                            "unexpected_classes": [],
+                            "missing_classes": missing,
+                        },
+                        calibration_state="insufficient",
+                        limitations=limitations,
+                        output_ref=f"content-opportunity:{opportunity_id}",
+                        generated_at=timestamp,
+                    ),
+                )
+                await session.execute(
+                    text(
+                        "INSERT INTO content_opportunities (id,owner_user_id,opportunity_type,"
+                        "source_ref,source_excerpt,source_url,source_published_at,source_authority,"
+                        "verification_status,content_intent,content_format,proposed_title,"
+                        "proposed_audience_change,proposed_rationale,"
+                        "proposed_material_requirements_json,evidence_refs_json,unknown_refs_json,"
+                        "status,proposal_source,ai_trace_id,limitations_json,version,idempotency_key,"
+                        "request_hash,created_at,updated_at) VALUES (:id,:owner,'user_source',"
+                        ":source_ref,:excerpt,:url,:published_at,:authority,'pending_verification',"
+                        ":intent,'graphic_note',:title,:change,:rationale,:materials,'[]',:unknowns,"
+                        "'proposed','deterministic_fallback',:trace,:limitations,1,:key,:hash,"
+                        ":now,:now)"
+                    ),
+                    {
+                        "id": opportunity_id,
+                        "owner": owner,
+                        "source_ref": f"user-source:{opportunity_id}",
+                        "excerpt": body.pasted_text.strip(),
+                        "url": body.original_url,
+                        "published_at": body.published_at,
+                        "authority": body.authoritative_source,
+                        "intent": body.content_intent,
+                        "title": "先核验来源，再判断是否值得做",
+                        "change": "来源核验后再确认这条内容能给读者带来什么",
+                        "rationale": "当前只有用户粘贴的片段，来源、时效或权威性不足，不能据此判断热点价值。",
+                        "materials": json.dumps(
+                            ["原始链接或用户手动核验结果"], ensure_ascii=False
+                        ),
+                        "unknowns": json.dumps(unknown_refs, ensure_ascii=False),
+                        "trace": trace_id,
+                        "limitations": json.dumps(limitations, ensure_ascii=False),
+                        "key": body.idempotency_key,
+                        "hash": digest,
+                        "now": timestamp,
+                    },
+                )
+                await self._event(
+                    session,
+                    owner,
+                    opportunity_id,
+                    "proposed",
+                    None,
+                    "proposed",
+                    1,
+                    f"{body.idempotency_key}:proposed",
+                    digest,
+                    {"verification_status": "pending_verification", "unknown_refs": unknown_refs},
+                    timestamp,
+                )
+        return await self.get(owner, opportunity_id), False
 
     async def propose_series_extension(
         self, owner: str, series_id: str, body: SeriesExtensionCreate
@@ -180,6 +298,11 @@ class ContentOpportunityService:
         opportunity = await self._opportunity(owner, opportunity_id)
         if opportunity["status"] != "proposed":
             raise ValueError("content opportunity is no longer pending")
+        if (
+            body.decision == "accept"
+            and opportunity.get("verification_status") != "verified"
+        ):
+            raise ValueError("source verification is required before accepting this opportunity")
         if opportunity["version"] != body.expected_opportunity_version:
             raise VersionConflictException(
                 opportunity["version"], body.expected_opportunity_version
@@ -360,4 +483,13 @@ class ContentOpportunityService:
                       "evidence_refs_json", "unknown_refs_json", "limitations_json"):
             value = result.pop(field, None)
             result[field.removesuffix("_json")] = json.loads(value or "[]")
+        if result.get("verification_status") == "pending_verification":
+            result["required_action"] = {
+                "action_type": "verify_source",
+                "reason": "来源、发布时间或权威性尚未核验",
+                "accepted_inputs": ["original_url", "published_at", "authoritative_source"],
+                "fallback": "manual_verification",
+            }
+        else:
+            result["required_action"] = None
         return result

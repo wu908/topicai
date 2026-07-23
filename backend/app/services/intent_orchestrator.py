@@ -81,7 +81,8 @@ class IntentOrchestratorService:
 
         opportunity = await self.db.fetch_one(
             "SELECT * FROM content_opportunities WHERE owner_user_id=:owner "
-            "AND status='proposed' ORDER BY updated_at DESC LIMIT 1",
+            "AND status='proposed' AND verification_status='verified' "
+            "ORDER BY updated_at DESC LIMIT 1",
             {"owner": owner_user_id},
         )
         if opportunity:
@@ -374,6 +375,19 @@ class IntentOrchestratorService:
             return "confirm_intent"
         if not project.get("current_version_id"):
             return "answer_key_question"
+        if project.get("last_action") == "evidence_revoked":
+            return "answer_key_question"
+        invalid_evidence = await self.db.fetch_one(
+            "SELECT 1 AS invalid FROM content_versions cv,json_each(cv.evidence_snapshot_json) ref "
+            "LEFT JOIN evidence_items e ON e.id=json_extract(ref.value,'$.evidence_id') "
+            "AND e.owner_user_id=cv.owner_user_id "
+            "WHERE cv.id=:version AND cv.owner_user_id=:owner "
+            "AND json_extract(ref.value,'$.evidence_id') IS NOT NULL "
+            "AND (e.id IS NULL OR e.confirmation_status!='confirmed') LIMIT 1",
+            {"version": project["current_version_id"], "owner": owner_user_id},
+        )
+        if invalid_evidence:
+            return "answer_key_question"
         if not project.get("publish_hypothesis_id"):
             return "review_candidate"
         publication = await self.db.fetch_one(
@@ -588,7 +602,7 @@ class IntentOrchestratorService:
         specs = {
             "create_project": ("确定下一条内容从哪里开始", "有模糊想法可以直接创建；还不知道做什么，可以先盘点真实经历并完成三篇低成本实验。", [], ["content_seed"], 3, None, {"action_type": "create_project", "path": "/content"}),
             "confirm_intent": (f"确认这是一条“{config['label']}”内容吗？", "内容意图会决定 AI 接下来问什么、怎么组织内容以及发布后观察什么。", ["project:title", f"project:audience:{audience}"], ["confirmed_intent", "audience_change"], 2, "intent", {"action_type": "confirm_intent", "path": f"/content/{project_id}"}),
-            "answer_key_question": (config["question"], "只补一个最关键的真实信息，AI 就能先准备候选内容，不需要你填写完整 Brief。", ["project:intent", "project:title"], ["first_party_evidence"], 5, "user_fact", {"action_type": "create_version", "path": f"/content/{project_id}"}),
+            "answer_key_question": (config["question"], "只补一个最关键的真实信息，AI 就能先准备候选内容，不需要你填写完整 Brief。", ["project:intent", "project:title"], ["first_party_evidence"], 5, "user_fact", {"action_type": "create_version", "path": f"/content/{project_id}", "mode": "generic_structure", "limitations": ["missing_first_party_evidence", "must_not_represent_creator_experience"]}),
             "review_candidate": ("确认候选内容是否准确表达了你", "发布前只需要确认事实、表达和公开范围；已确认内容不会被自动覆盖。", ["content:current_version", "project:intent"], ["fact_accuracy", "public_scope"], 8, "content_version", {"action_type": "lock_hypothesis", "path": f"/content/{project_id}"}),
             "record_publication": ("发布后，把笔记链接留在这里", "系统不会替你发布。记录真实发布时间后，AI 才能安排复盘。", ["content:locked_version"], ["publication_time"], 2, "publication", {"action_type": "record_publication", "path": f"/content/{project_id}"}),
             "add_performance": ("回填这篇内容的真实表现", f"这条{config['label']}内容需要用对应的观察信号复盘，而不是套用统一爆款分。", ["publication:record"], config["signals"], 4, None, {"action_type": "add_snapshot", "path": f"/content/{project_id}"}),

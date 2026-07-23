@@ -37,7 +37,7 @@
 - [x] T024 Block fact-based complete drafts when evidence is insufficient unless the user chooses a marked generic structure.
 - [x] T025 Implement evidence revocation and downstream invalidation.
 - [x] T026 Implement candidate versions, segment acceptance/rejection, comparison and immutable confirmed versions.
-- [ ] T027 Add synthetic scenario tests C-01 through C-04.
+- [x] T027 Add synthetic scenario tests C-01 through C-04.
 
 ## Phase E - Publish, review and learning
 
@@ -46,7 +46,7 @@
 - [x] T030 Replace prediction semantics with fact/hypothesis/experiment review output.
 - [x] T031 Create exactly one continue, stop and experiment action from a completed review.
 - [x] T032 Add confirmed/rejected insight gates and ContentGenome update rules.
-- [ ] T033 Add synthetic scenario tests C-05 through C-07.
+- [x] T033 Add synthetic scenario tests C-05 through C-07.
 
 ## Phase F - Judgment calibration
 
@@ -162,3 +162,19 @@ The feature is not complete until all P1 tasks are green, synthetic logic scenar
   archived source observations remove the insight from future action context.
 - Final validation: backend `789 passed`, `1 deselected`, `87.08%` coverage;
   frontend `365 passed`, `2 skipped`, plus lint and production build.
+
+## Phase 20 synthetic acceptance matrix (2026-07-23)
+
+- C-01 through C-07 are defined in
+  `phase-20-synthetic-acceptance-matrix.md` and execute as seven named API tests.
+- Missing evidence routes to an interview; manual continuation carries explicit
+  generic-structure limits; AI revisions do not move a locked publication version.
+- User-pasted unverified sources persist as `pending_verification` opportunities
+  without model calls, scores, project creation or content generation.
+- Partial metrics cannot create learning, explicit rejection capacity is short-term
+  state only, and revoked evidence reports affected segments and blocks locking.
+- Focused validation: synthetic matrix `7 passed`; affected backend and migration
+  regression `58 passed`; frontend TypeScript/production build and diff check passed.
+- Final validation: backend `797 passed`, `1 deselected`, `87.14%` coverage;
+  frontend `365 passed`, `2 skipped`, plus lint and production build.
+- T027 and T033 are complete. T034, T036, T039 and T042 remain open.

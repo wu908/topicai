@@ -6,7 +6,11 @@ from app.api.v1.deps import get_current_user, get_db
 from app.core.database import Database
 from app.core.llm import LLMClient
 from app.models.common import ApiResponse
-from app.models.v2.content_opportunity import OpportunityDecision, SeriesExtensionCreate
+from app.models.v2.content_opportunity import (
+    OpportunityDecision,
+    SeriesExtensionCreate,
+    UserSourceOpportunityCreate,
+)
 from app.services.content_opportunity import ContentOpportunityService
 
 router = APIRouter(tags=["Content opportunities v2"])
@@ -52,6 +56,19 @@ async def propose_series_extension(
 ):
     result, replayed = await _proposal_service(db).propose_series_extension(
         user["id"], series_id, body
+    )
+    return _response(response, result, replayed)
+
+
+@router.post("/content-opportunities/source-verification", status_code=201)
+async def create_source_verification_opportunity(
+    body: UserSourceOpportunityCreate,
+    response: Response,
+    user=Depends(get_current_user),
+    db: Database = Depends(get_db),
+):
+    result, replayed = await ContentOpportunityService(db).create_user_source(
+        user["id"], body
     )
     return _response(response, result, replayed)
 
