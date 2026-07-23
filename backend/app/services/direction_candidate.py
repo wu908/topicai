@@ -7,7 +7,9 @@ from typing import Any
 from sqlalchemy import text
 
 from app.core.exceptions import IdempotencyConflictException, VersionConflictException
+from app.models.v2.action_domain import AITraceCreate
 from app.models.v2.starter import DirectionGenerate
+from app.services.ai_trace import AITraceService
 from app.services.starter_assessment import StarterAssessmentService
 from app.services.v2_utils import now, request_hash
 
@@ -94,50 +96,44 @@ class DirectionCandidateService:
         session = await self.db.get_session()
         async with session:
             async with session.begin():
-                await session.execute(
-                    text(
-                        "INSERT INTO ai_traces_v2 (id,owner_user_id,task_type,input_refs_json,"
-                        "evidence_refs_json,policy_version,model_identifier,capability,"
-                        "visibility_boundary_json,source_snapshot_ids_json,"
-                        "contamination_check_json,calibration_state,limitations_json,output_ref,"
-                        "generated_at) VALUES (:id,:owner,'starter_direction',:inputs,:evidence,"
-                        "'starter-direction-v1',NULL,'deterministic_fallback',:boundary,'[]',"
-                        ":check,'insufficient',:limits,:output,:now)"
-                    ),
-                    {
-                        "id": trace_id,
-                        "owner": owner_user_id,
-                        "inputs": json.dumps(
-                            [f"starter-assessment:{assessment['id']}:v{assessment['version']}"],
-                            ensure_ascii=False,
-                        ),
-                        "evidence": json.dumps(
-                            [f"assessment:{field}:{index}" for field, index, _ in selected],
-                            ensure_ascii=False,
-                        ),
-                        "boundary": json.dumps(
-                            {
-                                "allowed": ["owner_supplied_starter_assets"],
-                                "forbidden": ["privacy_limits", "other_users", "trend_claims"],
-                                "actual": ["owner_supplied_starter_assets"],
-                            },
-                            ensure_ascii=False,
-                        ),
-                        "check": json.dumps(
-                            {"status": "clean", "unexpected_classes": []},
-                            ensure_ascii=False,
-                        ),
-                        "limits": json.dumps(
-                            [
-                                "方向仅用于14天实验，不代表长期定位",
-                                "未使用热点、流量预测或商业化判断",
-                                "未调用生成模型，当前为可审计的确定性降级结果",
+                await AITraceService.create(
+                    session,
+                    owner_user_id,
+                    AITraceCreate(
+                        id=trace_id,
+                        task_type="starter_direction",
+                        input_refs=[
+                            f"starter-assessment:{assessment['id']}:v{assessment['version']}"
+                        ],
+                        evidence_refs=[
+                            f"assessment:{field}:{index}" for field, index, _ in selected
+                        ],
+                        policy_version="starter-direction-v1",
+                        capability="deterministic_fallback",
+                        visibility_boundary={
+                            "allowed": ["owner_supplied_starter_assets"],
+                            "forbidden": [
+                                "privacy_limits",
+                                "other_users",
+                                "trend_claims",
                             ],
-                            ensure_ascii=False,
+                            "actual": ["owner_supplied_starter_assets"],
+                        },
+                        contamination_check={
+                            "status": "clean",
+                            "unexpected_classes": [],
+                        },
+                        calibration_state="insufficient",
+                        limitations=[
+                            "方向仅用于14天实验，不代表长期定位",
+                            "未使用热点、流量预测或商业化判断",
+                            "未调用生成模型，当前为可审计的确定性降级结果",
+                        ],
+                        output_ref=(
+                            f"starter-directions:{assessment['id']}:{assessment['version']}"
                         ),
-                        "output": f"starter-directions:{assessment['id']}:{assessment['version']}",
-                        "now": timestamp,
-                    },
+                        generated_at=timestamp,
+                    ),
                 )
                 for ordinal, (field, index, asset) in enumerate(selected):
                     copy = DIRECTION_COPY[field]

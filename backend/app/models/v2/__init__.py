@@ -6,6 +6,17 @@ from app.models.v2.calibration import (
     PerformanceSnapshotCreate,
     PublishRecordCreate,
 )
+from app.models.v2.action_domain import (
+    AITrace,
+    AITraceCreate,
+    ActionEvent,
+    ContentGenome,
+    CreatorState,
+    Evidence,
+    Experiment,
+    HumanGate,
+    NextBestAction,
+)
 from app.models.v2.intent_actions import (
     ActionLifecycleCommand,
     ActionResponse,
@@ -36,7 +47,16 @@ from app.models.v2.experiment_metrics import (
 )
 
 __all__ = [
+    "AITrace",
+    "AITraceCreate",
+    "ActionEvent",
     "BlindReviewCreate",
+    "ContentGenome",
+    "CreatorState",
+    "Evidence",
+    "Experiment",
+    "HumanGate",
+    "NextBestAction",
     "ObservationCreate",
     "ObservationTransition",
     "PerformanceSnapshotCreate",

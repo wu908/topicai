@@ -779,11 +779,11 @@ async def test_revoked_evidence_blocks_candidate_lock(client):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("generation_error", [TimeoutError("model timeout"), ValueError("malformed output")])
+@pytest.mark.parametrize("failure_mode", ["timeout", "malformed", "missing_capability"])
 async def test_model_failure_after_fact_confirmation_preserves_input_and_uses_fallback(
     client,
     test_db,
-    generation_error,
+    failure_mode,
 ):
     class FailingLLM:
         @staticmethod
@@ -792,14 +792,23 @@ async def test_model_failure_after_fact_confirmation_preserves_input_and_uses_fa
 
         @staticmethod
         def generate_structured(*args, **kwargs):
-            raise generation_error
+            if failure_mode == "timeout":
+                raise TimeoutError("model timeout")
+            raise ValueError("malformed output")
+
+    class MissingCapabilityLLM:
+        @staticmethod
+        def is_available(capability):
+            return capability == "text"
+
+    llm = MissingCapabilityLLM() if failure_mode == "missing_capability" else FailingLLM()
 
     created = await client.post(
         "/api/v2/projects",
         json={
             "title": "模型失败时保留真实经历",
             "content_intent": "share",
-            "idempotency_key": f"failure-project-{type(generation_error).__name__}",
+            "idempotency_key": f"failure-project-{failure_mode}",
         },
     )
     project = created.json()["data"]
@@ -809,7 +818,7 @@ async def test_model_failure_after_fact_confirmation_preserves_input_and_uses_fa
             "content_intent": "share",
             "audience_change": "让读者理解一次真实调整",
             "expected_project_version": project["version"],
-            "idempotency_key": f"failure-intent-{type(generation_error).__name__}",
+            "idempotency_key": f"failure-intent-{failure_mode}",
         },
     )
     question = confirmed.json()["data"]["next_action"]
@@ -820,19 +829,19 @@ async def test_model_failure_after_fact_confirmation_preserves_input_and_uses_fa
             "decision": "accept",
             "response_payload": {"answer": answer},
             "expected_action_version": question["version"],
-            "idempotency_key": f"failure-answer-{type(generation_error).__name__}",
+            "idempotency_key": f"failure-answer-{failure_mode}",
         },
     )
     gate = responded.json()["data"]["action"]["human_gate"]
 
-    result, replayed = await HumanGateService(test_db, llm=FailingLLM()).decide(
+    result, replayed = await HumanGateService(test_db, llm=llm).decide(
         "u1",
         gate["id"],
         HumanGateDecision(
             decision="confirm",
             decision_payload={"evidence_confirmed": True},
             expected_gate_version=gate["version"],
-            idempotency_key=f"failure-gate-{type(generation_error).__name__}",
+            idempotency_key=f"failure-gate-{failure_mode}",
         ),
     )
 

@@ -8,6 +8,8 @@ from typing import Any
 
 from sqlalchemy import text
 
+from app.models.v2.action_domain import AITraceCreate
+from app.services.ai_trace import AITraceService
 from app.services.creator_state import CreatorStateService
 from app.services.content_genome import ContentGenomeService
 from app.services.v2_utils import now, request_hash
@@ -317,41 +319,31 @@ class IntentOrchestratorService:
         trace_id: str,
     ) -> str:
         evidence_refs = json.loads(opportunity["evidence_refs_json"] or "[]")
-        await session.execute(
-            text(
-                "INSERT INTO ai_traces_v2 (id,owner_user_id,task_type,input_refs_json,"
-                "evidence_refs_json,policy_version,model_identifier,capability,"
-                "visibility_boundary_json,source_snapshot_ids_json,contamination_check_json,"
-                "calibration_state,limitations_json,output_ref,generated_at) VALUES "
-                "(:id,:owner,'next_best_action',:inputs,:evidence,'today-priority-v1',"
-                "NULL,'deterministic_fallback',:boundary,'[]',:check,'insufficient',"
-                ":limitations,:output,:now)"
+        await AITraceService.create(
+            session,
+            owner,
+            AITraceCreate(
+                id=trace_id,
+                task_type="next_best_action",
+                input_refs=[f"content-opportunity:{opportunity['id']}"],
+                evidence_refs=evidence_refs,
+                policy_version="today-priority-v1",
+                capability="deterministic_fallback",
+                visibility_boundary={
+                    "allowed": ["user_confirmed_series", "confirmed_evidence"],
+                    "forbidden": ["other_users", "unconfirmed_series"],
+                    "actual": ["user_confirmed_series"],
+                },
+                contamination_check={
+                    "status": "clean",
+                    "unexpected_classes": [],
+                    "missing_classes": [],
+                },
+                calibration_state="insufficient",
+                limitations=["机会必须由用户确认后才创建内容项目"],
+                output_ref=f"next_best_action:{action_id}",
+                generated_at=now(),
             ),
-            {
-                "id": trace_id,
-                "owner": owner,
-                "inputs": json.dumps(
-                    [f"content-opportunity:{opportunity['id']}"], ensure_ascii=False
-                ),
-                "evidence": json.dumps(evidence_refs, ensure_ascii=False),
-                "boundary": json.dumps(
-                    {
-                        "allowed": ["user_confirmed_series", "confirmed_evidence"],
-                        "forbidden": ["other_users", "unconfirmed_series"],
-                        "actual": ["user_confirmed_series"],
-                    },
-                    ensure_ascii=False,
-                ),
-                "check": json.dumps(
-                    {"status": "clean", "unexpected_classes": [], "missing_classes": []},
-                    ensure_ascii=False,
-                ),
-                "limitations": json.dumps(
-                    ["机会必须由用户确认后才创建内容项目"], ensure_ascii=False
-                ),
-                "output": f"next_best_action:{action_id}",
-                "now": now(),
-            },
         )
         return trace_id
 
@@ -647,36 +639,43 @@ class IntentOrchestratorService:
             actual_boundary.append("user_confirmed_viewpoints")
         if any(item.startswith("creator-series:") for item in genome_refs):
             actual_boundary.append("user_confirmed_series")
-        await session.execute(
-            text(
-                "INSERT INTO ai_traces_v2 (id,owner_user_id,task_type,input_refs_json,"
-                "evidence_refs_json,policy_version,model_identifier,capability,"
-                "visibility_boundary_json,source_snapshot_ids_json,contamination_check_json,"
-                "calibration_state,limitations_json,output_ref,generated_at) VALUES "
-                "(:id,:owner,'next_best_action',:inputs,:evidence,'intent-orchestrator-v2',"
-                "NULL,'deterministic_fallback',:boundary,'[]',:check,'insufficient',"
-                ":limitations,:output,:now)"
-            ),
-            {
-                "id": trace_id,
-                "owner": owner,
-                "inputs": json.dumps(input_refs, ensure_ascii=False),
-                "evidence": json.dumps(
-                    ["confirmed_project_state", *genome_refs], ensure_ascii=False
-                ),
-                "boundary": json.dumps({"allowed": ["owner_scoped_project", "creator_state", "confirmed_creator_rules"], "forbidden": ["other_users", "post_hoc_private_data", "inactive_or_conflicted_rules"], "actual": actual_boundary}, ensure_ascii=False),
-                "check": json.dumps({"status": "clean", "unexpected_classes": [], "missing_classes": []}, ensure_ascii=False),
-                "limitations": json.dumps(
-                    [
-                        "未调用生成模型；当前行动由可审计规则产生",
-                        f"action_type:{action_type}",
-                        f"content_genome_context_refs:{len(genome_refs)}",
+        await AITraceService.create(
+            session,
+            owner,
+            AITraceCreate(
+                id=trace_id,
+                task_type="next_best_action",
+                input_refs=input_refs,
+                evidence_refs=["confirmed_project_state", *genome_refs],
+                policy_version="intent-orchestrator-v2",
+                capability="deterministic_fallback",
+                visibility_boundary={
+                    "allowed": [
+                        "owner_scoped_project",
+                        "creator_state",
+                        "confirmed_creator_rules",
                     ],
-                    ensure_ascii=False,
-                ),
-                "output": f"next_best_action:{action_id}",
-                "now": now(),
-            },
+                    "forbidden": [
+                        "other_users",
+                        "post_hoc_private_data",
+                        "inactive_or_conflicted_rules",
+                    ],
+                    "actual": actual_boundary,
+                },
+                contamination_check={
+                    "status": "clean",
+                    "unexpected_classes": [],
+                    "missing_classes": [],
+                },
+                calibration_state="insufficient",
+                limitations=[
+                    "未调用生成模型；当前行动由可审计规则产生",
+                    f"action_type:{action_type}",
+                    f"content_genome_context_refs:{len(genome_refs)}",
+                ],
+                output_ref=f"next_best_action:{action_id}",
+                generated_at=now(),
+            ),
         )
         return trace_id
 

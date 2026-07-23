@@ -9,6 +9,7 @@ from sqlalchemy import text
 
 from app.core.exceptions import IdempotencyConflictException, VersionConflictException
 from app.models.v2.content_project import ContentProjectCreate, ContentVersionCreate
+from app.models.v2.intent_actions import ActionResponse
 from app.models.v2.creator_series import (
     SeriesCandidateCreate,
     SeriesDecision,
@@ -25,6 +26,7 @@ from app.services.creator_series import CreatorSeriesService
 from app.services.content_opportunity import ContentOpportunityService
 from app.services.creator_state import CreatorStateService
 from app.services.intent_orchestrator import IntentOrchestratorService
+from app.services.intent_actions import ActionResponseService
 from app.services.publication import PublicationService
 from app.services.publish_hypothesis import PublishHypothesisService
 
@@ -597,3 +599,25 @@ async def test_today_surfaces_a_pending_series_opportunity_after_active_work_is_
     }
     assert today["action"]["fallback_action"]["path"] == "/opportunities"
     assert f"creator-series:{series['id']}" in today["action"]["evidence_refs"]
+
+    await series_db.execute(
+        "UPDATE next_best_actions SET expires_at='2000-01-01T00:00:00Z' WHERE id=:id",
+        {"id": today["action"]["id"]},
+    )
+    replacement = (await IntentOrchestratorService(series_db).today("u1"))["action"]
+    assert replacement["id"] != today["action"]["id"]
+    assert replacement["fallback_action"]["path"] == "/opportunities"
+
+    manual, replayed = await ActionResponseService(series_db).respond(
+        "u1",
+        replacement["id"],
+        ActionResponse(
+            decision="manual",
+            expected_action_version=replacement["version"],
+            idempotency_key="expired-opportunity-manual-fallback",
+        ),
+    )
+    assert replayed is False
+    assert manual["action"]["status"] == "completed"
+    assert manual["event"]["event_type"] == "manual_selected"
+    assert manual["event"]["payload"]["fallback_action"]["path"] == "/opportunities"
