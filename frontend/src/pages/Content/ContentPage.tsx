@@ -522,6 +522,8 @@ function IntentActionPanel({
     );
   }
 
+  if (action.action_type === 'record_publication') return null;
+
   if (action.action_type === 'review_candidate' && workspace.candidate_review && !workspace.candidate_review.can_lock) {
     return (
       <CandidateReviewPanel
@@ -781,7 +783,7 @@ function StageAction({
     case 'lock_hypothesis':
       return <HypothesisForm {...common} lockHypothesis={lockPublishHypothesis} />;
     case 'record_publication':
-      return <PublicationForm {...common} recordPublication={recordPublication} />;
+      return <PublicationForm {...common} recordPublication={recordPublication} openHumanGate={openHumanGate} decideHumanGate={decideHumanGate} />;
     case 'add_snapshot':
       return <SnapshotForm {...common} appendSnapshot={appendSnapshot} />;
     case 'run_blind_review':

@@ -18,6 +18,7 @@ from app.models.v2.intent_actions import (
     AutomationPreference,
     CandidateDraft,
     HumanGateDecision,
+    HumanGateType,
     IntentConfirmation,
 )
 from app.models.v2.publish_hypothesis import PublishHypothesisLock
@@ -526,30 +527,38 @@ class HumanGateService:
         action = await ActionResponseService(self.db)._action(owner, action_id)
         if not action["human_gate_type"]:
             raise ValueError("action does not require a human gate")
+        payload = await self._action_gate_payload(owner, action, payload_extra)
         existing = await self.db.fetch_one(
             "SELECT * FROM human_gates WHERE action_id=:action AND owner_user_id=:owner",
             {"action": action_id, "owner": owner},
         )
         if existing:
+            existing_payload = json.loads(existing["payload_json"] or "{}")
+            enriched_payload = {**payload, **existing_payload}
+            for field in (
+                "ai_trace_id",
+                "content_version_id",
+                "publish_hypothesis_id",
+                "public_scope",
+            ):
+                if not enriched_payload.get(field) and payload.get(field):
+                    enriched_payload[field] = payload[field]
+            if existing["status"] == "pending" and enriched_payload != existing_payload:
+                await self.db.execute(
+                    "UPDATE human_gates SET payload_json=:payload,request_hash=:hash,"
+                    "updated_at=:now WHERE id=:id AND owner_user_id=:owner AND status='pending'",
+                    {
+                        "payload": json.dumps(enriched_payload, ensure_ascii=False),
+                        "hash": request_hash(enriched_payload),
+                        "now": now(),
+                        "id": existing["id"],
+                        "owner": owner,
+                    },
+                )
+                return await self._gate(owner, existing["id"])
             return self._normalize(existing)
         gate_id = str(uuid.uuid4())
         timestamp = now()
-        payload = {
-            "project_id": action["project_id"],
-            "content_intent": action["content_intent"],
-            "expected_state_change": action["expected_state_change"],
-            **(payload_extra or {}),
-        }
-        if action["human_gate_type"] == "long_term_learning" and action["project_id"]:
-            review = await self.db.fetch_one(
-                "SELECT id,comparison_json FROM blind_reviews WHERE owner_user_id=:owner "
-                "AND project_id=:project ORDER BY created_at DESC LIMIT 1",
-                {"owner": owner, "project": action["project_id"]},
-            )
-            if review:
-                comparison = json.loads(review["comparison_json"] or "{}")
-                payload["blind_review_id"] = review["id"]
-                payload["intent_review"] = comparison.get("intent_review")
         key = f"gate:{action_id}:{action['human_gate_type']}"
         session = await self.db.get_session()
         async with session:
@@ -591,8 +600,113 @@ class HumanGateService:
                 ).mappings().one()
         return self._normalize(created)
 
+    async def _action_gate_payload(
+        self,
+        owner: str,
+        action: dict[str, Any],
+        payload_extra: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        payload = {
+            "project_id": action["project_id"],
+            "content_intent": action["content_intent"],
+            "expected_state_change": action["expected_state_change"],
+            "ai_trace_id": action["ai_trace_id"],
+            **(payload_extra or {}),
+        }
+        if action["human_gate_type"] in {"content_version", "publication"}:
+            project = await self.db.fetch_one(
+                "SELECT current_version_id,locked_publish_version_id,publish_hypothesis_id "
+                "FROM content_projects WHERE id=:id AND owner_user_id=:owner "
+                "AND deleted_at IS NULL",
+                {"id": action["project_id"], "owner": owner},
+            )
+            if project is None:
+                raise ValueError("project not found")
+            payload.update(
+                {
+                    "content_version_id": (
+                        project["current_version_id"]
+                        if action["human_gate_type"] == "content_version"
+                        else project["locked_publish_version_id"]
+                    ),
+                    "publish_hypothesis_id": project["publish_hypothesis_id"],
+                    "public_scope": {
+                        "platform": "xiaohongshu",
+                        "visibility": "public",
+                    },
+                }
+            )
+        if action["human_gate_type"] == "long_term_learning" and action["project_id"]:
+            review = await self.db.fetch_one(
+                "SELECT id,comparison_json FROM blind_reviews WHERE owner_user_id=:owner "
+                "AND project_id=:project ORDER BY created_at DESC LIMIT 1",
+                {"owner": owner, "project": action["project_id"]},
+            )
+            if review:
+                comparison = json.loads(review["comparison_json"] or "{}")
+                payload["blind_review_id"] = review["id"]
+                payload["intent_review"] = comparison.get("intent_review")
+        return payload
+
+    async def ensure_for_account(
+        self,
+        owner: str,
+        gate_type: HumanGateType,
+        idempotency_key: str,
+    ) -> tuple[dict[str, Any], bool]:
+        if gate_type not in {HumanGateType.PRIVACY, HumanGateType.DELETION}:
+            raise ValueError("account gates support privacy or deletion only")
+        payload = {
+            "target": "owner_account",
+            "operation": "data_export" if gate_type == HumanGateType.PRIVACY else "account_deletion",
+        }
+        digest = request_hash(payload)
+        gate_id = str(uuid.uuid4())
+        timestamp = now()
+        prompt = (
+            "Allow an owner-scoped data export"
+            if gate_type == HumanGateType.PRIVACY
+            else "Permanently delete this account and its data"
+        )
+        session = await self.db.get_session()
+        async with session, session.begin():
+            inserted = await session.execute(
+                text(
+                    "INSERT INTO human_gates (id,owner_user_id,project_id,action_id,gate_type,"
+                    "prompt,payload_json,status,version,idempotency_key,request_hash,created_at,updated_at) "
+                    "VALUES (:id,:owner,NULL,NULL,:type,:prompt,:payload,'pending',1,:key,:hash,:now,:now) "
+                    "ON CONFLICT(owner_user_id,idempotency_key) DO NOTHING RETURNING id"
+                ),
+                {
+                    "id": gate_id,
+                    "owner": owner,
+                    "type": gate_type.value,
+                    "prompt": prompt,
+                    "payload": json.dumps(payload, ensure_ascii=False),
+                    "key": idempotency_key,
+                    "hash": digest,
+                    "now": timestamp,
+                },
+            )
+            created = inserted.scalar_one_or_none() == gate_id
+            gate = (
+                await session.execute(
+                    text(
+                        "SELECT * FROM human_gates WHERE owner_user_id=:owner "
+                        "AND idempotency_key=:key"
+                    ),
+                    {"owner": owner, "key": idempotency_key},
+                )
+            ).mappings().one()
+        if gate["request_hash"] != digest:
+            raise IdempotencyConflictException()
+        return self._normalize(gate), not created
+
     async def decide(self, owner: str, gate_id: str, body: HumanGateDecision) -> tuple[dict[str, Any], bool]:
         digest = request_hash(body)
+        gate = await self._gate(owner, gate_id)
+        if gate["action_id"] is None:
+            return await self._decide_account_gate(owner, gate, body, digest)
         replay = await self.db.fetch_one(
             "SELECT * FROM action_events WHERE owner_user_id=:owner AND idempotency_key=:key",
             {"owner": owner, "key": body.idempotency_key},
@@ -601,8 +715,25 @@ class HumanGateService:
             if replay["request_hash"] != digest:
                 raise IdempotencyConflictException()
             gate = await self._gate(owner, gate_id)
-            return {"gate": gate}, True
-        gate = await self._gate(owner, gate_id)
+            action = await ActionResponseService(self.db)._action(owner, gate["action_id"])
+            candidate, evidence, learning = await self._apply_gate_side_effects(
+                owner,
+                gate,
+                action,
+                "confirmed" if gate["status"] == "confirmed" else "rejected",
+            )
+            result = {"gate": gate, "next_action": None}
+            if candidate:
+                result["candidate_version"] = candidate
+            if evidence:
+                result["evidence"] = evidence
+            if learning:
+                result["observation"] = learning
+            if gate["status"] == "confirmed" and action["project_id"]:
+                result["next_action"] = await IntentOrchestratorService(
+                    self.db
+                ).ensure_project_action(owner, action["project_id"])
+            return result, True
         if gate["version"] != body.expected_gate_version:
             raise VersionConflictException(gate["version"], body.expected_gate_version)
         if gate["status"] != "pending":
@@ -615,54 +746,6 @@ class HumanGateService:
             if expires_at <= datetime.now(UTC):
                 raise ValueError("action has expired")
 
-        candidate = None
-        evidence = None
-        learning = None
-        if body.decision == "confirm":
-            if gate["gate_type"] == "user_fact":
-                evidence_id = gate["payload"].get("evidence_id")
-                if not evidence_id:
-                    raise ValueError("user fact gate is missing evidence")
-                existing_evidence = await EvidenceService(self.db).get(owner, evidence_id)
-                if existing_evidence["source_type"] != "user_fact":
-                    raise ValueError("user fact gate requires user_fact evidence")
-                evidence, _ = await EvidenceService(self.db).confirm(
-                    owner,
-                    evidence_id,
-                    EvidenceDecision(
-                        decision="confirm",
-                        expected_evidence_version=existing_evidence["version"],
-                        idempotency_key=f"gate:{gate_id}:evidence-confirm",
-                    ),
-                )
-                response_service = ActionResponseService(self.db, llm=self.llm)
-                candidate = await response_service._prepare_candidate(
-                    owner,
-                    action,
-                    evidence["statement"],
-                    f"gate:{gate_id}:fact-confirm",
-                    evidence_id,
-                )
-                await CreatorStateService(self.db).append_confirmed_fact(
-                    owner, evidence["statement"], f"evidence:{evidence_id}"
-                )
-            elif gate["gate_type"] == "content_version":
-                await self._lock_candidate(owner, gate)
-            elif gate["gate_type"] == "long_term_learning":
-                learning = await self._confirm_learning(owner, gate)
-        elif gate["gate_type"] == "user_fact":
-            evidence_id = gate["payload"].get("evidence_id")
-            if evidence_id:
-                existing_evidence = await EvidenceService(self.db).get(owner, evidence_id)
-                await EvidenceService(self.db).reject(
-                    owner,
-                    evidence_id,
-                    EvidenceDecision(
-                        decision="reject",
-                        expected_evidence_version=existing_evidence["version"],
-                        idempotency_key=f"gate:{gate_id}:evidence-reject",
-                    ),
-                )
         status = "confirmed" if body.decision == "confirm" else "rejected"
         action_status = (
             "completed"
@@ -706,8 +789,11 @@ class HumanGateService:
                     ),
                     {"id": str(uuid.uuid4()), "owner": owner, "action": action["id"], "project": action["project_id"], "event": event_type, "from_status": action["status"], "to_status": action_status, "payload": json.dumps(body.decision_payload, ensure_ascii=False), "version": action["version"] + 1, "key": body.idempotency_key, "hash": digest, "now": timestamp},
                 )
+        candidate, evidence, learning = await self._apply_gate_side_effects(
+            owner, gate, action, status
+        )
         next_action = None
-        if status == "confirmed":
+        if status == "confirmed" and action["project_id"]:
             next_action = await IntentOrchestratorService(self.db).ensure_project_action(owner, action["project_id"])
         result = {"gate": await self._gate(owner, gate_id), "next_action": next_action}
         if candidate:
@@ -717,6 +803,106 @@ class HumanGateService:
         if learning:
             result["observation"] = learning
         return result, False
+
+    async def _apply_gate_side_effects(
+        self,
+        owner: str,
+        gate: dict[str, Any],
+        action: dict[str, Any],
+        status: str,
+    ) -> tuple[dict[str, Any] | None, dict[str, Any] | None, dict[str, Any] | None]:
+        candidate = None
+        evidence = None
+        learning = None
+        if status == "confirmed":
+            if gate["gate_type"] == "user_fact":
+                evidence_id = gate["payload"].get("evidence_id")
+                if not evidence_id:
+                    raise ValueError("user fact gate is missing evidence")
+                existing_evidence = await EvidenceService(self.db).get(owner, evidence_id)
+                if existing_evidence["source_type"] != "user_fact":
+                    raise ValueError("user fact gate requires user_fact evidence")
+                evidence, _ = await EvidenceService(self.db).confirm(
+                    owner,
+                    evidence_id,
+                    EvidenceDecision(
+                        decision="confirm",
+                        expected_evidence_version=existing_evidence["version"],
+                        idempotency_key=f"gate:{gate['id']}:evidence-confirm",
+                    ),
+                )
+                candidate = await ActionResponseService(
+                    self.db, llm=self.llm
+                )._prepare_candidate(
+                    owner,
+                    action,
+                    evidence["statement"],
+                    f"gate:{gate['id']}:fact-confirm",
+                    evidence_id,
+                )
+                await CreatorStateService(self.db).append_confirmed_fact(
+                    owner, evidence["statement"], f"evidence:{evidence_id}"
+                )
+            elif gate["gate_type"] == "content_version":
+                await self._lock_candidate(owner, gate)
+            elif gate["gate_type"] == "long_term_learning":
+                learning = await self._confirm_learning(owner, gate)
+        elif gate["gate_type"] == "user_fact":
+            evidence_id = gate["payload"].get("evidence_id")
+            if evidence_id:
+                existing_evidence = await EvidenceService(self.db).get(owner, evidence_id)
+                await EvidenceService(self.db).reject(
+                    owner,
+                    evidence_id,
+                    EvidenceDecision(
+                        decision="reject",
+                        expected_evidence_version=existing_evidence["version"],
+                        idempotency_key=f"gate:{gate['id']}:evidence-reject",
+                    ),
+                )
+        return candidate, evidence, learning
+
+    async def _decide_account_gate(
+        self,
+        owner: str,
+        gate: dict[str, Any],
+        body: HumanGateDecision,
+        digest: str,
+    ) -> tuple[dict[str, Any], bool]:
+        replay = await self.db.fetch_one(
+            "SELECT * FROM human_gates WHERE owner_user_id=:owner "
+            "AND decision_idempotency_key=:key",
+            {"owner": owner, "key": body.idempotency_key},
+        )
+        if replay:
+            if replay["decision_request_hash"] != digest or replay["id"] != gate["id"]:
+                raise IdempotencyConflictException()
+            return {"gate": self._normalize(replay)}, True
+        if gate["version"] != body.expected_gate_version:
+            raise VersionConflictException(gate["version"], body.expected_gate_version)
+        if gate["status"] != "pending":
+            raise ValueError("human gate is no longer pending")
+
+        status = "confirmed" if body.decision == "confirm" else "rejected"
+        updated = await self.db.execute(
+            "UPDATE human_gates SET status=:status,decision_payload_json=:payload,"
+            "decision_idempotency_key=:key,decision_request_hash=:hash,decided_at=:now,"
+            "updated_at=:now,version=version+1 WHERE id=:id AND owner_user_id=:owner "
+            "AND version=:expected AND status='pending'",
+            {
+                "status": status,
+                "payload": json.dumps(body.decision_payload, ensure_ascii=False),
+                "key": body.idempotency_key,
+                "hash": digest,
+                "now": now(),
+                "id": gate["id"],
+                "owner": owner,
+                "expected": gate["version"],
+            },
+        )
+        if updated.rowcount != 1:
+            raise VersionConflictException(gate["version"] + 1, gate["version"])
+        return {"gate": await self._gate(owner, gate["id"])}, False
 
     async def _confirm_learning(self, owner: str, gate: dict[str, Any]) -> dict[str, Any]:
         plan = gate["payload"].get("intent_review")
@@ -730,6 +916,11 @@ class HumanGateService:
         )
         if project is None:
             raise ValueError("project not found")
+        expected_project_version = gate["payload"].get(
+            "expected_state_change", {}
+        ).get("based_on_project_version")
+        if not isinstance(expected_project_version, int):
+            raise ValueError("learning gate is missing the source project version")
         from app.models.v2.calibration import ObservationCreate
         from app.services.observation import ObservationService
 
@@ -747,11 +938,22 @@ class HumanGateService:
                     "source": "user_confirmed_intent_review",
                 },
                 next_test=plan["experiment_item"],
-                expected_project_version=project["version"],
+                expected_project_version=expected_project_version,
                 idempotency_key=f"gate:{gate['id']}:learning-observation",
             ),
         )
-        return result["observation"]
+        observation = result["observation"]
+        await CreatorStateService(self.db).append_validated_insight(
+            owner,
+            {
+                "statement": observation["statement"],
+                "source_ref": f"observation:{observation['id']}",
+                "source_type": "validated_insight",
+                "project_id": observation["project_id"],
+                "scope": observation["scope"],
+            },
+        )
+        return observation
 
     async def _lock_candidate(self, owner: str, gate: dict[str, Any]) -> None:
         from app.services.candidate_review import CandidateReviewService
@@ -762,6 +964,10 @@ class HumanGateService:
         )
         if project is None or not project["current_version_id"]:
             raise ValueError("candidate content version not found")
+        if gate["payload"].get("content_version_id") != project["current_version_id"]:
+            raise ValueError("candidate changed after the confirmation gate was opened")
+        if gate["payload"].get("ai_trace_id") is None:
+            raise ValueError("content version gate is missing action trace provenance")
         await CandidateReviewService(self.db).assert_ready_to_lock(owner, gate["project_id"])
         version = await self.db.fetch_one(
             "SELECT evidence_snapshot_json FROM content_versions WHERE id=:id "

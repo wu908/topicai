@@ -6,7 +6,7 @@
 - [x] T002 Add idempotency and optimistic-concurrency contracts for action lifecycle operations.
 - [x] T003 Add migrations for state snapshots, evidence, actions, traces, gates, action events and experiments.
 - [x] T004 Test fresh database migration, repeat migration, and upgrade from the 008 schema.
-- [ ] T005 Add owner-isolation and deletion/export coverage for every new entity.
+- [x] T005 Add owner-isolation and deletion/export coverage for every new entity.
 
 ## Phase B - Action policy and service
 
@@ -16,7 +16,7 @@
 - [x] T009 Implement `NextBestActionService` offer, accept, reject, execute, fail, expire and cancel operations.
 - [x] T010 Enforce action idempotency and state-version checks in the service layer.
 - [x] T011 Implement `AITraceService` and require traces for AI-generated actions.
-- [ ] T012 Implement `HumanGateService` for fact, version, publish, insight, privacy and deletion gates.
+- [x] T012 Implement `HumanGateService` for fact, version, publish, insight, privacy and deletion gates.
 - [x] T013 Add source-integrity tests proving the action engine never calls legacy hotspot sources.
 - [x] T014 Add timeout, malformed output, missing capability and manual fallback tests.
 
@@ -41,11 +41,11 @@
 
 ## Phase E - Publish, review and learning
 
-- [ ] T028 Create publish/version HumanGates and version-bound action traces.
+- [x] T028 Create publish/version HumanGates and version-bound action traces.
 - [x] T029 Connect manual publish record and performance snapshot actions to project state.
 - [x] T030 Replace prediction semantics with fact/hypothesis/experiment review output.
 - [x] T031 Create exactly one continue, stop and experiment action from a completed review.
-- [ ] T032 Add confirmed/rejected insight gates and ContentGenome update rules.
+- [x] T032 Add confirmed/rejected insight gates and ContentGenome update rules.
 - [ ] T033 Add synthetic scenario tests C-05 through C-07.
 
 ## Phase F - Judgment calibration
@@ -147,3 +147,18 @@ The feature is not complete until all P1 tasks are green, synthetic logic scenar
   trust/privacy, synthetic scenarios and calibration completeness in
   `phase-17-completion-gate-audit.md`.
 - Spec 009 is not complete and no unchecked item is represented as shipped.
+
+## Phase 19 trust-boundary and privacy closure (2026-07-23)
+
+- Migration `031_trust_boundaries_privacy.sql` adds account-level privacy and
+  deletion gates without weakening project/action gate ownership constraints.
+- Owner-confirmed export covers every v2 owner entity, excludes credentials and
+  includes current ContentGenome projections; confirmed account deletion removes
+  all owner rows while preserving other users.
+- Publication records now require a confirmed publication gate bound to the
+  locked content version, publish hypothesis, public scope and action AI trace.
+- Confirmed long-term learning enters CreatorState and ContentGenome as a
+  source-linked validated insight; rejected gates write nothing, while refuted or
+  archived source observations remove the insight from future action context.
+- Final validation: backend `788 passed`, `1 deselected`, `87.06%` coverage;
+  frontend `365 passed`, `2 skipped`, plus lint and production build.

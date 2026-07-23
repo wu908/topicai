@@ -84,6 +84,7 @@ describe('v2 content project API', () => {
   it('maps publication, review and observation commands to their target resources', async () => {
     await recordPublication('p1', {
       content_version_id: 'v1',
+      publication_gate_id: 'g1',
       published_at: '2026-07-18T08:00:00Z',
       expected_project_version: 3,
       idempotency_key: 'publish-key',
@@ -118,7 +119,7 @@ describe('v2 content project API', () => {
     expect(v2Client.post).toHaveBeenNthCalledWith(
       1,
       '/projects/p1/publish-records',
-      expect.any(Object),
+      expect.objectContaining({ publication_gate_id: 'g1' }),
     );
     expect(v2Client.post).toHaveBeenNthCalledWith(
       2,

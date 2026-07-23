@@ -19,6 +19,8 @@ const api = vi.hoisted(() => ({
   proposeSeriesCandidate: vi.fn(),
   decideSeriesCandidate: vi.fn(),
   revokeCreatorSeries: vi.fn(),
+  openHumanGate: vi.fn(),
+  decideHumanGate: vi.fn(),
 }));
 
 vi.mock('@/services/api/v2/projects', () => api);
@@ -64,6 +66,26 @@ const workspace: CalibrationWorkspace = {
   blind_review_trace: null,
   observations: [],
   next_action: 'record_publication',
+  orchestrated_action: {
+    id: 'publication-action',
+    project_id: 'p1',
+    action_type: 'record_publication',
+    content_intent: 'solve',
+    title: 'Record publication',
+    reason: 'Publication remains manual.',
+    evidence_refs: ['content:locked_version'],
+    unknown_refs: ['publication_time'],
+    expected_state_change: {},
+    estimated_effort_minutes: 2,
+    automation_level: 'guided',
+    human_gate_type: 'publication',
+    human_gate: null,
+    fallback_action: { action_type: 'record_publication' },
+    status: 'proposed',
+    version: 1,
+    expires_at: null,
+    last_event: null,
+  },
 };
 
 function renderPage(path = '/content') {
@@ -84,6 +106,15 @@ describe('ContentPage', () => {
     api.getCalibrationWorkspace.mockResolvedValue(workspace);
     api.createProject.mockResolvedValue({ id: 'new-project' });
     api.recordPublication.mockResolvedValue({ project, record: { id: 'r1' } });
+    api.openHumanGate.mockResolvedValue({
+      id: 'publication-gate',
+      gate_type: 'publication',
+      prompt: 'Confirm publication',
+      payload: { content_version_id: 'v1' },
+      status: 'pending',
+      version: 1,
+    });
+    api.decideHumanGate.mockResolvedValue({});
     api.transitionObservation.mockResolvedValue({});
     api.proposeViewpointCandidate.mockResolvedValue({ id: 'vp1' });
     api.decideViewpointCandidate.mockResolvedValue({ id: 'vp1', status: 'confirmed' });
@@ -121,16 +152,34 @@ describe('ContentPage', () => {
     fireEvent.change(screen.getByLabelText('发布时间'), {
       target: { value: '2026-07-18T16:00' },
     });
-    fireEvent.click(screen.getByRole('button', { name: '确认已发布' }));
+    const publishButton = screen.getByRole('button', { name: '确认已发布' });
+    await waitFor(() => expect(publishButton).toBeEnabled());
+    fireEvent.click(publishButton);
 
     await waitFor(() => {
       expect(api.recordPublication).toHaveBeenCalledWith(
         'p1',
         expect.objectContaining({
           content_version_id: 'v1',
+          publication_gate_id: 'publication-gate',
           expected_project_version: 3,
         }),
       );
+    });
+  });
+
+  it('lets the user retry when publication confirmation cannot be prepared', async () => {
+    api.listProjects.mockResolvedValue({ items: [project], total: 1 });
+    api.openHumanGate.mockRejectedValueOnce(new Error('temporary failure'));
+    renderPage('/content/p1');
+
+    expect(await screen.findByText('暂时无法准备发布确认，请重试。')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '确认已发布' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: '重试' }));
+
+    await waitFor(() => {
+      expect(api.openHumanGate).toHaveBeenCalledTimes(2);
+      expect(screen.getByRole('button', { name: '确认已发布' })).toBeEnabled();
     });
   });
 
@@ -214,6 +263,7 @@ describe('ContentPage', () => {
         }],
         viewpoint_context: [],
         series_context: [],
+        insight_context: [],
         summary: {
           relevant_rule_count: 0,
           applicable_rule_count: 0,
@@ -222,6 +272,7 @@ describe('ContentPage', () => {
           applicable_evidence_count: 1,
           applicable_viewpoint_count: 0,
           applicable_series_count: 0,
+          applicable_insight_count: 0,
         },
       },
     });

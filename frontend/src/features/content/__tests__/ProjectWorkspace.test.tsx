@@ -203,6 +203,7 @@ describe('ProjectWorkspace', () => {
         ],
         viewpoint_context: [],
         series_context: [],
+        insight_context: [],
         summary: {
           relevant_rule_count: 2,
           applicable_rule_count: 1,
@@ -211,6 +212,7 @@ describe('ProjectWorkspace', () => {
           applicable_evidence_count: 1,
           applicable_viewpoint_count: 0,
           applicable_series_count: 0,
+          applicable_insight_count: 0,
         },
       },
     });
@@ -270,6 +272,7 @@ describe('ProjectWorkspace', () => {
             }],
             viewpoint_context: [],
             series_context: [],
+            insight_context: [],
             summary: {
               relevant_rule_count: 0,
               applicable_rule_count: 0,
@@ -278,6 +281,7 @@ describe('ProjectWorkspace', () => {
               applicable_evidence_count: 1,
               applicable_viewpoint_count: 0,
               applicable_series_count: 0,
+              applicable_insight_count: 0,
             },
           },
         }}

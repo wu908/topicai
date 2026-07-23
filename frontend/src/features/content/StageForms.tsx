@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Alert,
   Box,
@@ -23,6 +23,8 @@ import {
 import type {
   CalibrationWorkspace,
   ContentProject,
+  HumanGate,
+  HumanGateDecisionInput,
   PerformanceMetrics,
 } from '@/types/contracts/v2/content';
 
@@ -363,11 +365,14 @@ export function HypothesisForm({
 interface PublicationFormProps extends WorkspaceFormProps {
   recordPublication: (projectId: string, input: {
     content_version_id: string;
+    publication_gate_id: string;
     note_url?: string;
     published_at: string;
     expected_project_version: number;
     idempotency_key: string;
   }) => Promise<unknown>;
+  openHumanGate: (actionId: string) => Promise<HumanGate>;
+  decideHumanGate: (gateId: string, input: HumanGateDecisionInput) => Promise<unknown>;
 }
 
 export function PublicationForm({
@@ -375,10 +380,26 @@ export function PublicationForm({
   busy,
   onCommand,
   recordPublication,
+  openHumanGate,
+  decideHumanGate,
   makeKey,
 }: PublicationFormProps) {
   const [url, setUrl] = useState('');
   const [publishedAt, setPublishedAt] = useState(() => toLocalDateTimeValue(new Date()));
+  const action = workspace.orchestrated_action;
+  const [gate, setGate] = useState<HumanGate | null>(action?.human_gate ?? null);
+  const [gateError, setGateError] = useState(false);
+  const [gateAttempt, setGateAttempt] = useState(0);
+  useEffect(() => {
+    if (action?.action_type === 'record_publication' && !gate) {
+      void openHumanGate(action.id)
+        .then((nextGate) => {
+          setGate(nextGate);
+          setGateError(false);
+        })
+        .catch(() => setGateError(true));
+    }
+  }, [action, gate, gateAttempt, openHumanGate]);
   return (
     <Paper component="section" variant="outlined" sx={panelSx}>
       <Typography component="h2" variant="h5" mb={2}>
@@ -387,6 +408,19 @@ export function PublicationForm({
       <Typography variant="body2" color="text.secondary" mb={2}>
         TopicAI 不会代替你发布。记录链接和时间后，才能在发布后帮你比较实际表现。
       </Typography>
+      {gateError ? (
+        <Alert
+          severity="error"
+          action={
+            <Button color="inherit" size="small" onClick={() => setGateAttempt((value) => value + 1)}>
+              重试
+            </Button>
+          }
+          sx={{ mb: 2 }}
+        >
+          暂时无法准备发布确认，请重试。
+        </Alert>
+      ) : null}
       <Stack spacing={2}>
         <TextField
           label="小红书笔记链接"
@@ -408,19 +442,29 @@ export function PublicationForm({
           <Button
             variant="contained"
             startIcon={<PublishOutlined />}
-            disabled={busy || !publishedAt || !workspace.project.locked_publish_version_id}
+            disabled={busy || !publishedAt || !workspace.project.locked_publish_version_id || !gate}
             onClick={() => {
               const versionId = workspace.project.locked_publish_version_id;
               if (!versionId) return;
-              void onCommand(() =>
-                recordPublication(workspace.project.id, {
+              if (!gate) return;
+              void onCommand(async () => {
+                if (gate.status === 'pending') {
+                  await decideHumanGate(gate.id, {
+                    decision: 'confirm',
+                    decision_payload: { publication_confirmed: true },
+                    expected_gate_version: gate.version,
+                    idempotency_key: `publication-gate-${gate.id}-${gate.version}`,
+                  });
+                }
+                return recordPublication(workspace.project.id, {
                   content_version_id: versionId,
+                  publication_gate_id: gate.id,
                   note_url: url.trim() || undefined,
                   published_at: new Date(publishedAt).toISOString(),
                   expected_project_version: workspace.project.version,
                   idempotency_key: makeKey('publication'),
-                }),
-              );
+                });
+              });
             }}
           >
             确认已发布

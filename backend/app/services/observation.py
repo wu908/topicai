@@ -9,6 +9,7 @@ from sqlalchemy import text
 from app.core.exceptions import IdempotencyConflictException, VersionConflictException
 from app.models.v2.calibration import ObservationCreate, ObservationTransition
 from app.services.v2_utils import decode_json_fields, now, request_hash
+from app.services.creator_state import CreatorStateService
 
 
 class ObservationService:
@@ -162,6 +163,28 @@ class ObservationService:
         digest = request_hash(
             {"observation_id": observation_id, "body": body.model_dump(mode="json")}
         )
+        replay = await self.db.fetch_one(
+            "SELECT * FROM observation_events WHERE owner_user_id=:owner "
+            "AND idempotency_key=:key",
+            {"owner": owner_user_id, "key": body.idempotency_key},
+        )
+        if replay:
+            if replay["request_hash"] != digest:
+                raise IdempotencyConflictException()
+            observation = await self.db.fetch_one(
+                "SELECT * FROM observations WHERE id=:id AND owner_user_id=:owner",
+                {"id": observation_id, "owner": owner_user_id},
+            )
+            if observation is None:
+                raise ValueError(f"observation not found: {observation_id}")
+            if observation["lifecycle_status"] in {"refuted", "archived"}:
+                await CreatorStateService(self.db).remove_validated_insight(
+                    owner_user_id, f"observation:{observation_id}"
+                )
+            return {
+                "observation": self._normalize(observation),
+                "event": dict(replay),
+            }, True
         session = await self.db.get_session()
         async with session:
             async with session.begin():
@@ -249,10 +272,15 @@ class ObservationService:
                         {"id": event_id},
                     )
                 ).mappings().one()
-                return {
+                result = {
                     "observation": self._normalize(current_observation),
                     "event": dict(event),
-                }, False
+                }
+        if body.to_status in {"refuted", "archived"}:
+            await CreatorStateService(self.db).remove_validated_insight(
+                owner_user_id, f"observation:{observation_id}"
+            )
+        return result, False
 
     @staticmethod
     async def _project(session, owner_user_id: str, project_id: str):

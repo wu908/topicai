@@ -15,6 +15,17 @@ async def _lock_project(client, suffix="api-loop"):
             },
         )
     ).json()["data"]
+    project = (
+        await client.post(
+            f"/api/v2/projects/{project['id']}/intent:confirm",
+            json={
+                "content_intent": "solve",
+                "audience_change": "The reader gets a concrete starting sequence.",
+                "expected_project_version": project["version"],
+                "idempotency_key": f"{suffix}-intent",
+            },
+        )
+    ).json()["data"]["project"]
     version = (
         await client.post(
             f"/api/v2/projects/{project['id']}/versions",
@@ -43,11 +54,33 @@ async def _lock_project(client, suffix="api-loop"):
     return locked.json()["data"]["project"], version
 
 
+async def _confirm_publication_gate(client, project_id: str, suffix: str) -> str:
+    action = (
+        await client.get(f"/api/v2/projects/{project_id}/next-action")
+    ).json()["data"]
+    gate = (
+        await client.post(f"/api/v2/actions/{action['id']}/human-gate")
+    ).json()["data"]
+    confirmed = await client.post(
+        f"/api/v2/human-gates/{gate['id']}:decide",
+        json={
+            "decision": "confirm",
+            "decision_payload": {"publication_confirmed": True},
+            "expected_gate_version": gate["version"],
+            "idempotency_key": f"{suffix}-publication-gate-decision",
+        },
+    )
+    assert confirmed.status_code == 201
+    return gate["id"]
+
+
 @pytest.mark.asyncio
 async def test_manual_publish_snapshot_blind_review_and_observation(client):
     project, version = await _lock_project(client)
+    publication_gate_id = await _confirm_publication_gate(client, project["id"], "api")
     publication_body = {
         "content_version_id": version["id"],
+        "publication_gate_id": publication_gate_id,
         "note_url": "https://www.xiaohongshu.com/explore/api-note",
         "published_at": "2026-07-18T08:00:00Z",
         "expected_project_version": project["version"],
@@ -195,6 +228,7 @@ async def test_publication_is_owner_scoped(client, client_as_u2):
         f"/api/v2/projects/{project['id']}/publish-records",
         json={
             "content_version_id": version["id"],
+            "publication_gate_id": "foreign-publication-gate",
             "published_at": "2026-07-18T08:00:00Z",
             "expected_project_version": project["version"],
             "idempotency_key": "private-publication",

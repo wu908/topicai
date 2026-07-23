@@ -34,6 +34,8 @@ class HumanGateType(StrEnum):
     PUBLIC_SCOPE = "public_scope"
     PUBLICATION = "publication"
     LONG_TERM_LEARNING = "long_term_learning"
+    PRIVACY = "privacy"
+    DELETION = "deletion"
 
 
 class ActionType(StrEnum):
@@ -89,6 +91,10 @@ class HumanGateDecision(StrictModel):
     decision: Literal["confirm", "reject"]
     decision_payload: dict[str, Any] = Field(default_factory=dict)
     expected_gate_version: int = Field(ge=1)
+    idempotency_key: str = Field(min_length=1, max_length=200)
+
+
+class AccountGateRequest(StrictModel):
     idempotency_key: str = Field(min_length=1, max_length=200)
 
 

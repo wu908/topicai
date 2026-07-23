@@ -103,6 +103,7 @@ def test_intent_action_migration_upgrades_from_019_and_replays(tmp_path):
         "028_action_experiment_metrics",
         "029_starter_domain",
         "030_action_lifecycle",
+        "031_trust_boundaries_privacy",
     ]
     assert replay == []
     with sqlite3.connect(db_path) as conn:
@@ -157,7 +158,10 @@ def test_action_lifecycle_migration_rebuilds_phase_15_constraints(tmp_path):
 
     apply(db_path, phase_15_dir)
     upgraded = apply(db_path, DEFAULT_MIGRATIONS_DIR)
-    assert [item.version for item in upgraded] == ["030_action_lifecycle"]
+    assert [item.version for item in upgraded] == [
+        "030_action_lifecycle",
+        "031_trust_boundaries_privacy",
+    ]
     with sqlite3.connect(db_path) as conn:
         action_sql = conn.execute(
             "SELECT sql FROM sqlite_master WHERE type='table' AND name='next_best_actions'"
@@ -168,6 +172,57 @@ def test_action_lifecycle_migration_rebuilds_phase_15_constraints(tmp_path):
         assert "'failed','expired','cancelled'" in action_sql
         assert "'rejected','failed','expired','cancelled'" in event_sql
         assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
+
+
+def test_privacy_migration_preserves_existing_project_gate(tmp_path):
+    db_path = tmp_path / "gate-upgrade.db"
+    through_030 = tmp_path / "through-030"
+    through_030.mkdir()
+    for path in DEFAULT_MIGRATIONS_DIR.glob("[0-9][0-9][0-9]_*.sql"):
+        if int(path.name[:3]) <= 30:
+            shutil.copy2(path, through_030 / path.name)
+
+    apply(db_path, through_030)
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("PRAGMA foreign_keys=ON")
+        conn.execute(
+            "INSERT INTO users (id,email,username,password_hash,ai_calls_reset_at,created_at) "
+            "VALUES ('u1','u1@example.com','u1','hash','2026-07-24T00:00:00Z','2026-07-23T00:00:00Z')"
+        )
+        conn.execute(
+            "INSERT INTO content_projects (id,owner_user_id,title,status,primary_goal,"
+            "target_audience,last_action_at,created_at,updated_at) VALUES "
+            "('p1','u1','Existing project','ready_to_publish','stable_publish',"
+            "'Creators','2026-07-23T00:00:00Z','2026-07-23T00:00:00Z','2026-07-23T00:00:00Z')"
+        )
+        conn.execute(
+            "INSERT INTO next_best_actions (id,owner_user_id,project_id,action_type,title,reason,"
+            "estimated_effort_minutes,human_gate_type,fallback_action_json,status,version,"
+            "idempotency_key,request_hash,created_at,updated_at) VALUES "
+            "('a1','u1','p1','record_publication','Record','Manual',2,'publication','{}',"
+            "'proposed',1,'action-key','action-hash','2026-07-23T00:00:00Z','2026-07-23T00:00:00Z')"
+        )
+        conn.execute(
+            "INSERT INTO human_gates (id,owner_user_id,project_id,action_id,gate_type,prompt,"
+            "payload_json,status,decision_payload_json,version,idempotency_key,request_hash,"
+            "decided_at,created_at,updated_at) VALUES "
+            "('g1','u1','p1','a1','publication','Confirm','{\"legacy\":true}','confirmed',"
+            "'{\"confirmed\":true}',2,'gate-key','gate-hash','2026-07-23T00:00:00Z',"
+            "'2026-07-23T00:00:00Z','2026-07-23T00:00:00Z')"
+        )
+        conn.commit()
+
+    apply(db_path, DEFAULT_MIGRATIONS_DIR)
+    with sqlite3.connect(db_path) as conn:
+        gate = conn.execute(
+            "SELECT project_id,action_id,gate_type,payload_json,status,"
+            "decision_payload_json,version,idempotency_key,request_hash,decided_at "
+            "FROM human_gates WHERE id='g1'"
+        ).fetchone()
+    assert gate == (
+        "p1", "a1", "publication", '{"legacy":true}', "confirmed",
+        '{"confirmed":true}', 2, "gate-key", "gate-hash", "2026-07-23T00:00:00Z"
+    )
 
 
 def test_publish_hypothesis_is_unique_per_project_version(tmp_path):

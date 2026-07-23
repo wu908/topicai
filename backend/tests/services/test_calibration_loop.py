@@ -105,6 +105,10 @@ async def _locked_project(db, *, expected_behaviors=None, suffix="1"):
             idempotency_key=f"hypothesis-{suffix}",
         ),
     )
+    await db.execute(
+        "UPDATE content_projects SET intent_status='confirmed' WHERE id=:id",
+        {"id": project["id"]},
+    )
     return await ContentProjectService(db).get("u1", project["id"]), version
 
 
@@ -112,11 +116,24 @@ async def _published_with_snapshot(db, *, expected_behaviors=None, suffix="1"):
     project, version = await _locked_project(
         db, expected_behaviors=expected_behaviors, suffix=suffix
     )
+    action = await IntentOrchestratorService(db).ensure_project_action("u1", project["id"])
+    gate = await HumanGateService(db).ensure_for_action("u1", action["id"])
+    await HumanGateService(db).decide(
+        "u1",
+        gate["id"],
+        HumanGateDecision(
+            decision="confirm",
+            decision_payload={"publication_confirmed": True},
+            expected_gate_version=gate["version"],
+            idempotency_key=f"publication-gate-{suffix}",
+        ),
+    )
     publication, _ = await PublicationService(db).record(
         "u1",
         project["id"],
         PublishRecordCreate(
             content_version_id=version["id"],
+            publication_gate_id=gate["id"],
             note_url="https://www.xiaohongshu.com/explore/test-note",
             published_at="2026-07-18T08:00:00Z",
             expected_project_version=project["version"],
@@ -598,6 +615,7 @@ async def test_creator_rule_requires_two_observations_and_supports_activation_an
         "applicable_evidence_count": 2,
         "applicable_viewpoint_count": 0,
         "applicable_series_count": 0,
+        "applicable_insight_count": 0,
     }
     evidence_refs = {item["source_ref"] for item in genome["evidence_context"]}
     assert evidence_refs == {

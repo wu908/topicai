@@ -80,6 +80,7 @@ class ContentGenome(StrictModel):
     evidence_context: list[dict[str, Any]]
     viewpoint_context: list[dict[str, Any]]
     series_context: list[dict[str, Any]]
+    insight_context: list[dict[str, Any]]
     summary: dict[str, int]
 
 
@@ -107,8 +108,8 @@ class Evidence(StrictModel):
 class HumanGate(StrictModel):
     id: str
     owner_user_id: str
-    project_id: str
-    action_id: str
+    project_id: str | None = None
+    action_id: str | None = None
     gate_type: HumanGateType
     prompt: str
     payload: dict[str, Any]
@@ -117,6 +118,8 @@ class HumanGate(StrictModel):
     version: int = Field(ge=1)
     idempotency_key: str
     request_hash: str
+    decision_idempotency_key: str | None = None
+    decision_request_hash: str | None = None
     decided_at: str | None = None
     created_at: str
     updated_at: str
