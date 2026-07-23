@@ -11,6 +11,7 @@ class StrictModel(BaseModel):
 
 class PublishRecordCreate(StrictModel):
     content_version_id: str = Field(min_length=1)
+    publication_gate_id: str = Field(min_length=1)
     note_url: str | None = Field(default=None, max_length=2000)
     published_at: str = Field(min_length=1)
     expected_project_version: int = Field(ge=1)

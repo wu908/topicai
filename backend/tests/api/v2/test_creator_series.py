@@ -4,11 +4,14 @@ import pytest
 
 from app.models.v2.calibration import PublishRecordCreate
 from app.models.v2.content_project import ContentProjectCreate, ContentVersionCreate
+from app.models.v2.intent_actions import HumanGateDecision
 from app.models.v2.publish_hypothesis import PublishHypothesisLock
 from app.services.content_project import ContentProjectService
 from app.services.content_version import ContentVersionService
 from app.services.publication import PublicationService
 from app.services.publish_hypothesis import PublishHypothesisService
+from app.services.intent_actions import HumanGateService
+from app.services.intent_orchestrator import IntentOrchestratorService
 
 
 async def _published_project(test_db, suffix):
@@ -52,11 +55,24 @@ async def _published_project(test_db, suffix):
         {"id": project["id"]},
     )
     project = await ContentProjectService(test_db).get("u1", project["id"])
+    action = await IntentOrchestratorService(test_db).ensure_project_action("u1", project["id"])
+    gate = await HumanGateService(test_db).ensure_for_action("u1", action["id"])
+    await HumanGateService(test_db).decide(
+        "u1",
+        gate["id"],
+        HumanGateDecision(
+            decision="confirm",
+            decision_payload={"publication_confirmed": True},
+            expected_gate_version=gate["version"],
+            idempotency_key=f"api-series-publication-gate-{suffix}",
+        ),
+    )
     published, _ = await PublicationService(test_db).record(
         "u1",
         project["id"],
         PublishRecordCreate(
             content_version_id=version["id"],
+            publication_gate_id=gate["id"],
             note_url=f"https://www.xiaohongshu.com/explore/api-series-{suffix}",
             published_at="2026-07-21T08:00:00Z",
             expected_project_version=project["version"],

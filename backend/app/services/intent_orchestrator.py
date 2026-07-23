@@ -461,6 +461,7 @@ class IntentOrchestratorService:
                 *content_genome.get("evidence_context", []),
                 *content_genome.get("viewpoint_context", []),
                 *content_genome.get("series_context", []),
+                *content_genome.get("insight_context", []),
             ]
         ]
         evidence_refs = list(dict.fromkeys([*spec["evidence_refs"], *genome_refs]))
@@ -624,6 +625,7 @@ class IntentOrchestratorService:
                 *content_genome.get("evidence_context", []),
                 *content_genome.get("viewpoint_context", []),
                 *content_genome.get("series_context", []),
+                *content_genome.get("insight_context", []),
             ]
         ]
         input_refs = [
@@ -639,6 +641,8 @@ class IntentOrchestratorService:
             actual_boundary.append("user_confirmed_viewpoints")
         if any(item.startswith("creator-series:") for item in genome_refs):
             actual_boundary.append("user_confirmed_series")
+        if any(item.startswith("observation:") for item in genome_refs):
+            actual_boundary.append("user_confirmed_insights")
         await AITraceService.create(
             session,
             owner,
@@ -654,6 +658,7 @@ class IntentOrchestratorService:
                         "owner_scoped_project",
                         "creator_state",
                         "confirmed_creator_rules",
+                        "user_confirmed_insights",
                     ],
                     "forbidden": [
                         "other_users",

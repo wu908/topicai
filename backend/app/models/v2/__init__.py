@@ -1,4 +1,5 @@
 """Typed contracts for the TopicAI ContentProject API."""
+from app.models.v2.account_data import OwnerDataExport
 from app.models.v2.calibration import (
     BlindReviewCreate,
     ObservationCreate,
@@ -18,6 +19,7 @@ from app.models.v2.action_domain import (
     NextBestAction,
 )
 from app.models.v2.intent_actions import (
+    AccountGateRequest,
     ActionLifecycleCommand,
     ActionResponse,
     AutomationLevel,
@@ -47,6 +49,8 @@ from app.models.v2.experiment_metrics import (
 )
 
 __all__ = [
+    "OwnerDataExport",
+    "AccountGateRequest",
     "AITrace",
     "AITraceCreate",
     "ActionEvent",

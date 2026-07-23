@@ -29,7 +29,7 @@ export type IntentActionType =
 
 export interface HumanGate {
   id: string;
-  gate_type: 'intent' | 'user_fact' | 'content_version' | 'public_scope' | 'publication' | 'long_term_learning';
+  gate_type: 'intent' | 'user_fact' | 'content_version' | 'public_scope' | 'publication' | 'long_term_learning' | 'privacy' | 'deletion';
   prompt: string;
   payload: Record<string, unknown>;
   status: 'pending' | 'confirmed' | 'rejected';
@@ -458,6 +458,14 @@ export interface ContentGenomeSeriesContext {
   reason: 'user_confirmed_series_matches_project_context';
 }
 
+export interface ContentGenomeInsightContext {
+  source_ref: string;
+  statement: string;
+  project_id: string;
+  scope: Record<string, unknown>;
+  reason: string;
+}
+
 export interface ContentGenome {
   project_id: string | null;
   query: {
@@ -470,7 +478,7 @@ export interface ContentGenome {
   fingerprint: string;
   nodes: Array<Record<string, unknown> & {
     id: string;
-    node_type: 'creator_rule' | 'observation' | 'evidence' | 'viewpoint' | 'series' | 'content_project';
+    node_type: 'creator_rule' | 'observation' | 'validated_insight' | 'evidence' | 'viewpoint' | 'series' | 'content_project';
     status?: ContentGenomeRuleStatus | string;
   }>;
   edges: Array<Record<string, unknown> & {
@@ -488,6 +496,7 @@ export interface ContentGenome {
   evidence_context: ContentGenomeEvidenceContext[];
   viewpoint_context: ContentGenomeViewpointContext[];
   series_context: ContentGenomeSeriesContext[];
+  insight_context: ContentGenomeInsightContext[];
   summary: {
     relevant_rule_count: number;
     applicable_rule_count: number;
@@ -496,6 +505,7 @@ export interface ContentGenome {
     applicable_evidence_count: number;
     applicable_viewpoint_count: number;
     applicable_series_count: number;
+    applicable_insight_count: number;
   };
 }
 
@@ -714,6 +724,7 @@ export interface HypothesisLockInput {
 
 export interface PublicationInput {
   content_version_id: string;
+  publication_gate_id: string;
   note_url?: string;
   published_at: string;
   expected_project_version: number;

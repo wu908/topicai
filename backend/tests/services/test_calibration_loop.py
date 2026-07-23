@@ -105,6 +105,10 @@ async def _locked_project(db, *, expected_behaviors=None, suffix="1"):
             idempotency_key=f"hypothesis-{suffix}",
         ),
     )
+    await db.execute(
+        "UPDATE content_projects SET intent_status='confirmed' WHERE id=:id",
+        {"id": project["id"]},
+    )
     return await ContentProjectService(db).get("u1", project["id"]), version
 
 
@@ -112,11 +116,24 @@ async def _published_with_snapshot(db, *, expected_behaviors=None, suffix="1"):
     project, version = await _locked_project(
         db, expected_behaviors=expected_behaviors, suffix=suffix
     )
+    action = await IntentOrchestratorService(db).ensure_project_action("u1", project["id"])
+    gate = await HumanGateService(db).ensure_for_action("u1", action["id"])
+    await HumanGateService(db).decide(
+        "u1",
+        gate["id"],
+        HumanGateDecision(
+            decision="confirm",
+            decision_payload={"publication_confirmed": True},
+            expected_gate_version=gate["version"],
+            idempotency_key=f"publication-gate-{suffix}",
+        ),
+    )
     publication, _ = await PublicationService(db).record(
         "u1",
         project["id"],
         PublishRecordCreate(
             content_version_id=version["id"],
+            publication_gate_id=gate["id"],
             note_url="https://www.xiaohongshu.com/explore/test-note",
             published_at="2026-07-18T08:00:00Z",
             expected_project_version=project["version"],
@@ -598,6 +615,7 @@ async def test_creator_rule_requires_two_observations_and_supports_activation_an
         "applicable_evidence_count": 2,
         "applicable_viewpoint_count": 0,
         "applicable_series_count": 0,
+        "applicable_insight_count": 0,
     }
     evidence_refs = {item["source_ref"] for item in genome["evidence_context"]}
     assert evidence_refs == {
@@ -956,7 +974,9 @@ async def test_snapshot_corrections_append_and_old_snapshot_cannot_be_reviewed(s
 
 
 @pytest.mark.asyncio
-async def test_observation_transitions_are_audited_and_owner_scoped(seeded_db):
+async def test_observation_transitions_are_audited_and_owner_scoped(
+    seeded_db, monkeypatch
+):
     project, _, snapshot = await _published_with_snapshot(seeded_db, suffix="transition")
     review, _ = await BlindReviewService(seeded_db).create(
         "u1",
@@ -1036,17 +1056,41 @@ async def test_observation_transitions_are_audited_and_owner_scoped(seeded_db):
             idempotency_key="observation-refuted",
         ),
     )
+    refute_body = ObservationTransition(
+        to_status="refuted",
+        reason="A counterexample invalidated the statement.",
+        expected_observation_version=1,
+        idempotency_key="observation-refute",
+    )
     refuted, _ = await ObservationService(seeded_db).transition(
         "u1",
         refuted_created["observation"]["id"],
-        ObservationTransition(
-            to_status="refuted",
-            reason="A counterexample invalidated the statement.",
-            expected_observation_version=1,
-            idempotency_key="observation-refute",
-        ),
+        refute_body,
     )
     assert refuted["observation"]["lifecycle_status"] == "refuted"
+
+    source_ref = f"observation:{refuted_created['observation']['id']}"
+    await CreatorStateService(seeded_db).append_validated_insight(
+        "u1", {"statement": "stale refuted insight", "source_ref": source_ref}
+    )
+    original_fetch_one = seeded_db.fetch_one
+    missed_outer_replay = False
+
+    async def miss_outer_replay_once(query, values=None):
+        nonlocal missed_outer_replay
+        if not missed_outer_replay and "FROM observation_events" in query:
+            missed_outer_replay = True
+            return None
+        return await original_fetch_one(query, values)
+
+    monkeypatch.setattr(seeded_db, "fetch_one", miss_outer_replay_once)
+    refuted_replay, replayed = await ObservationService(seeded_db).transition(
+        "u1", refuted_created["observation"]["id"], refute_body
+    )
+    assert replayed is True
+    assert refuted_replay["observation"]["lifecycle_status"] == "refuted"
+    state = await CreatorStateService(seeded_db).get("u1")
+    assert all(item.get("source_ref") != source_ref for item in state["validated_insights"])
 
     current_project = refuted_created["project"]
     archived_created, _ = await ObservationService(seeded_db).create(

@@ -9,7 +9,7 @@ from sqlalchemy import text
 
 from app.core.exceptions import IdempotencyConflictException, VersionConflictException
 from app.models.v2.content_project import ContentProjectCreate, ContentVersionCreate
-from app.models.v2.intent_actions import ActionResponse
+from app.models.v2.intent_actions import ActionResponse, HumanGateDecision
 from app.models.v2.creator_series import (
     SeriesCandidateCreate,
     SeriesDecision,
@@ -26,7 +26,7 @@ from app.services.creator_series import CreatorSeriesService
 from app.services.content_opportunity import ContentOpportunityService
 from app.services.creator_state import CreatorStateService
 from app.services.intent_orchestrator import IntentOrchestratorService
-from app.services.intent_actions import ActionResponseService
+from app.services.intent_actions import ActionResponseService, HumanGateService
 from app.services.publication import PublicationService
 from app.services.publish_hypothesis import PublishHypothesisService
 
@@ -88,11 +88,24 @@ async def _published_project(db, *, owner="u1", suffix="one", intent="share"):
         {"id": project["id"]},
     )
     project = await ContentProjectService(db).get(owner, project["id"])
+    action = await IntentOrchestratorService(db).ensure_project_action(owner, project["id"])
+    gate = await HumanGateService(db).ensure_for_action(owner, action["id"])
+    await HumanGateService(db).decide(
+        owner,
+        gate["id"],
+        HumanGateDecision(
+            decision="confirm",
+            decision_payload={"publication_confirmed": True},
+            expected_gate_version=gate["version"],
+            idempotency_key=f"series-publication-gate-{owner}-{suffix}",
+        ),
+    )
     published, _ = await PublicationService(db).record(
         owner,
         project["id"],
         PublishRecordCreate(
             content_version_id=version["id"],
+            publication_gate_id=gate["id"],
             note_url=f"https://www.xiaohongshu.com/explore/series-{owner}-{suffix}",
             published_at="2026-07-21T08:00:00Z",
             expected_project_version=project["version"],

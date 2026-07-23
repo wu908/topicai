@@ -66,6 +66,13 @@ class ContentGenomeService:
             {"owner": owner_user_id},
         )
         observations_by_id = {item["id"]: self._normalize_observation(item) for item in observations}
+        state_row = await self.db.fetch_one(
+            "SELECT validated_insights_json FROM creator_states WHERE owner_user_id=:owner",
+            {"owner": owner_user_id},
+        )
+        validated_insights = json.loads(
+            (state_row or {}).get("validated_insights_json") or "[]"
+        )
         all_evidence_rows = await self.db.fetch_all(
             "SELECT * FROM evidence_items WHERE owner_user_id=:owner",
             {"owner": owner_user_id},
@@ -113,6 +120,7 @@ class ContentGenomeService:
         evidence_context: list[dict[str, Any]] = []
         viewpoint_context: list[dict[str, Any]] = []
         series_context: list[dict[str, Any]] = []
+        insight_context: list[dict[str, Any]] = []
         included_observations: set[str] = set()
         included_evidence: set[str] = set()
         included_projects: set[str] = set()
@@ -450,6 +458,71 @@ class ContentGenomeService:
                     }
                 )
 
+        for insight in validated_insights:
+            source_ref = str(insight.get("source_ref") or "")
+            if not source_ref.startswith("observation:"):
+                continue
+            observation_id = source_ref.removeprefix("observation:")
+            observation = observations_by_id.get(observation_id)
+            status = (
+                "applicable"
+                if observation
+                and observation["user_decision"] == "confirmed"
+                and observation["lifecycle_status"] not in {"refuted", "archived"}
+                and (
+                    not query["content_intent"]
+                    or self._normalized_text(
+                        observation.get("scope", {}).get("content_intent")
+                    )
+                    in {"", query["content_intent"]}
+                )
+                else "needs_review"
+            )
+            node_id = f"validated-insight:{observation_id}"
+            nodes.append(
+                {
+                    "id": node_id,
+                    "node_type": "validated_insight",
+                    "observation_id": observation_id,
+                    "statement": insight.get("statement", ""),
+                    "project_id": insight.get("project_id"),
+                    "status": status,
+                    "reason_codes": (
+                        [] if status == "applicable" else ["source_observation_no_longer_valid"]
+                    ),
+                }
+            )
+            if observation:
+                if not any(item["id"] == f"observation:{observation_id}" for item in nodes):
+                    nodes.append(
+                        {
+                            "id": f"observation:{observation_id}",
+                            "node_type": "observation",
+                            "statement": observation["statement"],
+                            "project_id": observation["project_id"],
+                            "status": observation["lifecycle_status"],
+                        }
+                    )
+                edges.append(
+                    {
+                        "id": f"{node_id}:derived-from:{observation_id}",
+                        "edge_type": "derived_from",
+                        "from_node_id": node_id,
+                        "to_node_id": f"observation:{observation_id}",
+                        "status": "active" if status == "applicable" else "invalidated",
+                    }
+                )
+            if status == "applicable":
+                insight_context.append(
+                    {
+                        "source_ref": source_ref,
+                        "statement": insight.get("statement", ""),
+                        "project_id": insight.get("project_id"),
+                        "scope": insight.get("scope", {}),
+                        "reason": "user_confirmed_review_insight",
+                    }
+                )
+
         seen_edges: set[str] = set()
         for edge in pending_conflict_edges:
             if (
@@ -466,6 +539,7 @@ class ContentGenomeService:
         evidence_context.sort(key=lambda item: item["source_ref"])
         viewpoint_context.sort(key=lambda item: item["source_ref"])
         series_context.sort(key=lambda item: item["source_ref"])
+        insight_context.sort(key=lambda item: item["source_ref"])
         fingerprint_payload = [
             {
                 "id": item["id"],
@@ -502,6 +576,14 @@ class ContentGenomeService:
             }
             for item in nodes
             if item["node_type"] == "series"
+        ] + [
+            {
+                "id": item["id"],
+                "status": item.get("status"),
+                "reason_codes": item.get("reason_codes", []),
+            }
+            for item in nodes
+            if item["node_type"] == "validated_insight"
         ]
         fingerprint = hashlib.sha256(
             json.dumps(fingerprint_payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
@@ -518,6 +600,7 @@ class ContentGenomeService:
             "evidence_context": evidence_context,
             "viewpoint_context": viewpoint_context,
             "series_context": series_context,
+            "insight_context": insight_context,
             "summary": {
                 "relevant_rule_count": len(rule_nodes),
                 "applicable_rule_count": len(decision_context),
@@ -528,6 +611,7 @@ class ContentGenomeService:
                 "applicable_evidence_count": len(evidence_context),
                 "applicable_viewpoint_count": len(viewpoint_context),
                 "applicable_series_count": len(series_context),
+                "applicable_insight_count": len(insight_context),
             },
         }
 

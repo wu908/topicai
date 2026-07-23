@@ -7,6 +7,7 @@ import pytest
 from sqlalchemy import text
 
 from app.models.v2.intent_actions import HumanGateDecision
+from app.services.creator_state import CreatorStateService
 from app.services.intent_actions import HumanGateService
 
 
@@ -61,7 +62,9 @@ async def test_legacy_project_maps_to_solve_but_requires_confirmation(client, te
 
 
 @pytest.mark.asyncio
-async def test_growth_creator_completes_confirmed_learning_loop(client, test_db):
+async def test_growth_creator_completes_confirmed_learning_loop(
+    client, test_db, monkeypatch
+):
     today = await client.get("/api/v2/today")
     assert today.status_code == 200
     assert today.json()["data"]["action"]["action_type"] == "create_project"
@@ -174,6 +177,21 @@ async def test_growth_creator_completes_confirmed_learning_loop(client, test_db)
     assert gate.status_code == 201
     gate_payload = gate.json()["data"]
     assert gate_payload["status"] == "pending"
+    assert gate_payload["payload"]["content_version_id"] == review["content_version_id"]
+    assert gate_payload["payload"]["ai_trace_id"] == candidate["ai_trace_id"]
+    assert gate_payload["payload"]["public_scope"] == {
+        "platform": "xiaohongshu",
+        "visibility": "public",
+    }
+    await test_db.execute(
+        "UPDATE human_gates SET payload_json='{}' WHERE id=:id",
+        {"id": gate_payload["id"]},
+    )
+    gate_payload = (
+        await client.post(f"/api/v2/actions/{candidate['id']}/human-gate")
+    ).json()["data"]
+    assert gate_payload["payload"]["content_version_id"] == review["content_version_id"]
+    assert gate_payload["payload"]["ai_trace_id"] == candidate["ai_trace_id"]
 
     locked = await client.post(
         f"/api/v2/human-gates/{gate_payload['id']}:decide",
@@ -193,10 +211,57 @@ async def test_growth_creator_completes_confirmed_learning_loop(client, test_db)
     )
     assert workspace_response.status_code == 200
     workspace = workspace_response.json()["data"]
+    publication_action = locked.json()["data"]["next_action"]
+    publication_gate = (
+        await client.post(f"/api/v2/actions/{publication_action['id']}/human-gate")
+    ).json()["data"]
+    assert publication_gate["payload"]["content_version_id"] == workspace["project"]["locked_publish_version_id"]
+    assert publication_gate["payload"]["publish_hypothesis_id"] == workspace["project"]["publish_hypothesis_id"]
+    assert publication_gate["payload"]["ai_trace_id"] == publication_action["ai_trace_id"]
+    confirmed_publication_gate = await client.post(
+        f"/api/v2/human-gates/{publication_gate['id']}:decide",
+        json={
+            "decision": "confirm",
+            "decision_payload": {"publication_confirmed": True},
+            "expected_gate_version": publication_gate["version"],
+            "idempotency_key": "intent-publication-gate",
+        },
+    )
+    assert confirmed_publication_gate.status_code == 201
+    mismatched_gate_payload = {
+        **publication_gate["payload"],
+        "public_scope": {"platform": "xiaohongshu", "visibility": "private"},
+    }
+    await test_db.execute(
+        "UPDATE human_gates SET payload_json=:payload WHERE id=:id",
+        {
+            "payload": json.dumps(mismatched_gate_payload),
+            "id": publication_gate["id"],
+        },
+    )
+    rejected_publication = await client.post(
+        f"/api/v2/projects/{project['id']}/publish-records",
+        json={
+            "content_version_id": workspace["project"]["locked_publish_version_id"],
+            "publication_gate_id": publication_gate["id"],
+            "published_at": "2026-07-20T08:00:00Z",
+            "expected_project_version": workspace["project"]["version"],
+            "idempotency_key": "mismatched-public-scope",
+        },
+    )
+    assert rejected_publication.status_code == 400
+    await test_db.execute(
+        "UPDATE human_gates SET payload_json=:payload WHERE id=:id",
+        {
+            "payload": json.dumps(publication_gate["payload"]),
+            "id": publication_gate["id"],
+        },
+    )
     publication_response = await client.post(
         f"/api/v2/projects/{project['id']}/publish-records",
         json={
             "content_version_id": workspace["project"]["locked_publish_version_id"],
+            "publication_gate_id": publication_gate["id"],
             "note_url": "https://www.xiaohongshu.com/explore/intent-growth-loop",
             "published_at": "2026-07-20T08:00:00Z",
             "expected_project_version": workspace["project"]["version"],
@@ -206,6 +271,8 @@ async def test_growth_creator_completes_confirmed_learning_loop(client, test_db)
     assert publication_response.status_code == 201
     publication = publication_response.json()["data"]
     assert publication["project"]["status"] == "published"
+    assert publication["record"]["publication_gate_id"] == publication_gate["id"]
+    assert publication["record"]["ai_trace_id"] == publication_action["ai_trace_id"]
     publication_action = await client.get(
         f"/api/v2/projects/{project['id']}/next-action"
     )
@@ -278,16 +345,32 @@ async def test_growth_creator_completes_confirmed_learning_loop(client, test_db)
     assert learning_gate["gate_type"] == "long_term_learning"
     assert learning_gate["payload"]["intent_review"] == plan
 
+    decision_body = {
+        "decision": "confirm",
+        "decision_payload": {"learning_confirmed": True},
+        "expected_gate_version": learning_gate["version"],
+        "idempotency_key": "intent-learning-confirm",
+    }
+    append_insight = CreatorStateService.append_validated_insight
+
+    async def fail_first_projection(self, owner, insight):
+        monkeypatch.setattr(CreatorStateService, "append_validated_insight", append_insight)
+        raise RuntimeError("simulated projection interruption")
+
+    monkeypatch.setattr(
+        CreatorStateService, "append_validated_insight", fail_first_projection
+    )
+    interrupted = await client.post(
+        f"/api/v2/human-gates/{learning_gate['id']}:decide",
+        json=decision_body,
+    )
+    assert interrupted.status_code == 500
+
     learning_confirmation = await client.post(
         f"/api/v2/human-gates/{learning_gate['id']}:decide",
-        json={
-            "decision": "confirm",
-            "decision_payload": {"learning_confirmed": True},
-            "expected_gate_version": learning_gate["version"],
-            "idempotency_key": "intent-learning-confirm",
-        },
+        json=decision_body,
     )
-    assert learning_confirmation.status_code == 201
+    assert learning_confirmation.status_code == 200
     learning = learning_confirmation.json()["data"]
     assert learning["gate"]["status"] == "confirmed"
     assert learning["observation"]["statement"] == plan["experiment_item"]
@@ -305,6 +388,30 @@ async def test_growth_creator_completes_confirmed_learning_loop(client, test_db)
     assert completed["observations"][0]["id"] == learning["observation"]["id"]
     assert completed["next_action"] == "manage_observations"
     assert completed["orchestrated_action"]["action_type"] == "manage_learning"
+    observation_ref = f"observation:{learning['observation']['id']}"
+    assert any(
+        item["source_ref"] == observation_ref
+        for item in completed["creator_state"]["validated_insights"]
+    )
+    assert completed["content_genome"]["insight_context"] == [
+        {
+            "source_ref": observation_ref,
+            "statement": plan["experiment_item"],
+            "project_id": project["id"],
+            "scope": learning["observation"]["scope"],
+            "reason": "user_confirmed_review_insight",
+        }
+    ]
+    unrelated_genome = await client.get(
+        "/api/v2/content-genome", params={"content_intent": "share"}
+    )
+    assert unrelated_genome.status_code == 200
+    assert unrelated_genome.json()["data"]["insight_context"] == []
+    manage_trace = await test_db.fetch_one(
+        "SELECT evidence_refs_json FROM ai_traces_v2 WHERE id=:id",
+        {"id": completed["orchestrated_action"]["ai_trace_id"]},
+    )
+    assert observation_ref in json.loads(manage_trace["evidence_refs_json"])
 
     project_id = project["id"]
     observation_id = learning["observation"]["id"]
@@ -1020,3 +1127,44 @@ async def test_terminal_action_cannot_confirm_an_old_human_gate(client):
         },
     )
     assert stale_decision.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_gate_decision_idempotency_key_is_bound_to_one_action(client, test_db):
+    gates = []
+    for index in range(2):
+        project = (
+            await client.post(
+                "/api/v2/projects",
+                json={
+                    "title": f"gate target {index}",
+                    "idempotency_key": f"gate-target-project-{index}",
+                },
+            )
+        ).json()["data"]
+        action = (
+            await client.get(f"/api/v2/projects/{project['id']}/next-action")
+        ).json()["data"]
+        gate = (
+            await client.post(f"/api/v2/actions/{action['id']}/human-gate")
+        ).json()["data"]
+        gates.append(gate)
+
+    decision = {
+        "decision": "confirm",
+        "decision_payload": {},
+        "expected_gate_version": 1,
+        "idempotency_key": "shared-cross-gate-decision",
+    }
+    first = await client.post(
+        f"/api/v2/human-gates/{gates[0]['id']}:decide", json=decision
+    )
+    assert first.status_code == 201
+    conflict = await client.post(
+        f"/api/v2/human-gates/{gates[1]['id']}:decide", json=decision
+    )
+    assert conflict.status_code == 409
+    second_gate = await test_db.fetch_one(
+        "SELECT status FROM human_gates WHERE id=:id", {"id": gates[1]["id"]}
+    )
+    assert second_gate["status"] == "pending"
