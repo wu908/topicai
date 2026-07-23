@@ -71,6 +71,8 @@ async def test_owner_export_requires_privacy_gate_and_excludes_other_owner(
     assert exported.status_code == 200
     data = exported.json()["data"]
     assert "password_hash" not in data["owner"]
+    assert data["owner"]["ai_calls_today"] == 0
+    assert "ai_calls_reset_at" in data["owner"]
     exported_project_ids = {
         item["id"] for item in data["entities"]["content_projects"]
     }
@@ -98,6 +100,16 @@ async def test_account_gate_request_is_concurrent_and_idempotent(client):
     gates = [response.json()["data"] for response in responses]
     assert len({gate["id"] for gate in gates}) == 1
     assert all(gate["gate_type"] == "privacy" for gate in gates)
+
+    gate = gates[0]
+    decisions = await asyncio.gather(
+        *(
+            _decide(client, gate, "confirm", "concurrent-privacy-decision")
+            for _ in range(4)
+        )
+    )
+    assert {response.status_code for response in decisions} == {200, 201}
+    assert all(response.json()["data"]["gate"]["status"] == "confirmed" for response in decisions)
 
 
 @pytest.mark.asyncio

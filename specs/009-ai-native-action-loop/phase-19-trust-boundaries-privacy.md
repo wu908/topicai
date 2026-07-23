@@ -42,6 +42,10 @@ scenario coverage, benchmark calibration or automatic publication.
   cannot influence subsequent action traces.
 - Rejecting the gate creates neither an Observation nor a validated insight. No
   single result becomes durable creator knowledge without user confirmation.
+- Gate decision replays are bound to the original gate and action. Account-level
+  confirmations also recover concurrent identical requests as idempotent replays.
+- Replaying a refuted or archived Observation still removes any stale validated
+  insight, including when replay is detected inside the database transaction.
 
 ## Migration and compatibility
 
@@ -61,7 +65,7 @@ Focused backend verification covers migration replay, calibration, intent action
 account rights and creator series. CI-equivalent verification on 2026-07-23:
 
 ```text
-backend: 788 passed, 1 deselected, coverage 87.06% (minimum 80%)
+backend: 789 passed, 1 deselected, coverage 87.08% (minimum 80%)
 frontend: 365 passed, 2 skipped
 frontend lint: passed
 frontend production build: passed

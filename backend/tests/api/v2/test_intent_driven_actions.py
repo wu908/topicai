@@ -1127,3 +1127,44 @@ async def test_terminal_action_cannot_confirm_an_old_human_gate(client):
         },
     )
     assert stale_decision.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_gate_decision_idempotency_key_is_bound_to_one_action(client, test_db):
+    gates = []
+    for index in range(2):
+        project = (
+            await client.post(
+                "/api/v2/projects",
+                json={
+                    "title": f"gate target {index}",
+                    "idempotency_key": f"gate-target-project-{index}",
+                },
+            )
+        ).json()["data"]
+        action = (
+            await client.get(f"/api/v2/projects/{project['id']}/next-action")
+        ).json()["data"]
+        gate = (
+            await client.post(f"/api/v2/actions/{action['id']}/human-gate")
+        ).json()["data"]
+        gates.append(gate)
+
+    decision = {
+        "decision": "confirm",
+        "decision_payload": {},
+        "expected_gate_version": 1,
+        "idempotency_key": "shared-cross-gate-decision",
+    }
+    first = await client.post(
+        f"/api/v2/human-gates/{gates[0]['id']}:decide", json=decision
+    )
+    assert first.status_code == 201
+    conflict = await client.post(
+        f"/api/v2/human-gates/{gates[1]['id']}:decide", json=decision
+    )
+    assert conflict.status_code == 409
+    second_gate = await test_db.fetch_one(
+        "SELECT status FROM human_gates WHERE id=:id", {"id": gates[1]["id"]}
+    )
+    assert second_gate["status"] == "pending"

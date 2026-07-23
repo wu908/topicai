@@ -203,84 +203,86 @@ class ObservationService:
                     observation = await self._observation(
                         session, owner_user_id, observation_id
                     )
-                    return {
+                    result = {
                         "observation": self._normalize(observation),
                         "event": dict(existing_event),
-                    }, True
+                    }
+                    replayed = True
+                else:
+                    observation = await self._observation(
+                        session, owner_user_id, observation_id
+                    )
+                    if observation["version"] != body.expected_observation_version:
+                        raise VersionConflictException(
+                            observation["version"], body.expected_observation_version
+                        )
+                    current = observation["lifecycle_status"]
+                    if body.to_status not in self.ALLOWED_TRANSITIONS[current]:
+                        raise ValueError(
+                            f"observation transition not allowed: {current} -> {body.to_status}"
+                        )
 
-                observation = await self._observation(
-                    session, owner_user_id, observation_id
-                )
-                if observation["version"] != body.expected_observation_version:
-                    raise VersionConflictException(
-                        observation["version"], body.expected_observation_version
+                    event_id = str(uuid.uuid4())
+                    timestamp = now()
+                    next_version = observation["version"] + 1
+                    updated = await session.execute(
+                        text(
+                            "UPDATE observations SET lifecycle_status=:status,version=version+1,"
+                            "updated_at=:now WHERE id=:id AND owner_user_id=:owner "
+                            "AND version=:expected"
+                        ),
+                        {
+                            "status": body.to_status,
+                            "now": timestamp,
+                            "id": observation_id,
+                            "owner": owner_user_id,
+                            "expected": body.expected_observation_version,
+                        },
                     )
-                current = observation["lifecycle_status"]
-                if body.to_status not in self.ALLOWED_TRANSITIONS[current]:
-                    raise ValueError(
-                        f"observation transition not allowed: {current} -> {body.to_status}"
-                    )
-
-                event_id = str(uuid.uuid4())
-                timestamp = now()
-                next_version = observation["version"] + 1
-                updated = await session.execute(
-                    text(
-                        "UPDATE observations SET lifecycle_status=:status,version=version+1,"
-                        "updated_at=:now WHERE id=:id AND owner_user_id=:owner "
-                        "AND version=:expected"
-                    ),
-                    {
-                        "status": body.to_status,
-                        "now": timestamp,
-                        "id": observation_id,
-                        "owner": owner_user_id,
-                        "expected": body.expected_observation_version,
-                    },
-                )
-                if updated.rowcount != 1:
-                    raise VersionConflictException(
-                        observation["version"], body.expected_observation_version
-                    )
-                await session.execute(
-                    text(
-                        "INSERT INTO observation_events ("
-                        "id,owner_user_id,observation_id,from_status,to_status,reason,"
-                        "observation_version,idempotency_key,request_hash,created_at) VALUES ("
-                        ":id,:owner,:observation,:from_status,:to_status,:reason,:version,"
-                        ":key,:hash,:now)"
-                    ),
-                    {
-                        "id": event_id,
-                        "owner": owner_user_id,
-                        "observation": observation_id,
-                        "from_status": current,
-                        "to_status": body.to_status,
-                        "reason": body.reason.strip(),
-                        "version": next_version,
-                        "key": body.idempotency_key,
-                        "hash": digest,
-                        "now": timestamp,
-                    },
-                )
-                current_observation = await self._observation(
-                    session, owner_user_id, observation_id
-                )
-                event = (
+                    if updated.rowcount != 1:
+                        raise VersionConflictException(
+                            observation["version"], body.expected_observation_version
+                        )
                     await session.execute(
-                        text("SELECT * FROM observation_events WHERE id=:id"),
-                        {"id": event_id},
+                        text(
+                            "INSERT INTO observation_events ("
+                            "id,owner_user_id,observation_id,from_status,to_status,reason,"
+                            "observation_version,idempotency_key,request_hash,created_at) VALUES ("
+                            ":id,:owner,:observation,:from_status,:to_status,:reason,:version,"
+                            ":key,:hash,:now)"
+                        ),
+                        {
+                            "id": event_id,
+                            "owner": owner_user_id,
+                            "observation": observation_id,
+                            "from_status": current,
+                            "to_status": body.to_status,
+                            "reason": body.reason.strip(),
+                            "version": next_version,
+                            "key": body.idempotency_key,
+                            "hash": digest,
+                            "now": timestamp,
+                        },
                     )
-                ).mappings().one()
-                result = {
-                    "observation": self._normalize(current_observation),
-                    "event": dict(event),
-                }
-        if body.to_status in {"refuted", "archived"}:
+                    current_observation = await self._observation(
+                        session, owner_user_id, observation_id
+                    )
+                    event = (
+                        await session.execute(
+                            text("SELECT * FROM observation_events WHERE id=:id"),
+                            {"id": event_id},
+                        )
+                    ).mappings().one()
+                    result = {
+                        "observation": self._normalize(current_observation),
+                        "event": dict(event),
+                    }
+                    replayed = False
+        if result["observation"]["lifecycle_status"] in {"refuted", "archived"}:
             await CreatorStateService(self.db).remove_validated_insight(
                 owner_user_id, f"observation:{observation_id}"
             )
-        return result, False
+        return result, replayed
 
     @staticmethod
     async def _project(session, owner_user_id: str, project_id: str):

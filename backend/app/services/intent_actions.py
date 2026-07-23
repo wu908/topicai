@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 
 from app.core.exceptions import IdempotencyConflictException, VersionConflictException
 from app.core.llm import LLMClient, wrap_user_input
@@ -712,7 +713,10 @@ class HumanGateService:
             {"owner": owner, "key": body.idempotency_key},
         )
         if replay:
-            if replay["request_hash"] != digest:
+            if (
+                replay["request_hash"] != digest
+                or replay["action_id"] != gate["action_id"]
+            ):
                 raise IdempotencyConflictException()
             gate = await self._gate(owner, gate_id)
             action = await ActionResponseService(self.db)._action(owner, gate["action_id"])
@@ -884,24 +888,37 @@ class HumanGateService:
             raise ValueError("human gate is no longer pending")
 
         status = "confirmed" if body.decision == "confirm" else "rejected"
-        updated = await self.db.execute(
-            "UPDATE human_gates SET status=:status,decision_payload_json=:payload,"
-            "decision_idempotency_key=:key,decision_request_hash=:hash,decided_at=:now,"
-            "updated_at=:now,version=version+1 WHERE id=:id AND owner_user_id=:owner "
-            "AND version=:expected AND status='pending'",
-            {
-                "status": status,
-                "payload": json.dumps(body.decision_payload, ensure_ascii=False),
-                "key": body.idempotency_key,
-                "hash": digest,
-                "now": now(),
-                "id": gate["id"],
-                "owner": owner,
-                "expected": gate["version"],
-            },
-        )
-        if updated.rowcount != 1:
-            raise VersionConflictException(gate["version"] + 1, gate["version"])
+        try:
+            updated = await self.db.execute(
+                "UPDATE human_gates SET status=:status,decision_payload_json=:payload,"
+                "decision_idempotency_key=:key,decision_request_hash=:hash,decided_at=:now,"
+                "updated_at=:now,version=version+1 WHERE id=:id AND owner_user_id=:owner "
+                "AND version=:expected AND status='pending'",
+                {
+                    "status": status,
+                    "payload": json.dumps(body.decision_payload, ensure_ascii=False),
+                    "key": body.idempotency_key,
+                    "hash": digest,
+                    "now": now(),
+                    "id": gate["id"],
+                    "owner": owner,
+                    "expected": gate["version"],
+                },
+            )
+        except IntegrityError:
+            updated = None
+        if updated is None or updated.rowcount != 1:
+            replay = await self.db.fetch_one(
+                "SELECT * FROM human_gates WHERE owner_user_id=:owner "
+                "AND decision_idempotency_key=:key",
+                {"owner": owner, "key": body.idempotency_key},
+            )
+            if replay:
+                if replay["decision_request_hash"] != digest or replay["id"] != gate["id"]:
+                    raise IdempotencyConflictException()
+                return {"gate": self._normalize(replay)}, True
+            current = await self._gate(owner, gate["id"])
+            raise VersionConflictException(current["version"], gate["version"])
         return {"gate": await self._gate(owner, gate["id"])}, False
 
     async def _confirm_learning(self, owner: str, gate: dict[str, Any]) -> dict[str, Any]:

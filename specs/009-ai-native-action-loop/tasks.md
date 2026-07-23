@@ -160,5 +160,5 @@ The feature is not complete until all P1 tasks are green, synthetic logic scenar
 - Confirmed long-term learning enters CreatorState and ContentGenome as a
   source-linked validated insight; rejected gates write nothing, while refuted or
   archived source observations remove the insight from future action context.
-- Final validation: backend `788 passed`, `1 deselected`, `87.06%` coverage;
+- Final validation: backend `789 passed`, `1 deselected`, `87.08%` coverage;
   frontend `365 passed`, `2 skipped`, plus lint and production build.

@@ -55,7 +55,8 @@ class AccountDataService:
     async def export(self, owner: str, gate_id: str) -> dict[str, Any]:
         await self._assert_gate(owner, gate_id, "privacy")
         owner_row = await self.db.fetch_one(
-            "SELECT id,email,username,created_at,last_login FROM users WHERE id=:owner",
+            "SELECT id,email,username,ai_calls_today,ai_calls_reset_at,created_at,last_login "
+            "FROM users WHERE id=:owner",
             {"owner": owner},
         )
         if owner_row is None:
