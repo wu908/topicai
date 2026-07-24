@@ -7,13 +7,99 @@ from typing import Any
 from sqlalchemy import text
 
 from app.core.exceptions import IdempotencyConflictException, VersionConflictException
-from app.models.v2.publish_hypothesis import PublishHypothesisLock
+from app.models.v2.publish_hypothesis import (
+    PublishHypothesisAmendmentCreate,
+    PublishHypothesisLock,
+)
 from app.services.v2_utils import now, request_hash
 
 
 class PublishHypothesisService:
     def __init__(self, db: Any):
         self.db = db
+
+    async def list_amendments(
+        self, owner_user_id: str, hypothesis_id: str
+    ) -> list[dict[str, Any]]:
+        await self._hypothesis(owner_user_id, hypothesis_id)
+        rows = await self.db.fetch_all(
+            "SELECT * FROM publish_hypothesis_amendments "
+            "WHERE owner_user_id=:owner AND publish_hypothesis_id=:hypothesis "
+            "ORDER BY created_at,id",
+            {"owner": owner_user_id, "hypothesis": hypothesis_id},
+        )
+        return [dict(row) for row in rows]
+
+    async def amend(
+        self,
+        owner_user_id: str,
+        hypothesis_id: str,
+        body: PublishHypothesisAmendmentCreate,
+    ) -> tuple[dict[str, Any], bool]:
+        digest = request_hash(
+            {"hypothesis_id": hypothesis_id, "body": body.model_dump(mode="json")}
+        )
+        session = await self.db.get_session()
+        async with session:
+            async with session.begin():
+                existing = (
+                    await session.execute(
+                        text(
+                            "SELECT * FROM publish_hypothesis_amendments "
+                            "WHERE owner_user_id=:owner AND idempotency_key=:key"
+                        ),
+                        {"owner": owner_user_id, "key": body.idempotency_key},
+                    )
+                ).mappings().first()
+                if existing:
+                    if existing["request_hash"] != digest:
+                        raise IdempotencyConflictException()
+                    return dict(existing), True
+
+                hypothesis = (
+                    await session.execute(
+                        text(
+                            "SELECT id,status FROM publish_hypotheses "
+                            "WHERE id=:id AND owner_user_id=:owner"
+                        ),
+                        {"id": hypothesis_id, "owner": owner_user_id},
+                    )
+                ).mappings().first()
+                if hypothesis is None:
+                    raise ValueError("publish hypothesis not found")
+                if hypothesis["status"] not in {"locked", "superseded"}:
+                    raise ValueError("only a locked hypothesis can be amended")
+
+                amendment_id = str(uuid.uuid4())
+                timestamp = now()
+                await session.execute(
+                    text(
+                        "INSERT INTO publish_hypothesis_amendments ("
+                        "id,owner_user_id,publish_hypothesis_id,amendment_type,statement,"
+                        "reason,created_by,idempotency_key,request_hash,created_at) VALUES ("
+                        ":id,:owner,:hypothesis,:type,:statement,:reason,:owner,:key,:hash,:now)"
+                    ),
+                    {
+                        "id": amendment_id,
+                        "owner": owner_user_id,
+                        "hypothesis": hypothesis_id,
+                        "type": body.amendment_type,
+                        "statement": body.statement.strip(),
+                        "reason": body.reason.strip(),
+                        "key": body.idempotency_key,
+                        "hash": digest,
+                        "now": timestamp,
+                    },
+                )
+                created = (
+                    await session.execute(
+                        text(
+                            "SELECT * FROM publish_hypothesis_amendments WHERE id=:id"
+                        ),
+                        {"id": amendment_id},
+                    )
+                ).mappings().one()
+                return dict(created), False
 
     async def lock(
         self,
@@ -162,3 +248,14 @@ class PublishHypothesisService:
                     "project": dict(updated_project),
                     "hypothesis": dict(locked),
                 }, False
+
+    async def _hypothesis(
+        self, owner_user_id: str, hypothesis_id: str
+    ) -> dict[str, Any]:
+        row = await self.db.fetch_one(
+            "SELECT * FROM publish_hypotheses WHERE id=:id AND owner_user_id=:owner",
+            {"id": hypothesis_id, "owner": owner_user_id},
+        )
+        if row is None:
+            raise ValueError("publish hypothesis not found")
+        return dict(row)

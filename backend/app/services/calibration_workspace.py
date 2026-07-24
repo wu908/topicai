@@ -241,6 +241,7 @@ class CalibrationWorkspaceService:
             "result_snapshot_ids_json",
             "comparison_json",
             "visibility_boundary_json",
+            "benchmark_sample_ids_json",
         )
         result["eligible_for_rule_upgrade"] = bool(
             result["eligible_for_rule_upgrade"]

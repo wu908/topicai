@@ -72,6 +72,7 @@ class ObservationService:
                 if (
                     review["calibration_state"] != "valid"
                     or review["contamination_status"] != "clean"
+                    or not review["eligible_for_rule_upgrade"]
                 ):
                     raise ValueError("blind review is not eligible for an observation")
                 project = await self._project(

@@ -61,14 +61,17 @@ _EXPECTED_TABLES: frozenset[str] = frozenset(
         "user_feedback",
         "risk_keywords",
         "platform_tokens",
-        # v2 content-project foundation and intent orchestration (012-020)
+        # v2 content-project foundation and intent orchestration (012-033)
         "content_projects",
         "content_versions",
         "publish_hypotheses",
+        "publish_hypothesis_amendments",
         "publish_records_v2",
         "performance_snapshots_v2",
         "ai_traces_v2",
         "blind_reviews",
+        "benchmark_samples",
+        "benchmark_sample_events",
         "observations",
         "observation_events",
         "creator_states",

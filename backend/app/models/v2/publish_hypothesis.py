@@ -6,6 +6,9 @@ from pydantic import BaseModel, Field
 
 
 ExpectedBehavior = Literal["save", "comment", "profile_visit", "follow", "other"]
+HypothesisAmendmentType = Literal[
+    "clarification", "correction", "context", "evidence_update"
+]
 
 
 class PublishHypothesisLock(BaseModel):
@@ -16,4 +19,11 @@ class PublishHypothesisLock(BaseModel):
     basis_refs: list[str] = Field(default_factory=list)
     uncertainties: list[str] = Field(default_factory=list)
     expected_project_version: int = Field(ge=1)
+    idempotency_key: str = Field(min_length=1, max_length=200)
+
+
+class PublishHypothesisAmendmentCreate(BaseModel):
+    amendment_type: HypothesisAmendmentType
+    statement: str = Field(min_length=1, max_length=2000)
+    reason: str = Field(min_length=1, max_length=2000)
     idempotency_key: str = Field(min_length=1, max_length=200)

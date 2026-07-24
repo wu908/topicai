@@ -46,8 +46,69 @@ class PerformanceSnapshotCreate(StrictModel):
 
 class BlindReviewCreate(StrictModel):
     result_snapshot_ids: list[str] = Field(min_length=1)
+    benchmark_sample_ids: list[str] = Field(default_factory=list)
     expected_project_version: int = Field(ge=1)
     idempotency_key: str = Field(min_length=1, max_length=200)
+
+
+class BenchmarkMetrics(StrictModel):
+    views: int | None = Field(default=None, ge=0)
+    likes: int | None = Field(default=None, ge=0)
+    favorites: int | None = Field(default=None, ge=0)
+    comments: int | None = Field(default=None, ge=0)
+    shares: int | None = Field(default=None, ge=0)
+    follows_gained: int | None = Field(default=None, ge=0)
+
+
+class BenchmarkSampleCreate(StrictModel):
+    source_type: Literal["historical_project", "imported_post"]
+    source_ref: str = Field(min_length=1, max_length=2000)
+    project_id: str | None = None
+    metric_snapshot_ids: list[str] = Field(default_factory=list)
+    metrics: BenchmarkMetrics = Field(default_factory=BenchmarkMetrics)
+    quality_state: Literal["verified", "partial", "legacy"]
+    inclusion_state: Literal["included", "excluded"] = "excluded"
+    exclusion_reason_code: str | None = Field(default=None, max_length=100)
+    idempotency_key: str = Field(min_length=1, max_length=200)
+
+    @model_validator(mode="after")
+    def validate_source_and_inclusion(self):
+        if self.source_type == "historical_project":
+            if not self.project_id or not self.metric_snapshot_ids:
+                raise ValueError(
+                    "historical_project requires project_id and metric_snapshot_ids"
+                )
+        elif self.project_id is not None or self.metric_snapshot_ids:
+            raise ValueError(
+                "imported_post cannot reference internal projects or metric snapshots"
+            )
+        if self.inclusion_state == "excluded" and not self.exclusion_reason_code:
+            raise ValueError("excluded samples require exclusion_reason_code")
+        if self.inclusion_state == "included":
+            if self.exclusion_reason_code:
+                raise ValueError("included samples cannot have an exclusion reason")
+            if self.quality_state == "legacy":
+                raise ValueError("legacy samples cannot be included")
+            if self.source_type == "imported_post" and not any(
+                value is not None for value in self.metrics.model_dump().values()
+            ):
+                raise ValueError("included imported samples require an observed metric")
+        return self
+
+
+class BenchmarkSampleInclusionUpdate(StrictModel):
+    inclusion_state: Literal["included", "excluded"]
+    exclusion_reason_code: str | None = Field(default=None, max_length=100)
+    expected_version: int = Field(ge=1)
+    idempotency_key: str = Field(min_length=1, max_length=200)
+
+    @model_validator(mode="after")
+    def validate_exclusion(self):
+        if self.inclusion_state == "excluded" and not self.exclusion_reason_code:
+            raise ValueError("excluded samples require exclusion_reason_code")
+        if self.inclusion_state == "included" and self.exclusion_reason_code:
+            raise ValueError("included samples cannot have an exclusion reason")
+        return self
 
 
 class ObservationCreate(StrictModel):

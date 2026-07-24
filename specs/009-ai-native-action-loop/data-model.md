@@ -135,6 +135,10 @@ Stores hypothesis, control/variant assignment, project refs, metric definitions,
 
 A locked hypothesis is append-only. Locking it and `locked_publish_version_id` uses one transaction and one idempotency key.
 
+Post-lock corrections are separate `PublishHypothesisAmendment` records with
+type, statement, reason, author and timestamp. They never update the locked
+fields or the snapshot later read by `BlindReview`.
+
 ### BlindReview
 
 | Field | Type | Required | Rule |
@@ -146,6 +150,8 @@ A locked hypothesis is append-only. Locking it and `locked_publish_version_id` u
 | `visibility_boundary` | object | yes | allowed and forbidden input classes |
 | `contamination_status` | enum | yes | clean, suspected, contaminated |
 | `calibration_state` | enum | yes | valid, insufficient, calibration_invalid |
+| `eligibility_reason_code` | enum | yes | eligible_clean, insufficient_metrics, contaminated_input, revoked_evidence, legacy_hypothesis |
+| `benchmark_sample_refs` | list[string] | yes | only samples included when comparison ran |
 | `ai_trace_id` | string | conditional | required when AI compares inputs |
 
 Post-hoc user explanations and completed review causes are forbidden inputs to the initial comparison.
@@ -162,7 +168,11 @@ One project cannot activate a rule. Activation is atomic: approve candidate, sup
 
 ### BenchmarkSample
 
-Links a historical project, imported post, metric snapshots, sample quality, inclusion state, and exclusion reason. Missing metrics remain unknown, never zero. Benchmark samples support relative calibration only and never exact performance predictions.
+Links a historical project or imported post to metric snapshots, observed
+metrics, sample quality, inclusion state, exclusion reason and append-only
+inclusion events. Missing metrics remain unknown, never zero. Only explicitly
+included samples enter relative observed-range comparison. Benchmark samples
+support relative calibration only and never exact performance predictions.
 
 ## Relations to 008
 

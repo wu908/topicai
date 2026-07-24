@@ -18,6 +18,7 @@ from app.models.v2.action_domain import (
     NextBestAction,
 )
 from app.models.v2.calibration import (
+    BenchmarkSampleCreate,
     BlindReviewCreate,
     ObservationCreate,
     ObservationTransition,
@@ -40,6 +41,7 @@ from app.models.v2.evidence import (
 )
 from app.models.v2.publish_hypothesis import PublishHypothesisLock
 from app.services.blind_review import BlindReviewService
+from app.services.benchmark_sample import BenchmarkSampleService
 from app.services.content_project import ContentProjectService
 from app.services.content_version import ContentVersionService
 from app.services.observation import ObservationService
@@ -876,6 +878,7 @@ async def test_contamination_invalidates_review_and_blocks_observation(seeded_db
     assert result["review"]["contamination_status"] == "contaminated"
     assert result["review"]["calibration_state"] == "calibration_invalid"
     assert result["review"]["eligible_for_rule_upgrade"] is False
+    assert result["review"]["eligibility_reason_code"] == "contaminated_input"
     assert result["trace"]["contamination_check"]["unexpected_classes"] == [
         "post_hoc_explanation"
     ]
@@ -910,6 +913,7 @@ async def test_structurally_clean_but_unmeasurable_review_is_insufficient(seeded
     assert result["review"]["contamination_status"] == "clean"
     assert result["review"]["calibration_state"] == "insufficient"
     assert result["review"]["eligible_for_rule_upgrade"] is False
+    assert result["review"]["eligibility_reason_code"] == "insufficient_metrics"
 
 
 @pytest.mark.asyncio
@@ -931,6 +935,179 @@ async def test_missing_required_visibility_input_is_insufficient(seeded_db):
     assert result["trace"]["contamination_check"]["missing_classes"] == [
         "content_version"
     ]
+
+
+@pytest.mark.asyncio
+async def test_blind_review_persists_explicit_ineligibility_reasons(seeded_db):
+    legacy_project, _, legacy_snapshot = await _published_with_snapshot(
+        seeded_db, suffix="legacy-reason"
+    )
+    await seeded_db.execute(
+        "UPDATE content_projects SET intent_status='legacy_missing' WHERE id=:id",
+        {"id": legacy_project["id"]},
+    )
+    legacy, _ = await BlindReviewService(seeded_db).create(
+        "u1",
+        legacy_project["id"],
+        BlindReviewCreate(
+            result_snapshot_ids=[legacy_snapshot["id"]],
+            expected_project_version=legacy_project["version"],
+            idempotency_key="legacy-reason-review",
+        ),
+    )
+    assert legacy["review"]["eligibility_reason_code"] == "legacy_hypothesis"
+    assert legacy["review"]["eligible_for_rule_upgrade"] is False
+
+    revoked_project, _, revoked_snapshot = await _published_with_snapshot(
+        seeded_db, suffix="revoked-reason"
+    )
+    hypothesis = await seeded_db.fetch_one(
+        "SELECT content_version_id FROM publish_hypotheses WHERE id=:id",
+        {"id": revoked_project["publish_hypothesis_id"]},
+    )
+    await seeded_db.execute(
+        "INSERT INTO evidence_items (id,owner_user_id,project_id,source_type,statement,"
+        "source_ref,confirmation_status,reusable,version,idempotency_key,request_hash,"
+        "revoked_at,created_at,updated_at) VALUES ('revoked-review-evidence','u1',:project,"
+        "'user_fact','Revoked fact','interview:revoked','revoked',0,2,'revoked-evidence-key',"
+        "'hash','2026-07-22T00:00:00Z','2026-07-21T00:00:00Z','2026-07-22T00:00:00Z')",
+        {"project": revoked_project["id"]},
+    )
+    await seeded_db.execute(
+        "UPDATE content_versions SET evidence_snapshot_json=:snapshot WHERE id=:id",
+        {
+            "snapshot": json.dumps([{"evidence_id": "revoked-review-evidence"}]),
+            "id": hypothesis["content_version_id"],
+        },
+    )
+    revoked, _ = await BlindReviewService(seeded_db).create(
+        "u1",
+        revoked_project["id"],
+        BlindReviewCreate(
+            result_snapshot_ids=[revoked_snapshot["id"]],
+            expected_project_version=revoked_project["version"],
+            idempotency_key="revoked-reason-review",
+        ),
+    )
+    assert revoked["review"]["calibration_state"] == "calibration_invalid"
+    assert revoked["review"]["eligibility_reason_code"] == "revoked_evidence"
+    assert revoked["trace"]["contamination_check"]["revoked_evidence_ids"] == [
+        "revoked-review-evidence"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_revoking_evidence_invalidates_an_existing_clean_review(seeded_db):
+    project, _, snapshot = await _published_with_snapshot(
+        seeded_db, suffix="revoke-after-review"
+    )
+    hypothesis = await seeded_db.fetch_one(
+        "SELECT content_version_id FROM publish_hypotheses WHERE id=:id",
+        {"id": project["publish_hypothesis_id"]},
+    )
+    await seeded_db.execute(
+        "INSERT INTO evidence_items (id,owner_user_id,project_id,source_type,statement,"
+        "source_ref,confirmation_status,reusable,version,idempotency_key,request_hash,"
+        "created_at,updated_at) VALUES ('later-revoked-evidence','u1',:project,'user_fact',"
+        "'Confirmed fact','interview:confirmed','confirmed',1,1,'later-evidence-key','hash',"
+        "'2026-07-21T00:00:00Z','2026-07-21T00:00:00Z')",
+        {"project": project["id"]},
+    )
+    await seeded_db.execute(
+        "UPDATE content_versions SET evidence_snapshot_json=:snapshot WHERE id=:id",
+        {
+            "snapshot": json.dumps([{"evidence_id": "later-revoked-evidence"}]),
+            "id": hypothesis["content_version_id"],
+        },
+    )
+    review, _ = await BlindReviewService(seeded_db).create(
+        "u1",
+        project["id"],
+        BlindReviewCreate(
+            result_snapshot_ids=[snapshot["id"]],
+            expected_project_version=project["version"],
+            idempotency_key="clean-before-revoke",
+        ),
+    )
+    assert review["review"]["eligibility_reason_code"] == "eligible_clean"
+
+    await EvidenceService(seeded_db).revoke(
+        "u1",
+        "later-revoked-evidence",
+        EvidenceRevocation(
+            expected_evidence_version=1,
+            idempotency_key="later-evidence-revoke",
+        ),
+    )
+    invalidated = await seeded_db.fetch_one(
+        "SELECT calibration_state,eligible_for_rule_upgrade,eligibility_reason_code "
+        "FROM blind_reviews WHERE id=:id",
+        {"id": review["review"]["id"]},
+    )
+    assert invalidated == {
+        "calibration_state": "calibration_invalid",
+        "eligible_for_rule_upgrade": 0,
+        "eligibility_reason_code": "revoked_evidence",
+    }
+
+
+@pytest.mark.asyncio
+async def test_only_included_benchmarks_enter_relative_comparison(seeded_db):
+    project, _, snapshot = await _published_with_snapshot(
+        seeded_db, suffix="benchmark-relative"
+    )
+    service = BenchmarkSampleService(seeded_db)
+    included, _ = await service.create(
+        "u1",
+        BenchmarkSampleCreate(
+            source_type="imported_post",
+            source_ref="xiaohongshu:included",
+            metrics={"favorites": 8},
+            quality_state="verified",
+            inclusion_state="included",
+            idempotency_key="benchmark-included",
+        ),
+    )
+    excluded, _ = await service.create(
+        "u1",
+        BenchmarkSampleCreate(
+            source_type="imported_post",
+            source_ref="xiaohongshu:excluded",
+            metrics={},
+            quality_state="legacy",
+            inclusion_state="excluded",
+            exclusion_reason_code="missing_metric_provenance",
+            idempotency_key="benchmark-excluded",
+        ),
+    )
+    result, _ = await BlindReviewService(seeded_db).create(
+        "u1",
+        project["id"],
+        BlindReviewCreate(
+            result_snapshot_ids=[snapshot["id"]],
+            benchmark_sample_ids=[included["id"], excluded["id"]],
+            expected_project_version=project["version"],
+            idempotency_key="benchmark-relative-review",
+        ),
+    )
+
+    comparison = result["review"]["comparison"]
+    save = comparison["expected_behavior_comparisons"][0]
+    assert save["benchmark_observed_values"] == [8]
+    assert save["relative_position"] in {
+        "below_observed_range",
+        "within_observed_range",
+        "above_observed_range",
+    }
+    assert comparison["benchmark_context"] == {
+        "included_sample_ids": [included["id"]],
+        "excluded_samples": [
+            {"id": excluded["id"], "reason_code": "missing_metric_provenance"}
+        ],
+        "mode": "relative_observation_only",
+    }
+    assert result["review"]["benchmark_sample_ids"] == [included["id"]]
+    assert "prediction" not in json.dumps(comparison).lower()
 
 
 @pytest.mark.asyncio

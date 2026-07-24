@@ -1,12 +1,15 @@
 """Typed contracts for the TopicAI ContentProject API."""
 from app.models.v2.account_data import OwnerDataExport
 from app.models.v2.calibration import (
+    BenchmarkSampleCreate,
+    BenchmarkSampleInclusionUpdate,
     BlindReviewCreate,
     ObservationCreate,
     ObservationTransition,
     PerformanceSnapshotCreate,
     PublishRecordCreate,
 )
+from app.models.v2.publish_hypothesis import PublishHypothesisAmendmentCreate
 from app.models.v2.action_domain import (
     AITrace,
     AITraceCreate,
@@ -55,6 +58,8 @@ __all__ = [
     "AITraceCreate",
     "ActionEvent",
     "BlindReviewCreate",
+    "BenchmarkSampleCreate",
+    "BenchmarkSampleInclusionUpdate",
     "ContentGenome",
     "CreatorState",
     "Evidence",
@@ -65,6 +70,7 @@ __all__ = [
     "ObservationTransition",
     "PerformanceSnapshotCreate",
     "PublishRecordCreate",
+    "PublishHypothesisAmendmentCreate",
     "ActionResponse",
     "ActionLifecycleCommand",
     "AutomationLevel",
