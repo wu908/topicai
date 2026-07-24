@@ -18,8 +18,12 @@ class ContentIntent(StrEnum):
 
 class IntentStatus(StrEnum):
     CANDIDATE = "candidate"
-    CONFIRMED = "confirmed"
-    LEGACY_MISSING = "legacy_missing"
+    CONFIRMED = "confirmed"                    # kept: backward compat for existing DB rows
+    LEGACY_MISSING = "legacy_missing"          # kept: backward compat for existing DB rows
+    WORKING_CONFIRMED = "working_confirmed"    # Working Intent Confirmation complete
+    LOCKED = "locked"                          # Intent Lock complete — immutable
+    LEGACY_UNCLASSIFIED = "legacy_unclassified"  # historical content without locked intent
+    RETROSPECTIVE = "retrospective"            # Retrospective Intent Classification confirmed
 
 
 class AutomationLevel(StrEnum):

@@ -9,7 +9,11 @@ from app.models.v2.calibration import (
     PerformanceSnapshotCreate,
     PublishRecordCreate,
 )
-from app.models.v2.publish_hypothesis import PublishHypothesisAmendmentCreate
+from app.models.v2.publish_hypothesis import (
+    PublishHypothesisAmendmentCreate,
+    PublishHypothesisLock,
+    RetrospectiveIntentClassification,
+)
 from app.models.v2.action_domain import (
     AITrace,
     AITraceCreate,
@@ -29,6 +33,7 @@ from app.models.v2.intent_actions import (
     ContentIntent,
     HumanGateDecision,
     IntentConfirmation,
+    IntentStatus,
 )
 from app.models.v2.evidence import (
     EvidenceConfirmationStatus,
@@ -71,12 +76,15 @@ __all__ = [
     "PerformanceSnapshotCreate",
     "PublishRecordCreate",
     "PublishHypothesisAmendmentCreate",
+    "PublishHypothesisLock",
+    "RetrospectiveIntentClassification",
     "ActionResponse",
     "ActionLifecycleCommand",
     "AutomationLevel",
     "ContentIntent",
     "HumanGateDecision",
     "IntentConfirmation",
+    "IntentStatus",
     "EvidenceConfirmationStatus",
     "EvidenceCreate",
     "EvidenceDecision",
