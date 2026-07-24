@@ -171,7 +171,8 @@ class CreatorRuleService:
             raise VersionConflictException(candidate["version_number"], body.expected_candidate_version)
         if body.decision == "confirm":
             source_ids = json.loads(candidate["source_observation_ids_json"] or "[]")
-            if len(source_ids) < self.MIN_SAMPLES:
+            eligible_source_ids = await self._eligible_observation_ids(owner, source_ids)
+            if len(eligible_source_ids) < self.MIN_SAMPLES:
                 raise ValueError("rule candidate no longer has enough comparable observations")
         session = await self.db.get_session()
         timestamp = now()
@@ -465,8 +466,10 @@ class CreatorRuleService:
 
     async def _comparable_observations(self, owner: str, intent: str, statement: str):
         rows = await self.db.fetch_all(
-            "SELECT * FROM observations WHERE owner_user_id=:owner "
-            "AND lifecycle_status NOT IN ('refuted','archived') ORDER BY created_at",
+            "SELECT o.* FROM observations o JOIN blind_reviews br ON br.id=o.blind_review_id "
+            "WHERE o.owner_user_id=:owner AND br.owner_user_id=:owner "
+            "AND br.eligible_for_rule_upgrade=1 "
+            "AND o.lifecycle_status NOT IN ('refuted','archived') ORDER BY o.created_at",
             {"owner": owner},
         )
         matching = []
@@ -475,6 +478,23 @@ class CreatorRuleService:
             if scope.get("content_intent") == intent and row["statement"].strip() == statement.strip():
                 matching.append(dict(row))
         return matching
+
+    async def _eligible_observation_ids(
+        self, owner: str, observation_ids: list[str]
+    ) -> list[str]:
+        eligible = []
+        for observation_id in observation_ids:
+            row = await self.db.fetch_one(
+                "SELECT o.id FROM observations o "
+                "JOIN blind_reviews br ON br.id=o.blind_review_id "
+                "WHERE o.id=:id AND o.owner_user_id=:owner "
+                "AND br.owner_user_id=:owner AND br.eligible_for_rule_upgrade=1 "
+                "AND o.lifecycle_status NOT IN ('refuted','archived')",
+                {"id": observation_id, "owner": owner},
+            )
+            if row:
+                eligible.append(observation_id)
+        return eligible
 
     async def _observation(self, owner: str, observation_id: str):
         row = await self.db.fetch_one(

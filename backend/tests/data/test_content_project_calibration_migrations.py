@@ -3,6 +3,8 @@
 import shutil
 import sqlite3
 
+import pytest
+
 from app.data.migrations.runner import DEFAULT_MIGRATIONS_DIR, apply
 
 
@@ -33,6 +35,7 @@ def test_content_project_calibration_schema_applies_and_replays(tmp_path):
     assert any(item.version == "026_creator_series" for item in first)
     assert any(item.version == "028_action_experiment_metrics" for item in first)
     assert any(item.version == "032_source_verification_opportunities" for item in first)
+    assert any(item.version == "033_calibration_completeness" for item in first)
 
     with sqlite3.connect(db_path) as conn:
         tables = _tables(conn)
@@ -44,6 +47,9 @@ def test_content_project_calibration_schema_applies_and_replays(tmp_path):
             "performance_snapshots_v2",
             "ai_traces_v2",
             "blind_reviews",
+            "publish_hypothesis_amendments",
+            "benchmark_samples",
+            "benchmark_sample_events",
             "observations",
             "observation_events",
             "creator_states",
@@ -106,6 +112,7 @@ def test_intent_action_migration_upgrades_from_019_and_replays(tmp_path):
         "030_action_lifecycle",
         "031_trust_boundaries_privacy",
         "032_source_verification_opportunities",
+        "033_calibration_completeness",
     ]
     assert replay == []
     with sqlite3.connect(db_path) as conn:
@@ -164,6 +171,7 @@ def test_action_lifecycle_migration_rebuilds_phase_15_constraints(tmp_path):
         "030_action_lifecycle",
         "031_trust_boundaries_privacy",
         "032_source_verification_opportunities",
+        "033_calibration_completeness",
     ]
     with sqlite3.connect(db_path) as conn:
         action_sql = conn.execute(
@@ -221,7 +229,8 @@ def test_source_verification_migration_preserves_series_opportunities(tmp_path):
 
     upgraded = apply(db_path, DEFAULT_MIGRATIONS_DIR)
     assert [item.version for item in upgraded] == [
-        "032_source_verification_opportunities"
+        "032_source_verification_opportunities",
+        "033_calibration_completeness",
     ]
     with sqlite3.connect(db_path) as conn:
         opportunity = conn.execute(
@@ -315,6 +324,9 @@ def test_calibration_rows_have_owner_scoped_idempotency(tmp_path):
         "blind_reviews": "uq_blind_reviews_owner_idempotency",
         "observations": "uq_observations_owner_idempotency",
         "observation_events": "uq_observation_events_owner_idempotency",
+        "publish_hypothesis_amendments": "uq_hypothesis_amendments_owner_idempotency",
+        "benchmark_samples": "uq_benchmark_samples_owner_idempotency",
+        "benchmark_sample_events": "uq_benchmark_sample_events_owner_idempotency",
     }
     with sqlite3.connect(db_path) as conn:
         for table, expected in expected_indexes.items():
@@ -338,3 +350,42 @@ def test_calibration_rows_have_owner_scoped_idempotency(tmp_path):
             if row[2]
         }
         assert "uq_creator_rule_events_owner_idempotency" in rule_indexes
+
+
+def test_calibration_completeness_enforces_locked_hypothesis_fields(tmp_path):
+    db_path = tmp_path / "calibration-completeness.db"
+    apply(db_path, DEFAULT_MIGRATIONS_DIR)
+
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            "INSERT INTO users (id,email,username,password_hash,ai_calls_reset_at,created_at) "
+            "VALUES ('u1','u1@example.com','u1','hash','','2026-07-23T00:00:00Z')"
+        )
+        conn.execute(
+            "INSERT INTO content_projects (id,owner_user_id,title,status,primary_goal,"
+            "target_audience,last_action_at,created_at,updated_at) VALUES "
+            "('p1','u1','Project','creating','stable_publish','Creators',"
+            "'2026-07-23T00:00:00Z','2026-07-23T00:00:00Z','2026-07-23T00:00:00Z')"
+        )
+        conn.execute(
+            "INSERT INTO content_versions (id,owner_user_id,project_id,version_number,title,"
+            "body_text,content_hash,idempotency_key,request_hash,created_at) VALUES "
+            "('v1','u1','p1',1,'Title','Body','hash','version-key','version-hash',"
+            "'2026-07-23T00:00:00Z')"
+        )
+        conn.execute(
+            "INSERT INTO publish_hypotheses (id,owner_user_id,project_id,content_version_id,"
+            "audience_problem,reader_promise,expected_behaviors_json,status,idempotency_key,"
+            "request_hash,locked_at,locked_by,created_at) VALUES "
+            "('h1','u1','p1','v1','Problem','Promise','[\"save\"]','locked',"
+            "'hypothesis-key','hypothesis-hash','2026-07-23T00:00:00Z','u1',"
+            "'2026-07-23T00:00:00Z')"
+        )
+        with pytest.raises(sqlite3.IntegrityError, match="immutable"):
+            conn.execute(
+                "UPDATE publish_hypotheses SET reader_promise='Changed' WHERE id='h1'"
+            )
+        conn.execute("UPDATE publish_hypotheses SET status='superseded' WHERE id='h1'")
+        assert conn.execute(
+            "SELECT reader_promise,status FROM publish_hypotheses WHERE id='h1'"
+        ).fetchone() == ("Promise", "superseded")

@@ -247,6 +247,16 @@ class EvidenceService:
         )
         await session.execute(
             text(
+                "UPDATE blind_reviews SET calibration_state='calibration_invalid',"
+                "eligible_for_rule_upgrade=0,eligibility_reason_code='revoked_evidence' "
+                "WHERE owner_user_id=:owner AND publish_hypothesis_id IN ("
+                "SELECT id FROM publish_hypotheses WHERE owner_user_id=:owner "
+                f"AND project_id=:project AND content_version_id IN ({placeholders}))"
+            ),
+            params,
+        )
+        await session.execute(
+            text(
                 "UPDATE content_projects SET locked_publish_version_id=NULL,"
                 "publish_hypothesis_id=NULL,calibration_state='insufficient',"
                 "status=CASE WHEN status='ready_to_publish' THEN 'creating' ELSE status END,"

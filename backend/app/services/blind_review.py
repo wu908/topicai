@@ -14,8 +14,11 @@ from app.services.v2_utils import decode_json_fields, now, request_hash
 
 
 class BlindReviewService:
-    ALLOWED_INPUT_CLASSES = frozenset(
+    REQUIRED_INPUT_CLASSES = frozenset(
         {"publish_hypothesis", "content_version", "performance_snapshot"}
+    )
+    ALLOWED_INPUT_CLASSES = frozenset(
+        {*REQUIRED_INPUT_CLASSES, "benchmark_sample"}
     )
     FORBIDDEN_INPUT_CLASSES = frozenset(
         {
@@ -44,8 +47,10 @@ class BlindReviewService:
         input_classes: set[str] | None = None,
     ) -> tuple[dict[str, Any], bool]:
         actual_inputs = set(
-            self.ALLOWED_INPUT_CLASSES if input_classes is None else input_classes
+            self.REQUIRED_INPUT_CLASSES if input_classes is None else input_classes
         )
+        if body.benchmark_sample_ids:
+            actual_inputs.add("benchmark_sample")
         digest = request_hash(
             {
                 "project_id": project_id,
@@ -83,6 +88,8 @@ class BlindReviewService:
                     raise ValueError("project is not awaiting review")
                 if len(set(body.result_snapshot_ids)) != len(body.result_snapshot_ids):
                     raise ValueError("result snapshot ids must be unique")
+                if len(set(body.benchmark_sample_ids)) != len(body.benchmark_sample_ids):
+                    raise ValueError("benchmark sample ids must be unique")
 
                 hypothesis = (
                     await session.execute(
@@ -131,26 +138,67 @@ class BlindReviewService:
                         raise ValueError(f"result snapshot was superseded: {snapshot_id}")
                     snapshots.append(decode_json_fields(snapshot, "metrics_json"))
 
+                benchmark_samples = await self._benchmark_samples(
+                    session, owner_user_id, body.benchmark_sample_ids
+                )
+                included_benchmarks = [
+                    item
+                    for item in benchmark_samples
+                    if item["inclusion_state"] == "included"
+                ]
+
                 unexpected = sorted(actual_inputs - self.ALLOWED_INPUT_CLASSES)
-                missing = sorted(self.ALLOWED_INPUT_CLASSES - actual_inputs)
+                missing = sorted(self.REQUIRED_INPUT_CLASSES - actual_inputs)
                 contamination_status = "contaminated" if unexpected else "clean"
-                comparison, has_comparable_metric = self._compare(hypothesis, snapshots)
+                comparison, has_comparable_metric = self._compare(
+                    hypothesis, snapshots, included_benchmarks
+                )
+                comparison["benchmark_context"] = {
+                    "included_sample_ids": [item["id"] for item in included_benchmarks],
+                    "excluded_samples": [
+                        {
+                            "id": item["id"],
+                            "reason_code": item["exclusion_reason_code"],
+                        }
+                        for item in benchmark_samples
+                        if item["inclusion_state"] == "excluded"
+                    ],
+                    "mode": "relative_observation_only",
+                }
                 comparison["intent_review"] = self._intent_review_plan(
                     project,
                     comparison["expected_behavior_comparisons"],
                     len(snapshots),
                 )
+                revoked_evidence_ids = await self._revoked_evidence_ids(
+                    session, owner_user_id, hypothesis["content_version_id"]
+                )
+                is_legacy = (
+                    hypothesis["status"] == "legacy_missing"
+                    or project.get("intent_status") == "legacy_missing"
+                )
                 if contamination_status == "contaminated":
                     calibration_state = "calibration_invalid"
+                    eligibility_reason_code = "contaminated_input"
+                elif revoked_evidence_ids:
+                    calibration_state = "calibration_invalid"
+                    eligibility_reason_code = "revoked_evidence"
+                elif is_legacy:
+                    calibration_state = "insufficient"
+                    eligibility_reason_code = "legacy_hypothesis"
                 elif (
                     missing
                     or hypothesis["status"] != "locked"
                     or not has_comparable_metric
                 ):
                     calibration_state = "insufficient"
+                    eligibility_reason_code = "insufficient_metrics"
                 else:
                     calibration_state = "valid"
-                eligible_for_rule_upgrade = int(calibration_state == "valid")
+                    eligibility_reason_code = "eligible_clean"
+                eligible_for_rule_upgrade = int(
+                    eligibility_reason_code == "eligible_clean"
+                )
 
                 visibility_boundary = {
                     "allowed": sorted(self.ALLOWED_INPUT_CLASSES),
@@ -161,6 +209,7 @@ class BlindReviewService:
                     "status": contamination_status,
                     "unexpected_classes": unexpected,
                     "missing_classes": missing,
+                    "revoked_evidence_ids": revoked_evidence_ids,
                 }
                 hypothesis_snapshot = {
                     "id": hypothesis["id"],
@@ -194,6 +243,10 @@ class BlindReviewService:
                                 f"performance_snapshot:{item['id']}"
                                 for item in snapshots
                             ],
+                            *[
+                                f"benchmark_sample:{item['id']}"
+                                for item in included_benchmarks
+                            ],
                         ],
                         evidence_refs=json.loads(hypothesis["basis_refs_json"]),
                         policy_version="blind-review-v1",
@@ -213,11 +266,12 @@ class BlindReviewService:
                         "id,owner_user_id,project_id,publish_hypothesis_id,"
                         "hypothesis_snapshot_json,result_snapshot_ids_json,comparison_json,"
                         "visibility_boundary_json,contamination_status,calibration_state,"
-                        "eligible_for_rule_upgrade,ai_trace_id,idempotency_key,request_hash,"
+                        "eligible_for_rule_upgrade,eligibility_reason_code,"
+                        "benchmark_sample_ids_json,ai_trace_id,idempotency_key,request_hash,"
                         "reviewed_at,created_at) VALUES ("
                         ":id,:owner,:project,:hypothesis,:hypothesis_snapshot,:snapshots,"
-                        ":comparison,:boundary,:contamination,:state,:eligible,:trace,:key,:hash,"
-                        ":now,:now)"
+                        ":comparison,:boundary,:contamination,:state,:eligible,:reason,"
+                        ":benchmarks,:trace,:key,:hash,:now,:now)"
                     ),
                     {
                         "id": review_id,
@@ -231,6 +285,10 @@ class BlindReviewService:
                         "contamination": contamination_status,
                         "state": calibration_state,
                         "eligible": eligible_for_rule_upgrade,
+                        "reason": eligibility_reason_code,
+                        "benchmarks": json.dumps(
+                            [item["id"] for item in included_benchmarks]
+                        ),
                         "trace": trace_id,
                         "key": body.idempotency_key,
                         "hash": digest,
@@ -269,7 +327,7 @@ class BlindReviewService:
                 return self._result(updated_project, review, trace), False
 
     @classmethod
-    def _compare(cls, hypothesis, snapshots):
+    def _compare(cls, hypothesis, snapshots, benchmark_samples=()):
         behaviors = json.loads(hypothesis["expected_behaviors_json"])
         comparisons = []
         has_comparable_metric = False
@@ -282,11 +340,27 @@ class BlindReviewService:
             ]
             if values:
                 has_comparable_metric = True
+            benchmark_values = [
+                sample["metrics"].get(metric)
+                for sample in benchmark_samples
+                if metric and sample["metrics"].get(metric) is not None
+            ]
+            relative_position = "unknown"
+            if values and benchmark_values:
+                observed = values[-1]
+                if observed < min(benchmark_values):
+                    relative_position = "below_observed_range"
+                elif observed > max(benchmark_values):
+                    relative_position = "above_observed_range"
+                else:
+                    relative_position = "within_observed_range"
             comparisons.append(
                 {
                     "claim": behavior,
                     "metric": metric,
                     "observed_values": values,
+                    "benchmark_observed_values": benchmark_values,
+                    "relative_position": relative_position,
                     "assessment": "unknown",
                     "reason": (
                         "Observed without a pre-registered threshold."
@@ -296,6 +370,59 @@ class BlindReviewService:
                 }
             )
         return {"expected_behavior_comparisons": comparisons}, has_comparable_metric
+
+    @staticmethod
+    async def _benchmark_samples(session, owner_user_id: str, sample_ids: list[str]):
+        samples = []
+        for sample_id in sample_ids:
+            row = (
+                await session.execute(
+                    text(
+                        "SELECT * FROM benchmark_samples WHERE id=:id "
+                        "AND owner_user_id=:owner"
+                    ),
+                    {"id": sample_id, "owner": owner_user_id},
+                )
+            ).mappings().first()
+            if row is None:
+                raise ValueError(f"benchmark sample not found: {sample_id}")
+            samples.append(
+                decode_json_fields(row, "metric_snapshot_ids_json", "metrics_json")
+            )
+        return samples
+
+    @staticmethod
+    async def _revoked_evidence_ids(session, owner_user_id: str, version_id: str):
+        version = (
+            await session.execute(
+                text(
+                    "SELECT evidence_snapshot_json FROM content_versions WHERE id=:id "
+                    "AND owner_user_id=:owner"
+                ),
+                {"id": version_id, "owner": owner_user_id},
+            )
+        ).mappings().first()
+        if version is None:
+            return []
+        evidence_ids = [
+            item.get("evidence_id")
+            for item in json.loads(version["evidence_snapshot_json"] or "[]")
+            if isinstance(item, dict) and item.get("evidence_id")
+        ]
+        revoked = []
+        for evidence_id in evidence_ids:
+            row = (
+                await session.execute(
+                    text(
+                        "SELECT confirmation_status FROM evidence_items WHERE id=:id "
+                        "AND owner_user_id=:owner"
+                    ),
+                    {"id": evidence_id, "owner": owner_user_id},
+                )
+            ).mappings().first()
+            if row and row["confirmation_status"] == "revoked":
+                revoked.append(evidence_id)
+        return revoked
 
     @staticmethod
     def _intent_review_plan(project, comparisons, sample_count: int) -> dict[str, Any]:
@@ -397,6 +524,7 @@ class BlindReviewService:
             "result_snapshot_ids_json",
             "comparison_json",
             "visibility_boundary_json",
+            "benchmark_sample_ids_json",
         )
         review_result["eligible_for_rule_upgrade"] = bool(
             review_result["eligible_for_rule_upgrade"]

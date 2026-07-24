@@ -6,17 +6,22 @@ from app.api.v1.deps import get_current_user, get_db
 from app.core.database import Database
 from app.models.common import ApiResponse
 from app.models.v2.calibration import (
+    BenchmarkSampleCreate,
+    BenchmarkSampleInclusionUpdate,
     BlindReviewCreate,
     ObservationCreate,
     ObservationTransition,
     PerformanceSnapshotCreate,
     PublishRecordCreate,
 )
+from app.models.v2.publish_hypothesis import PublishHypothesisAmendmentCreate
+from app.services.benchmark_sample import BenchmarkSampleService
 from app.services.blind_review import BlindReviewService
 from app.services.calibration_workspace import CalibrationWorkspaceService
 from app.services.observation import ObservationService
 from app.services.performance_snapshot import PerformanceSnapshotService
 from app.services.publication import PublicationService
+from app.services.publish_hypothesis import PublishHypothesisService
 
 router = APIRouter(tags=["Calibration v2"])
 
@@ -38,6 +43,65 @@ async def get_calibration_workspace(
 ):
     result = await CalibrationWorkspaceService(db).get(user["id"], project_id)
     return ApiResponse(data=result)
+
+
+@router.get("/publish-hypotheses/{hypothesis_id}/amendments")
+async def list_hypothesis_amendments(
+    hypothesis_id: str,
+    user=Depends(get_current_user),
+    db: Database = Depends(get_db),
+):
+    result = await PublishHypothesisService(db).list_amendments(
+        user["id"], hypothesis_id
+    )
+    return ApiResponse(data=result)
+
+
+@router.post("/publish-hypotheses/{hypothesis_id}/amendments", status_code=201)
+async def amend_publish_hypothesis(
+    hypothesis_id: str,
+    body: PublishHypothesisAmendmentCreate,
+    response: Response,
+    user=Depends(get_current_user),
+    db: Database = Depends(get_db),
+):
+    result, replayed = await PublishHypothesisService(db).amend(
+        user["id"], hypothesis_id, body
+    )
+    return _response(response, result, replayed)
+
+
+@router.get("/benchmark-samples")
+async def list_benchmark_samples(
+    user=Depends(get_current_user),
+    db: Database = Depends(get_db),
+):
+    return ApiResponse(data=await BenchmarkSampleService(db).list(user["id"]))
+
+
+@router.post("/benchmark-samples", status_code=201)
+async def create_benchmark_sample(
+    body: BenchmarkSampleCreate,
+    response: Response,
+    user=Depends(get_current_user),
+    db: Database = Depends(get_db),
+):
+    result, replayed = await BenchmarkSampleService(db).create(user["id"], body)
+    return _response(response, result, replayed)
+
+
+@router.post("/benchmark-samples/{sample_id}/inclusion", status_code=201)
+async def set_benchmark_sample_inclusion(
+    sample_id: str,
+    body: BenchmarkSampleInclusionUpdate,
+    response: Response,
+    user=Depends(get_current_user),
+    db: Database = Depends(get_db),
+):
+    result, replayed = await BenchmarkSampleService(db).set_inclusion(
+        user["id"], sample_id, body
+    )
+    return _response(response, result, replayed)
 
 
 @router.post("/projects/{project_id}/publish-records", status_code=201)

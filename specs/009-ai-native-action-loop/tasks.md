@@ -50,15 +50,15 @@
 
 ## Phase F - Judgment calibration
 
-- [ ] T034 Add typed models and migrations for `PublishHypothesis`, `BlindReview`, `Observation`, `CreatorRule`, `RuleVersion`, and `BenchmarkSample`.
+- [x] T034 Add typed models and migrations for `PublishHypothesis`, `BlindReview`, `Observation`, `CreatorRule`, `RuleVersion`, and `BenchmarkSample`.
 - [x] T035 Implement atomic idempotent locking of publish version and minimum hypothesis.
-- [ ] T036 Enforce immutable hypothesis snapshots and append-only post-lock amendments.
+- [x] T036 Enforce immutable hypothesis snapshots and append-only post-lock amendments.
 - [x] T037 Implement blind-review input allowlist and forbid post-hoc explanations during initial comparison.
 - [x] T038 Add `AITrace.visibility_boundary`, source snapshot ids, contamination check, and calibration state.
-- [ ] T039 Mark insufficient, contaminated, revoked-evidence, and legacy reviews as ineligible for rule upgrades.
+- [x] T039 Mark insufficient, contaminated, revoked-evidence, and legacy reviews as ineligible for rule upgrades.
 - [x] T040 Implement Observation create, continue-testing, absorb, refute, archive, and workbench cleanup transitions.
 - [x] T041 Implement CreatorRule candidate, full-sample reevaluation, consistency threshold, approval, rejection, rollback, and audit history.
-- [ ] T042 Add BenchmarkSample inclusion/exclusion and unknown-metric handling without performance prediction.
+- [x] T042 Add BenchmarkSample inclusion/exclusion and unknown-metric handling without performance prediction.
 - [x] T043 Extend Today with pending publication, pending review, active observation, refuted judgment, resumable-project summaries, and pending series opportunities.
 - [x] T044 Add tests proving one sample cannot activate a rule and failed reevaluation leaves the active version unchanged.
 - [x] T045 Add tests proving result leakage produces `calibration_invalid` and cannot influence future actions.
@@ -178,3 +178,17 @@ The feature is not complete until all P1 tasks are green, synthetic logic scenar
 - Final validation: backend `797 passed`, `1 deselected`, `87.14%` coverage;
   frontend `365 passed`, `2 skipped`, plus lint and production build.
 - T027 and T033 are complete. T034, T036, T039 and T042 remain open.
+
+## Phase 21 calibration-completeness closure (2026-07-23)
+
+- Migration `033_calibration_completeness.sql` adds append-only hypothesis
+  amendments, benchmark samples/events, persisted review eligibility reasons
+  and benchmark references.
+- Locked hypothesis fields are database-enforced immutable; amendments never
+  alter the snapshot used by blind review.
+- Insufficient, contaminated, revoked-evidence and legacy reviews persist one
+  explicit reason and are blocked from observations and rule activation.
+- Only explicitly included benchmark samples enter relative observed-range
+  comparison; excluded and unknown metrics never become zero or predictions.
+- Final validation: backend `803 passed`, `1 deselected`, `86.95%` coverage.
+- T034, T036, T039 and T042 are complete. Spec 009 Phase F is complete.

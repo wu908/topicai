@@ -8,7 +8,10 @@ from sqlalchemy import text
 
 from app.core.exceptions import IdempotencyConflictException, VersionConflictException
 from app.models.v2.content_project import ContentProjectCreate, ContentVersionCreate
-from app.models.v2.publish_hypothesis import PublishHypothesisLock
+from app.models.v2.publish_hypothesis import (
+    PublishHypothesisAmendmentCreate,
+    PublishHypothesisLock,
+)
 from app.services.content_project import ContentProjectService
 from app.services.content_version import ContentVersionService
 from app.services.publish_hypothesis import PublishHypothesisService
@@ -77,6 +80,50 @@ async def test_lock_hypothesis_and_version_atomically(seeded_db):
     assert result["project"]["status"] == "ready_to_publish"
     assert result["project"]["locked_publish_version_id"] == version["id"]
     assert result["project"]["publish_hypothesis_id"] == result["hypothesis"]["id"]
+
+
+@pytest.mark.asyncio
+async def test_post_lock_amendments_append_without_mutating_hypothesis(seeded_db):
+    project, version = await _project_and_version(seeded_db)
+    locked, _ = await PublishHypothesisService(seeded_db).lock(
+        "u1",
+        project["id"],
+        PublishHypothesisLock(
+            content_version_id=version["id"],
+            audience_problem="Original audience problem",
+            reader_promise="Original promise",
+            expected_behaviors=["save"],
+            expected_project_version=project["version"],
+            idempotency_key="amendment-lock",
+        ),
+    )
+    hypothesis_id = locked["hypothesis"]["id"]
+    service = PublishHypothesisService(seeded_db)
+    body = PublishHypothesisAmendmentCreate(
+        amendment_type="clarification",
+        statement="This narrows the intended reader context.",
+        reason="New context became available after lock.",
+        idempotency_key="amendment-1",
+    )
+
+    amendment, replayed = await service.amend("u1", hypothesis_id, body)
+    replay, was_replayed = await service.amend("u1", hypothesis_id, body)
+    amendments = await service.list_amendments("u1", hypothesis_id)
+    hypothesis = await seeded_db.fetch_one(
+        "SELECT audience_problem,reader_promise FROM publish_hypotheses WHERE id=:id",
+        {"id": hypothesis_id},
+    )
+
+    assert replayed is False
+    assert was_replayed is True
+    assert replay["id"] == amendment["id"]
+    assert [item["statement"] for item in amendments] == [body.statement]
+    assert hypothesis == {
+        "audience_problem": "Original audience problem",
+        "reader_promise": "Original promise",
+    }
+    with pytest.raises(ValueError, match="not found"):
+        await service.amend("u2", hypothesis_id, body)
 
 
 @pytest.mark.asyncio
