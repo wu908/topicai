@@ -253,6 +253,13 @@ class RetrospectiveIntentClassification(StrictModel):
 - 不自动推断意图；不将旧数据默认归为 `solve`
 - `retrospective_intent` 初始为 NULL，仅在用户显式确认后写入
 
+> **实现修正**：content_projects 表重建放在 runner.py 的 Python post-step
+> `_post_step_034_intent_model`，而非 `.sql` 文件。原因：通过 `executescript`
+> 执行的 DROP TABLE 在 `foreign_keys=ON` 下会级联删除子表行（human_gates、
+> next_best_actions 等）。post-step 用 `foreign_keys=OFF` 安全重建，与现有
+> `_post_step_030_action_lifecycle` 同一模式。`.sql` 文件只保留 publish_hypotheses
+> 的安全 ALTER ADD COLUMN。
+
 ### 6.2 迁移 SQL 策略（migration 034）
 
 ```sql
@@ -390,7 +397,7 @@ ALTER TABLE publish_hypothesis ADD COLUMN continuation_promise TEXT;
 
 ## 10. 完成门槛
 
-- [ ] migration 034 可重复运行，不修改现有行，CHECK 约束覆盖所有新旧状态值
+- [ ] migration 034 runner-tracked 幂等（checksum 记录后不重复执行），不修改现有行，CHECK 约束覆盖所有新旧状态值
 - [ ] solve/share/record 的 lock validator 全部通过，跨意图字段混用被拒绝
 - [ ] 旧数据读取测试：`confirmed` → `working_confirmed`，`legacy_missing` → `legacy_unclassified`
 - [ ] `WORKING_CONFIRMED → LOCKED` 的 guard condition 测试（不完整 Judgment 被拒绝）

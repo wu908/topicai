@@ -113,6 +113,7 @@ def test_intent_action_migration_upgrades_from_019_and_replays(tmp_path):
         "031_trust_boundaries_privacy",
         "032_source_verification_opportunities",
         "033_calibration_completeness",
+        "034_intent_model_migration",
     ]
     assert replay == []
     with sqlite3.connect(db_path) as conn:
@@ -172,6 +173,7 @@ def test_action_lifecycle_migration_rebuilds_phase_15_constraints(tmp_path):
         "031_trust_boundaries_privacy",
         "032_source_verification_opportunities",
         "033_calibration_completeness",
+        "034_intent_model_migration",
     ]
     with sqlite3.connect(db_path) as conn:
         action_sql = conn.execute(
@@ -231,6 +233,7 @@ def test_source_verification_migration_preserves_series_opportunities(tmp_path):
     assert [item.version for item in upgraded] == [
         "032_source_verification_opportunities",
         "033_calibration_completeness",
+        "034_intent_model_migration",
     ]
     with sqlite3.connect(db_path) as conn:
         opportunity = conn.execute(
@@ -389,3 +392,118 @@ def test_calibration_completeness_enforces_locked_hypothesis_fields(tmp_path):
         assert conn.execute(
             "SELECT reader_promise,status FROM publish_hypotheses WHERE id='h1'"
         ).fetchone() == ("Promise", "superseded")
+
+
+def test_intent_model_migration_adds_intent_status_values_and_columns(tmp_path):
+    """Verify migration 034 expands intent_status CHECK and adds new columns."""
+    db_path = tmp_path / "intent-model.db"
+    through_033 = tmp_path / "through-033"
+    through_033.mkdir()
+    for path in DEFAULT_MIGRATIONS_DIR.glob("[0-9][0-9][0-9]_*.sql"):
+        if int(path.name[:3]) <= 33:
+            shutil.copy2(path, through_033 / path.name)
+
+    apply(db_path, through_033)
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("PRAGMA foreign_keys=ON")
+        conn.execute(
+            "INSERT INTO users (id,email,username,password_hash,ai_calls_reset_at,created_at) "
+            "VALUES ('u1','u1@example.com','u1','hash','2026-07-24T00:00:00Z','2026-07-23T00:00:00Z')"
+        )
+        # Old intent_status='confirmed' works before migration
+        conn.execute(
+            "INSERT INTO content_projects (id,owner_user_id,title,status,primary_goal,"
+            "target_audience,last_action_at,created_at,updated_at,intent_status) VALUES "
+            "('p1','u1','Legacy confirmed project','inbox','stable_publish','all',"
+            "'2026-07-23T00:00:00Z','2026-07-23T00:00:00Z','2026-07-23T00:00:00Z','confirmed')"
+        )
+        conn.commit()
+
+    # Apply 034
+    upgraded = apply(db_path, DEFAULT_MIGRATIONS_DIR)
+    assert any(item.version == "034_intent_model_migration" for item in upgraded)
+
+    with sqlite3.connect(db_path) as conn:
+        # Verify new columns exist
+        project_columns = {
+            row[1] for row in conn.execute("PRAGMA table_info(content_projects)")
+        }
+        assert "intent_locked_at" in project_columns
+        assert "retrospective_intent" in project_columns
+
+        hypothesis_columns = {
+            row[1] for row in conn.execute("PRAGMA table_info(publish_hypotheses)")
+        }
+        assert "content_intent" in hypothesis_columns
+        assert "audience_change" in hypothesis_columns
+        assert "primary_response" in hypothesis_columns
+        assert "supporting_responses_json" in hypothesis_columns
+        assert "observation_window_days" in hypothesis_columns
+        assert "viewpoint_anchor" in hypothesis_columns
+        assert "continuation_promise" in hypothesis_columns
+
+        # Verify old status value persists
+        old_status = conn.execute(
+            "SELECT intent_status FROM content_projects WHERE id='p1'"
+        ).fetchone()[0]
+        assert old_status == "confirmed"
+
+        # Test new intent_status values can be written
+        conn.execute(
+            "INSERT INTO content_projects (id,owner_user_id,title,status,primary_goal,"
+            "target_audience,last_action_at,created_at,updated_at,intent_status) VALUES "
+            "('p2','u1','Working confirmed project','inbox','stable_publish','all',"
+            "'2026-07-23T00:00:00Z','2026-07-23T00:00:00Z','2026-07-23T00:00:00Z',"
+            "'working_confirmed')"
+        )
+        conn.execute(
+            "INSERT INTO content_projects (id,owner_user_id,title,status,primary_goal,"
+            "target_audience,last_action_at,created_at,updated_at,intent_status,"
+            "intent_locked_at) VALUES "
+            "('p3','u1','Locked project','ready_to_publish','stable_publish','all',"
+            "'2026-07-23T00:00:00Z','2026-07-23T00:00:00Z','2026-07-23T00:00:00Z',"
+            "'locked','2026-07-23T12:00:00Z')"
+        )
+        conn.execute(
+            "INSERT INTO content_projects (id,owner_user_id,title,status,primary_goal,"
+            "target_audience,last_action_at,created_at,updated_at,intent_status) VALUES "
+            "('p4','u1','Legacy unclassified','published','stable_publish','all',"
+            "'2026-07-23T00:00:00Z','2026-07-23T00:00:00Z','2026-07-23T00:00:00Z',"
+            "'legacy_unclassified')"
+        )
+        conn.execute(
+            "INSERT INTO content_projects (id,owner_user_id,title,status,primary_goal,"
+            "target_audience,last_action_at,created_at,updated_at,intent_status,"
+            "retrospective_intent) VALUES "
+            "('p5','u1','Retrospective project','settled','stable_publish','all',"
+            "'2026-07-23T00:00:00Z','2026-07-23T00:00:00Z','2026-07-23T00:00:00Z',"
+            "'retrospective','share')"
+        )
+
+        # Verify invalid retrospective_intent is rejected
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(
+                "UPDATE content_projects SET retrospective_intent='invalid' WHERE id='p1'"
+            )
+
+        # Test new publish_hypotheses columns can be written
+        conn.execute(
+            "INSERT INTO content_versions (id,owner_user_id,project_id,version_number,title,"
+            "body_text,content_hash,idempotency_key,request_hash,created_at) VALUES "
+            "('v1','u1','p3',1,'Title','Body','hash','v-key','v-hash','2026-07-23T00:00:00Z')"
+        )
+        conn.execute(
+            "INSERT INTO publish_hypotheses (id,owner_user_id,project_id,content_version_id,"
+            "audience_problem,reader_promise,expected_behaviors_json,status,idempotency_key,"
+            "request_hash,locked_at,locked_by,created_at,content_intent,audience_change,"
+            "primary_response,observation_window_days) VALUES "
+            "('h1','u1','p3','v1','Problem','Promise','[\"save\"]','locked','h-key','h-hash',"
+            "'2026-07-23T00:00:00Z','u1','2026-07-23T00:00:00Z','solve','Understand X',"
+            "'save',30)"
+        )
+        hypothesis = conn.execute(
+            "SELECT content_intent,audience_change,primary_response,observation_window_days "
+            "FROM publish_hypotheses WHERE id='h1'"
+        ).fetchone()
+        assert hypothesis == ("solve", "Understand X", "save", 30)
+
