@@ -245,3 +245,17 @@ Q: Should I modify existing code or create new files?
 - **If the LLM returns malformed JSON**: Use `_clean_json_response` (in `backend/app/core/llm/`). If unrecoverable, fall back to template path and log a `logger.warning`.
 - **If coverage drops below 80%**: This is a release blocker per Constitution Quality Gate 7. Add missing tests before merging.
 - **If you need to create a new migration**: Follow the `NNN_topic.sql` pattern. Add it to the `schema_migrations` table via the runner. NEVER use ad-hoc SQL in app code.
+
+## Agent skills
+
+### Issue tracker
+
+Issues and PRDs are tracked in GitHub Issues for `wu908/topicai`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Use the default canonical triage labels. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Use the single-context layout with root `CONTEXT.md` and `docs/adr/`. See `docs/agents/domain.md`.
