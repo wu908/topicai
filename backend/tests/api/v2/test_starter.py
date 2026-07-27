@@ -2,7 +2,6 @@
 
 import pytest
 
-
 ASSESSMENT = {
     "motivation": "expression",
     "available_hours_per_week": 4,

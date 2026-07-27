@@ -8,10 +8,10 @@ from app.models.v2.intent_actions import HumanGateDecision
 from app.models.v2.publish_hypothesis import PublishHypothesisLock
 from app.services.content_project import ContentProjectService
 from app.services.content_version import ContentVersionService
-from app.services.publication import PublicationService
-from app.services.publish_hypothesis import PublishHypothesisService
 from app.services.intent_actions import HumanGateService
 from app.services.intent_orchestrator import IntentOrchestratorService
+from app.services.publication import PublicationService
+from app.services.publish_hypothesis import PublishHypothesisService
 
 
 async def _published_project(test_db, suffix):

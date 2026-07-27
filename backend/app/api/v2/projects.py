@@ -7,10 +7,10 @@ from app.core.database import Database
 from app.models.common import ApiResponse
 from app.models.v2.content_project import ContentProjectCreate, ContentVersionCreate
 from app.models.v2.publish_hypothesis import PublishHypothesisLock
+from app.services.calibration_workspace import CalibrationWorkspaceService
 from app.services.content_project import ContentProjectService
 from app.services.content_version import ContentVersionService
 from app.services.publish_hypothesis import PublishHypothesisService
-from app.services.calibration_workspace import CalibrationWorkspaceService
 
 router = APIRouter(prefix="/projects", tags=["ContentProject v2"])
 

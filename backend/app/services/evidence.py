@@ -4,7 +4,6 @@ Evidence is deliberately separate from CreatorState. A user answer is only
 proposed evidence until the user confirms that TopicAI may use it.
 """
 
-import json
 import uuid
 from typing import Any
 
@@ -14,7 +13,6 @@ from app.core.exceptions import IdempotencyConflictException, VersionConflictExc
 from app.models.v2.evidence import (
     EvidenceCreate,
     EvidenceDecision,
-    EvidencePrivacyLevel,
     EvidenceRevocation,
 )
 from app.services.v2_utils import now, request_hash

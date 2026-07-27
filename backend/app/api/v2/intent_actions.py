@@ -6,6 +6,7 @@ from app.api.v1.deps import get_current_user, get_db
 from app.core.database import Database
 from app.core.llm import LLMClient
 from app.models.common import ApiResponse
+from app.models.v2.evidence import EvidenceDecision, EvidenceRevocation
 from app.models.v2.intent_actions import (
     ActionLifecycleCommand,
     ActionResponse,
@@ -13,7 +14,6 @@ from app.models.v2.intent_actions import (
     HumanGateDecision,
     IntentConfirmation,
 )
-from app.models.v2.evidence import EvidenceDecision, EvidenceRevocation
 from app.models.v2.publish_hypothesis import RetrospectiveIntentClassification
 from app.services.creator_state import CreatorStateService
 from app.services.evidence import EvidenceService

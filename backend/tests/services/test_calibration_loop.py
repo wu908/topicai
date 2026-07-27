@@ -8,8 +8,8 @@ import pytest_asyncio
 from sqlalchemy import text
 
 from app.models.v2.action_domain import (
-    AITrace,
     ActionEvent,
+    AITrace,
     ContentGenome,
     CreatorState,
     Evidence,
@@ -26,7 +26,6 @@ from app.models.v2.calibration import (
     PublishRecordCreate,
 )
 from app.models.v2.content_project import ContentProjectCreate, ContentVersionCreate
-from app.models.v2.intent_actions import HumanGateDecision
 from app.models.v2.creator_rule import (
     RuleCandidateCreate,
     RuleCandidateDecision,
@@ -39,21 +38,22 @@ from app.models.v2.evidence import (
     EvidencePrivacyLevel,
     EvidenceRevocation,
 )
+from app.models.v2.intent_actions import HumanGateDecision
 from app.models.v2.publish_hypothesis import PublishHypothesisLock
-from app.services.blind_review import BlindReviewService
 from app.services.benchmark_sample import BenchmarkSampleService
+from app.services.blind_review import BlindReviewService
+from app.services.content_genome import ContentGenomeService
 from app.services.content_project import ContentProjectService
 from app.services.content_version import ContentVersionService
+from app.services.creator_rule import CreatorRuleService
+from app.services.creator_state import CreatorStateService
+from app.services.evidence import EvidenceService
+from app.services.intent_actions import HumanGateService
+from app.services.intent_orchestrator import IntentOrchestratorService
 from app.services.observation import ObservationService
 from app.services.performance_snapshot import PerformanceSnapshotService
 from app.services.publication import PublicationService
 from app.services.publish_hypothesis import PublishHypothesisService
-from app.services.intent_actions import HumanGateService
-from app.services.intent_orchestrator import IntentOrchestratorService
-from app.services.creator_rule import CreatorRuleService
-from app.services.creator_state import CreatorStateService
-from app.services.content_genome import ContentGenomeService
-from app.services.evidence import EvidenceService
 
 
 @pytest_asyncio.fixture

@@ -18,7 +18,6 @@ from app.models.v2.intent_actions import (
     StrictModel,
 )
 
-
 ActionStatus = Literal[
     "proposed",
     "accepted",

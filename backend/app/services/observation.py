@@ -8,8 +8,8 @@ from sqlalchemy import text
 
 from app.core.exceptions import IdempotencyConflictException, VersionConflictException
 from app.models.v2.calibration import ObservationCreate, ObservationTransition
-from app.services.v2_utils import decode_json_fields, now, request_hash
 from app.services.creator_state import CreatorStateService
+from app.services.v2_utils import decode_json_fields, now, request_hash
 
 
 class ObservationService:

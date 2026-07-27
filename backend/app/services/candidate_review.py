@@ -16,7 +16,7 @@ from app.models.v2.candidate_review import (
 from app.models.v2.content_project import ContentVersionCreate
 from app.services.content_version import ContentVersionService
 from app.services.evidence import EvidenceService
-from app.services.v2_utils import content_hash, decode_json_fields, now, request_hash
+from app.services.v2_utils import decode_json_fields, now, request_hash
 
 
 class CandidateReviewService:

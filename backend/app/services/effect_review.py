@@ -315,7 +315,7 @@ def _row_to_review(r: Any) -> dict[str, Any]:
 def _maybe_load_json(v: Any) -> Any:
     if v is None:
         return None
-    if isinstance(v, (dict, list)):
+    if isinstance(v, dict | list):
         return v
     if isinstance(v, str):
         try:

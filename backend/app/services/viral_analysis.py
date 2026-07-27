@@ -125,7 +125,7 @@ class ViralAnalysisService:
 
         # Ensure viral_score is a valid float in range
         viral_score = result.get("viral_score", 0.5)
-        if isinstance(viral_score, (int, float)):
+        if isinstance(viral_score, int | float):
             result["viral_score"] = max(0.0, min(1.0, float(viral_score)))
         else:
             result["viral_score"] = 0.5
