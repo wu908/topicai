@@ -68,24 +68,35 @@ async def _published_project(db, *, owner="u1", suffix="one", intent="share"):
             idempotency_key=f"series-version-{owner}-{suffix}",
         ),
     )
+    intent_fields = {
+        "solve": {
+            "audience_problem": "创作者每次都要重新决定写什么",
+            "reader_promise": "展示一次真实的稳定更新过程",
+        },
+        "share": {"viewpoint_anchor": "稳定更新来自减少临时决策"},
+        "record": {"continuation_promise": "继续记录稳定更新的真实过程"},
+    }[intent]
+    await db.execute(
+        "UPDATE content_projects SET intent_status='working_confirmed' WHERE id=:id",
+        {"id": project["id"]},
+    )
     project = await ContentProjectService(db).get(owner, project["id"])
     await PublishHypothesisService(db).lock(
         owner,
         project["id"],
         PublishHypothesisLock(
             content_version_id=version["id"],
-            audience_problem="创作者每次都要重新决定写什么",
-            reader_promise="展示一次真实的稳定更新过程",
-            expected_behaviors=["follow"],
+            content_intent=intent,
+            audience_change="读者理解稳定更新如何减少临时决策",
+            primary_response="follow",
+            supporting_responses=[],
             basis_refs=[f"content-version:{version['id']}"],
             uncertainties=["还不知道读者是否期待后续"],
+            observation_window_days=7,
             expected_project_version=project["version"],
             idempotency_key=f"series-hypothesis-{owner}-{suffix}",
+            **intent_fields,
         ),
-    )
-    await db.execute(
-        "UPDATE content_projects SET intent_status='confirmed' WHERE id=:id",
-        {"id": project["id"]},
     )
     project = await ContentProjectService(db).get(owner, project["id"])
     action = await IntentOrchestratorService(db).ensure_project_action(owner, project["id"])
@@ -526,7 +537,7 @@ async def test_confirmed_series_opportunity_requires_acceptance_and_replays_proj
     assert replayed is False
     assert accepted["status"] == "accepted"
     assert accepted["project"]["opportunity_id"] == opportunity["id"]
-    assert accepted["project"]["intent_status"] == "confirmed"
+    assert accepted["project"]["intent_status"] == "working_confirmed"
     project_id = accepted["project"]["id"]
 
     await series_db.execute(

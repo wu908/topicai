@@ -11,7 +11,12 @@ from app.models.v2.publish_hypothesis import (
     PublishHypothesisAmendmentCreate,
     PublishHypothesisLock,
 )
-from app.services.v2_utils import now, request_hash
+from app.services.v2_utils import (
+    effective_intent_status,
+    normalize_project_intent,
+    now,
+    request_hash,
+)
 
 
 class PublishHypothesisService:
@@ -138,7 +143,10 @@ class PublishHypothesisService:
                     ).mappings().first()
                     if project is None:
                         raise ValueError(f"project not found: {project_id}")
-                    return {"project": dict(project), "hypothesis": dict(existing)}, True
+                    return {
+                        "project": normalize_project_intent(project),
+                        "hypothesis": dict(existing),
+                    }, True
 
                 project = (
                     await session.execute(
@@ -155,6 +163,10 @@ class PublishHypothesisService:
                     raise VersionConflictException(
                         project["version"], body.expected_project_version
                     )
+                if effective_intent_status(project) != "working_confirmed":
+                    raise ValueError("intent must be working confirmed before lock")
+                if project["content_intent"] != body.content_intent.value:
+                    raise ValueError("locked content intent must match the working intent")
 
                 version = (
                     await session.execute(
@@ -191,21 +203,44 @@ class PublishHypothesisService:
                         "INSERT INTO publish_hypotheses ("
                         "id,owner_user_id,project_id,content_version_id,audience_problem,"
                         "reader_promise,expected_behaviors_json,basis_refs_json,"
-                        "uncertainties_json,status,idempotency_key,request_hash,locked_at,"
+                        "uncertainties_json,content_intent,audience_change,primary_response,"
+                        "supporting_responses_json,observation_window_days,viewpoint_anchor,"
+                        "continuation_promise,status,idempotency_key,request_hash,locked_at,"
                         "locked_by,created_at) VALUES ("
                         ":id,:owner,:project,:version,:problem,:promise,:behaviors,:basis,"
-                        ":uncertainties,'locked',:key,:hash,:now,:owner,:now)"
+                        ":uncertainties,:intent,:change,:primary,:supporting,:window,"
+                        ":viewpoint,:continuation,'locked',:key,:hash,:now,:owner,:now)"
                     ),
                     {
                         "id": hypothesis_id,
                         "owner": owner_user_id,
                         "project": project_id,
                         "version": body.content_version_id,
-                        "problem": body.audience_problem.strip(),
-                        "promise": body.reader_promise.strip(),
-                        "behaviors": json.dumps(body.expected_behaviors, ensure_ascii=False),
+                        "problem": (body.audience_problem or "").strip(),
+                        "promise": (body.reader_promise or "").strip(),
+                        "behaviors": json.dumps(
+                            [body.primary_response, *body.supporting_responses],
+                            ensure_ascii=False,
+                        ),
                         "basis": json.dumps(body.basis_refs, ensure_ascii=False),
                         "uncertainties": json.dumps(body.uncertainties, ensure_ascii=False),
+                        "intent": body.content_intent.value,
+                        "change": body.audience_change.strip(),
+                        "primary": body.primary_response,
+                        "supporting": json.dumps(
+                            body.supporting_responses, ensure_ascii=False
+                        ),
+                        "window": body.observation_window_days,
+                        "viewpoint": (
+                            body.viewpoint_anchor.strip()
+                            if body.viewpoint_anchor
+                            else None
+                        ),
+                        "continuation": (
+                            body.continuation_promise.strip()
+                            if body.continuation_promise
+                            else None
+                        ),
                         "key": body.idempotency_key,
                         "hash": digest,
                         "now": timestamp,
@@ -215,6 +250,8 @@ class PublishHypothesisService:
                     text(
                         "UPDATE content_projects SET status='ready_to_publish',"
                         "locked_publish_version_id=:version,publish_hypothesis_id=:hypothesis,"
+                        "content_intent=:intent,audience_change=:change,"
+                        "intent_status='locked',intent_locked_at=:now,"
                         "calibration_state='not_ready',last_action='publish_hypothesis_locked',"
                         "last_action_at=:now,updated_at=:now,version=version+1 "
                         "WHERE id=:project AND owner_user_id=:owner AND version=:expected"
@@ -222,6 +259,8 @@ class PublishHypothesisService:
                     {
                         "version": body.content_version_id,
                         "hypothesis": hypothesis_id,
+                        "intent": body.content_intent.value,
+                        "change": body.audience_change.strip(),
                         "now": timestamp,
                         "project": project_id,
                         "owner": owner_user_id,
@@ -245,7 +284,7 @@ class PublishHypothesisService:
                     )
                 ).mappings().one()
                 return {
-                    "project": dict(updated_project),
+                    "project": normalize_project_intent(updated_project),
                     "hypothesis": dict(locked),
                 }, False
 

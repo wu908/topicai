@@ -61,6 +61,7 @@ async def _answer_and_confirm(client, project, action, suffix: str):
 
 
 async def _ready_project(client, suffix: str, expected_behaviors=None):
+    responses = expected_behaviors or ["save"]
     project, _ = await _confirmed_project(client, suffix)
     version_response = await client.post(
         f"/api/v2/projects/{project['id']}/versions",
@@ -78,11 +79,15 @@ async def _ready_project(client, suffix: str, expected_behaviors=None):
         f"/api/v2/projects/{project['id']}/publish-hypothesis:lock",
         json={
             "content_version_id": version["id"],
+            "content_intent": "solve",
+            "audience_change": "Give readers a concrete and evidence-bound change.",
+            "primary_response": responses[0],
+            "supporting_responses": responses[1:],
             "audience_problem": "Readers need a tested method.",
             "reader_promise": "Show the method and its limits.",
-            "expected_behaviors": expected_behaviors or ["save"],
             "basis_refs": [f"content-version:{version['id']}"],
             "uncertainties": ["The result may not generalize."],
+            "observation_window_days": 7,
             "expected_project_version": project["version"],
             "idempotency_key": f"{suffix}-hypothesis",
         },
@@ -211,9 +216,12 @@ async def test_c03_ai_revision_never_overwrites_locked_version(client, test_db):
         f"/api/v2/projects/{project['id']}/publish-hypothesis:lock",
         json={
             "content_version_id": versions[2]["id"],
-            "audience_problem": "Readers need a real perspective.",
-            "reader_promise": "Share one confirmed experience.",
-            "expected_behaviors": ["comment"],
+            "content_intent": "share",
+            "audience_change": "Readers recognize one evidence-bound perspective.",
+            "primary_response": "comment",
+            "supporting_responses": [],
+            "viewpoint_anchor": "One confirmed experience changed the creator's perspective.",
+            "observation_window_days": 7,
             "expected_project_version": project["version"],
             "idempotency_key": "c03-lock-v3",
         },
@@ -426,11 +434,15 @@ async def test_c07_revoked_material_reports_impact_and_blocks_lock(client):
         f"/api/v2/projects/{project['id']}/publish-hypothesis:lock",
         json={
             "content_version_id": candidate_version["id"],
+            "content_intent": "solve",
+            "audience_change": "Readers can apply one evidence-bound method.",
+            "primary_response": "save",
+            "supporting_responses": [],
             "audience_problem": "Readers need an evidence-bound method.",
             "reader_promise": "Show one confirmed process and its limits.",
-            "expected_behaviors": ["save"],
             "basis_refs": [f"evidence:{evidence['id']}"],
             "uncertainties": ["The result may not generalize."],
+            "observation_window_days": 7,
             "expected_project_version": current_project["version"],
             "idempotency_key": "c07-lock-candidate",
         },

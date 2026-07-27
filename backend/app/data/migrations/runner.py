@@ -306,11 +306,259 @@ def _post_step_030_action_lifecycle(conn: sqlite3.Connection) -> None:
         raise sqlite3.IntegrityError(f"action lifecycle migration broke foreign keys: {violations}")
 
 
+_INTENT_ACTION_INDEX_TRIGGER_SQL = """
+CREATE UNIQUE INDEX IF NOT EXISTS uq_next_best_actions_owner_idempotency
+    ON next_best_actions(owner_user_id, idempotency_key);
+CREATE INDEX IF NOT EXISTS idx_next_best_actions_owner_status
+    ON next_best_actions(owner_user_id, status, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_next_best_actions_project_status
+    ON next_best_actions(project_id, status, updated_at DESC);
+CREATE TRIGGER IF NOT EXISTS trg_next_best_actions_experiment_context
+AFTER INSERT ON next_best_actions
+WHEN NEW.experiment_id IS NULL
+BEGIN
+    UPDATE next_best_actions
+    SET experiment_id = (
+            SELECT experiment_id FROM experiment_assignments
+            WHERE owner_user_id=NEW.owner_user_id AND status='active'
+            ORDER BY activated_at DESC, assigned_at DESC LIMIT 1
+        ),
+        cohort = (
+            SELECT cohort FROM experiment_assignments
+            WHERE owner_user_id=NEW.owner_user_id AND status='active'
+            ORDER BY activated_at DESC, assigned_at DESC LIMIT 1
+        )
+    WHERE id=NEW.id;
+END;
+"""
+
+_INTENT_ACTION_EVENT_TRIGGER_SQL = """
+CREATE TRIGGER IF NOT EXISTS trg_action_events_experiment_context
+AFTER INSERT ON action_events
+BEGIN
+    UPDATE action_events
+    SET experiment_id = COALESCE(
+            NEW.experiment_id,
+            (SELECT experiment_id FROM next_best_actions WHERE id=NEW.action_id),
+            (SELECT experiment_id FROM experiment_assignments
+             WHERE owner_user_id=NEW.owner_user_id AND status='active'
+             ORDER BY activated_at DESC, assigned_at DESC LIMIT 1)
+        ),
+        cohort = COALESCE(
+            NEW.cohort,
+            (SELECT cohort FROM next_best_actions WHERE id=NEW.action_id),
+            (SELECT cohort FROM experiment_assignments
+             WHERE owner_user_id=NEW.owner_user_id AND status='active'
+             ORDER BY activated_at DESC, assigned_at DESC LIMIT 1)
+        ),
+        ai_trace_id = COALESCE(
+            NEW.ai_trace_id,
+            (SELECT ai_trace_id FROM next_best_actions WHERE id=NEW.action_id)
+        ),
+        model_version = COALESCE(
+            NEW.model_version,
+            (SELECT model_identifier FROM ai_traces_v2 WHERE id=(
+                SELECT ai_trace_id FROM next_best_actions WHERE id=NEW.action_id
+            ))
+        ),
+        prompt_version = COALESCE(
+            NEW.prompt_version,
+            (SELECT policy_version FROM ai_traces_v2 WHERE id=(
+                SELECT ai_trace_id FROM next_best_actions WHERE id=NEW.action_id
+            ))
+        )
+    WHERE id=NEW.id;
+END;
+"""
+
+
+def _intent_action_table_sql(action_sql: str) -> str:
+    return action_sql.replace(
+        "CREATE TABLE next_best_actions",
+        "CREATE TABLE next_best_actions_intent_new",
+        1,
+    ).replace(
+        'CREATE TABLE "next_best_actions"',
+        "CREATE TABLE next_best_actions_intent_new",
+        1,
+    ).replace(
+        "'create_project','confirm_intent','answer_key_question'",
+        "'create_project','confirm_intent','lock_intent','answer_key_question'",
+        1,
+    )
+
+
+def _post_step_035_intent_lock_action(conn: sqlite3.Connection) -> None:
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='next_best_actions'"
+    ).fetchone()
+    if not row:
+        return
+    if "'lock_intent'" not in row[0]:
+        replacement_sql = _intent_action_table_sql(row[0])
+        if replacement_sql == row[0]:
+            raise sqlite3.IntegrityError("intent action constraint could not be expanded")
+
+        conn.commit()
+        conn.execute("PRAGMA foreign_keys=OFF")
+        try:
+            conn.execute("DROP TRIGGER IF EXISTS trg_next_best_actions_experiment_context")
+            conn.execute("DROP TRIGGER IF EXISTS trg_action_events_experiment_context")
+            conn.execute(replacement_sql)
+            columns = [
+                item[1]
+                for item in conn.execute("PRAGMA table_info(next_best_actions)").fetchall()
+            ]
+            column_list = ",".join(columns)
+            conn.execute(
+                f"INSERT INTO next_best_actions_intent_new ({column_list}) "
+                f"SELECT {column_list} FROM next_best_actions"
+            )
+            conn.execute("DROP TABLE next_best_actions")
+            conn.execute(
+                "ALTER TABLE next_best_actions_intent_new RENAME TO next_best_actions"
+            )
+            conn.commit()
+        finally:
+            conn.execute("PRAGMA foreign_keys=ON")
+
+    conn.executescript(_INTENT_ACTION_INDEX_TRIGGER_SQL)
+    conn.executescript(_INTENT_ACTION_EVENT_TRIGGER_SQL)
+    conn.commit()
+    violations = conn.execute("PRAGMA foreign_key_check").fetchall()
+    if violations:
+        raise sqlite3.IntegrityError(
+            f"intent action migration broke foreign keys: {violations}"
+        )
+
+
+_INTENT_MODEL_CONTENT_PROJECTS_SQL = """
+    CREATE TABLE content_projects_intent_new (
+        id                          TEXT PRIMARY KEY,
+        owner_user_id               TEXT NOT NULL,
+        title                       TEXT NOT NULL,
+        status                      TEXT NOT NULL CHECK (status IN (
+                                        'inbox','preparing','creating','ready_to_publish',
+                                        'published','awaiting_review','settled'
+                                    )),
+        platform                    TEXT NOT NULL DEFAULT 'xiaohongshu'
+                                        CHECK (platform = 'xiaohongshu'),
+        format                      TEXT NOT NULL DEFAULT 'graphic_note'
+                                        CHECK (format = 'graphic_note'),
+        primary_goal                TEXT NOT NULL CHECK (primary_goal IN (
+                                        'stable_publish','follower_growth','experiment'
+                                    )),
+        target_audience             TEXT NOT NULL,
+        opportunity_id              TEXT,
+        starter_sprint_id           TEXT,
+        planned_publish_at          TEXT,
+        current_version_id          TEXT,
+        locked_publish_version_id   TEXT,
+        publish_hypothesis_id       TEXT,
+        calibration_state           TEXT NOT NULL DEFAULT 'not_ready' CHECK (calibration_state IN (
+                                        'not_ready','insufficient','valid','calibration_invalid'
+                                    )),
+        last_action                 TEXT,
+        last_action_at              TEXT NOT NULL,
+        archived_at                 TEXT,
+        version                     INTEGER NOT NULL DEFAULT 1 CHECK (version >= 1),
+        idempotency_key             TEXT,
+        request_hash                TEXT,
+        created_at                  TEXT NOT NULL,
+        updated_at                  TEXT NOT NULL,
+        deleted_at                  TEXT,
+        content_intent              TEXT DEFAULT 'solve'
+                                        CHECK (content_intent IN ('solve','share','record')),
+        content_format              TEXT NOT NULL DEFAULT 'graphic_note'
+                                        CHECK (content_format IN ('graphic_note','vlog_plan')),
+        intent_status               TEXT NOT NULL DEFAULT 'legacy_missing'
+                                        CHECK (intent_status IN (
+                                            'candidate','confirmed','legacy_missing',
+                                            'working_confirmed','locked',
+                                            'legacy_unclassified','retrospective'
+                                        )),
+        audience_change             TEXT,
+        material_requirements_json  TEXT NOT NULL DEFAULT '[]',
+        expected_responses_json     TEXT NOT NULL DEFAULT '[]',
+        success_signals_json        TEXT NOT NULL DEFAULT '[]',
+        automation_level            TEXT NOT NULL DEFAULT 'guided'
+                                        CHECK (automation_level IN ('guided','autopilot_to_ready')),
+        creator_state_version       INTEGER NOT NULL DEFAULT 1 CHECK (creator_state_version >= 1),
+        intent_locked_at            TEXT,
+        retrospective_intent        TEXT
+                                        CHECK (retrospective_intent IN ('solve','share','record')
+                                               OR retrospective_intent IS NULL),
+        FOREIGN KEY (owner_user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+    """
+
+
+def _post_step_034_intent_model(conn: sqlite3.Connection) -> None:
+    """Rebuild content_projects to expand the intent_status CHECK constraint.
+
+    SQLite forbids ALTER CONSTRAINT, so the table is rebuilt. Dropping a
+    parent table with foreign_keys=ON would cascade-delete child rows
+    (human_gates, next_best_actions, etc.), so this follows the same
+    foreign_keys=OFF rebuild pattern as _post_step_030_action_lifecycle.
+
+    Idempotent: if the new intent_status values are already present in the
+    table's CHECK constraint, this is a no-op.
+    """
+    table_sql_row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='content_projects'"
+    ).fetchone()
+    if not table_sql_row:
+        return
+    table_sql = table_sql_row[0]
+
+    # Already migrated? The expanded CHECK contains 'working_confirmed'.
+    if "'working_confirmed'" in table_sql and "retrospective_intent" in table_sql:
+        return
+
+    conn.commit()
+    conn.execute("PRAGMA foreign_keys=OFF")
+    try:
+        conn.execute(_INTENT_MODEL_CONTENT_PROJECTS_SQL)
+        # Copy every existing column verbatim; the two new columns default NULL.
+        old_columns = [
+            row[1]
+            for row in conn.execute("PRAGMA table_info(content_projects)").fetchall()
+        ]
+        column_list = ",".join(old_columns)
+        conn.execute(
+            f"INSERT INTO content_projects_intent_new ({column_list}) "
+            f"SELECT {column_list} FROM content_projects"
+        )
+        conn.execute("DROP TABLE content_projects")
+        conn.execute(
+            "ALTER TABLE content_projects_intent_new RENAME TO content_projects"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_content_projects_owner_status "
+            "ON content_projects(owner_user_id, status, updated_at)"
+        )
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_content_projects_owner_idempotency "
+            "ON content_projects(owner_user_id, idempotency_key) "
+            "WHERE idempotency_key IS NOT NULL"
+        )
+        conn.commit()
+    finally:
+        conn.execute("PRAGMA foreign_keys=ON")
+    violations = conn.execute("PRAGMA foreign_key_check").fetchall()
+    if violations:
+        raise sqlite3.IntegrityError(
+            f"intent model migration broke foreign keys: {violations}"
+        )
+
+
 #: Migration stem -> post-step callable. Add an entry only when a
 #: migration needs Python-driven back-fill that pure SQL cannot express.
 MIGRATION_POST_STEPS: dict[str, PostStep] = {
     "003_effect_reviews": _post_step_003_effect_reviews,
     "030_action_lifecycle": _post_step_030_action_lifecycle,
+    "034_intent_model_migration": _post_step_034_intent_model,
+    "035_intent_lock_action": _post_step_035_intent_lock_action,
 }
 
 

@@ -173,13 +173,9 @@ class Database:
           async engine uses. Reuses the runner's full power unchanged.
         * **In-memory DB** (``_raw_path()`` returns ``None``): a sync
           ``sqlite3.connect(":memory:")`` would be a different DB than this
-          aiosqlite engine, so the runner is NOT used directly. Instead each
-          migration file is executed through the aiosqlite engine. Post-steps
-          are skipped on the memory path — ``000_initial_schema.sql`` already
-          ships the full-column baseline, so the additive-column back-fill
-          that ``_ensure_columns`` provides for *legacy* DBs is redundant on a
-          fresh memory DB (and porting ``_ensure_columns``' sqlite3 API to
-          aiosqlite would add a new bug surface for no gain).
+          aiosqlite engine, so each migration file is executed through that
+          engine. Migration 034's table rebuild is then applied on the same
+          connection using the runner's shared CREATE TABLE statement.
 
         Must be called after :meth:`init_db` has created the engine (or the
         caller creates the engine itself for the memory path). ``init_db``
@@ -187,6 +183,10 @@ class Database:
         """
         from app.data.migrations.runner import (
             DEFAULT_MIGRATIONS_DIR,
+            _INTENT_ACTION_EVENT_TRIGGER_SQL,
+            _INTENT_ACTION_INDEX_TRIGGER_SQL,
+            _INTENT_MODEL_CONTENT_PROJECTS_SQL,
+            _intent_action_table_sql,
             _list_migration_files,
             _sha256,
         )
@@ -251,6 +251,128 @@ class Database:
                 logger.info("Applied migration %s (memory path)", version)
         if applied_any:
             logger.info("Migration run complete (memory path)")
+
+        async with self.engine.connect() as conn:  # type: ignore[union-attr]
+            action_sql = (
+                await conn.execute(
+                    text(
+                        "SELECT sql FROM sqlite_master "
+                        "WHERE type='table' AND name='next_best_actions'"
+                    )
+                )
+            ).scalar_one_or_none()
+            if action_sql and "'lock_intent'" not in action_sql:
+                await conn.commit()
+                await conn.execute(text("PRAGMA foreign_keys=OFF"))
+                await conn.commit()
+                try:
+                    await conn.execute(
+                        text(
+                            "DROP TRIGGER IF EXISTS "
+                            "trg_next_best_actions_experiment_context"
+                        )
+                    )
+                    await conn.execute(
+                        text(
+                            "DROP TRIGGER IF EXISTS "
+                            "trg_action_events_experiment_context"
+                        )
+                    )
+                    columns = [
+                        row[1]
+                        for row in (
+                            await conn.execute(
+                                text("PRAGMA table_info(next_best_actions)")
+                            )
+                        ).fetchall()
+                    ]
+                    column_list = ",".join(columns)
+                    await conn.execute(text(_intent_action_table_sql(action_sql)))
+                    await conn.execute(
+                        text(
+                            f"INSERT INTO next_best_actions_intent_new ({column_list}) "
+                            f"SELECT {column_list} FROM next_best_actions"
+                        )
+                    )
+                    await conn.execute(text("DROP TABLE next_best_actions"))
+                    await conn.execute(
+                        text(
+                            "ALTER TABLE next_best_actions_intent_new "
+                            "RENAME TO next_best_actions"
+                        )
+                    )
+                    await conn.commit()
+                finally:
+                    await conn.execute(text("PRAGMA foreign_keys=ON"))
+                    await conn.commit()
+            if action_sql:
+                for sql in (
+                    _INTENT_ACTION_INDEX_TRIGGER_SQL,
+                    _INTENT_ACTION_EVENT_TRIGGER_SQL,
+                ):
+                    for stmt in _split_sql_statements(sql):
+                        await conn.execute(text(stmt))
+                await conn.commit()
+
+            table_sql = (
+                await conn.execute(
+                    text(
+                        "SELECT sql FROM sqlite_master "
+                        "WHERE type='table' AND name='content_projects'"
+                    )
+                )
+            ).scalar_one_or_none()
+            if table_sql and "'working_confirmed'" not in table_sql:
+                await conn.commit()
+                await conn.execute(text("PRAGMA foreign_keys=OFF"))
+                await conn.commit()
+                try:
+                    columns = [
+                        row[1]
+                        for row in (
+                            await conn.execute(text("PRAGMA table_info(content_projects)"))
+                        ).fetchall()
+                    ]
+                    column_list = ",".join(columns)
+                    await conn.execute(text(_INTENT_MODEL_CONTENT_PROJECTS_SQL))
+                    await conn.execute(
+                        text(
+                            f"INSERT INTO content_projects_intent_new ({column_list}) "
+                            f"SELECT {column_list} FROM content_projects"
+                        )
+                    )
+                    await conn.execute(text("DROP TABLE content_projects"))
+                    await conn.execute(
+                        text(
+                            "ALTER TABLE content_projects_intent_new "
+                            "RENAME TO content_projects"
+                        )
+                    )
+                    await conn.execute(
+                        text(
+                            "CREATE INDEX IF NOT EXISTS idx_content_projects_owner_status "
+                            "ON content_projects(owner_user_id, status, updated_at)"
+                        )
+                    )
+                    await conn.execute(
+                        text(
+                            "CREATE UNIQUE INDEX IF NOT EXISTS "
+                            "uq_content_projects_owner_idempotency "
+                            "ON content_projects(owner_user_id, idempotency_key) "
+                            "WHERE idempotency_key IS NOT NULL"
+                        )
+                    )
+                    await conn.commit()
+                finally:
+                    await conn.execute(text("PRAGMA foreign_keys=ON"))
+                    await conn.commit()
+                violations = (
+                    await conn.execute(text("PRAGMA foreign_key_check"))
+                ).fetchall()
+                if violations:
+                    raise sqlite3.IntegrityError(
+                        f"intent model migration broke foreign keys: {violations}"
+                    )
 
     async def get_session(self) -> AsyncSession:
         """Get a new async database session.

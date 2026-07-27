@@ -5,7 +5,7 @@ from typing import Any
 
 from sqlalchemy import text
 
-from app.services.v2_utils import decode_json_fields
+from app.services.v2_utils import decode_json_fields, normalize_project_intent
 
 
 class CalibrationWorkspaceService:
@@ -154,6 +154,7 @@ class CalibrationWorkspaceService:
             decode_json_fields(
                 hypothesis,
                 "expected_behaviors_json",
+                "supporting_responses_json",
                 "basis_refs_json",
                 "uncertainties_json",
             )
@@ -213,7 +214,7 @@ class CalibrationWorkspaceService:
 
     @staticmethod
     def _normalize_project(project):
-        result = dict(project)
+        result = normalize_project_intent(project)
         for field in (
             "material_requirements_json",
             "expected_responses_json",

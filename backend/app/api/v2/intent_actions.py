@@ -14,6 +14,7 @@ from app.models.v2.intent_actions import (
     IntentConfirmation,
 )
 from app.models.v2.evidence import EvidenceDecision, EvidenceRevocation
+from app.models.v2.publish_hypothesis import RetrospectiveIntentClassification
 from app.services.creator_state import CreatorStateService
 from app.services.evidence import EvidenceService
 from app.services.intent_actions import (
@@ -120,6 +121,22 @@ async def confirm_project_intent(
     db: Database = Depends(get_db),
 ):
     result, replayed = await IntentConfirmationService(db).confirm(
+        user["id"], project_id, body
+    )
+    return _created_or_replayed(response, result, replayed)
+
+
+@router.post(
+    "/projects/{project_id}/intent:classify-retrospective", status_code=201
+)
+async def classify_retrospective_intent(
+    project_id: str,
+    body: RetrospectiveIntentClassification,
+    response: Response,
+    user=Depends(get_current_user),
+    db: Database = Depends(get_db),
+):
+    result, replayed = await IntentConfirmationService(db).classify_retrospective(
         user["id"], project_id, body
     )
     return _created_or_replayed(response, result, replayed)

@@ -20,7 +20,7 @@ from app.models.v2.creator_series import (
 )
 from app.services.ai_trace import AITraceService
 from app.services.creator_state import CreatorStateService
-from app.services.v2_utils import now, request_hash
+from app.services.v2_utils import effective_intent_status, now, request_hash
 
 
 ELIGIBLE_SERIES_STATUSES = {"published", "awaiting_review", "settled"}
@@ -385,7 +385,7 @@ class CreatorSeriesService:
             )
             if (
                 row is None
-                or row["intent_status"] != "confirmed"
+                or effective_intent_status(row) not in {"working_confirmed", "locked"}
                 or row["status"] not in ELIGIBLE_SERIES_STATUSES
                 or not row.get("locked_publish_version_id")
             ):

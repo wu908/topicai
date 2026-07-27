@@ -73,6 +73,7 @@ async def seeded_db(test_db):
 
 
 async def _locked_project(db, *, expected_behaviors=None, suffix="1"):
+    responses = expected_behaviors or ["save"]
     project, _ = await ContentProjectService(db).create(
         "u1",
         ContentProjectCreate(
@@ -92,24 +93,28 @@ async def _locked_project(db, *, expected_behaviors=None, suffix="1"):
             idempotency_key=f"version-{suffix}",
         ),
     )
+    await db.execute(
+        "UPDATE content_projects SET intent_status='working_confirmed' WHERE id=:id",
+        {"id": project["id"]},
+    )
     project = await ContentProjectService(db).get("u1", project["id"])
     await PublishHypothesisService(db).lock(
         "u1",
         project["id"],
         PublishHypothesisLock(
             content_version_id=version["id"],
+            content_intent="solve",
+            audience_change="The reader can choose what to publish first.",
+            primary_response=responses[0],
+            supporting_responses=responses[1:],
             audience_problem="The reader does not know what to publish first.",
             reader_promise="Three first-party mistakes and a concrete sequence.",
-            expected_behaviors=expected_behaviors or ["save"],
             basis_refs=["user_fact:first-ten-posts"],
             uncertainties=["Profile visits are not available in manual metrics."],
+            observation_window_days=7,
             expected_project_version=project["version"],
             idempotency_key=f"hypothesis-{suffix}",
         ),
-    )
-    await db.execute(
-        "UPDATE content_projects SET intent_status='confirmed' WHERE id=:id",
-        {"id": project["id"]},
     )
     return await ContentProjectService(db).get("u1", project["id"]), version
 
@@ -957,6 +962,31 @@ async def test_blind_review_persists_explicit_ineligibility_reasons(seeded_db):
     )
     assert legacy["review"]["eligibility_reason_code"] == "legacy_hypothesis"
     assert legacy["review"]["eligible_for_rule_upgrade"] is False
+
+    retrospective_project, _, retrospective_snapshot = await _published_with_snapshot(
+        seeded_db, suffix="retrospective-reason"
+    )
+    await seeded_db.execute(
+        "UPDATE content_projects SET content_intent=NULL,intent_status='retrospective',"
+        "retrospective_intent='share' WHERE id=:id",
+        {"id": retrospective_project["id"]},
+    )
+    await seeded_db.execute(
+        "UPDATE publish_hypotheses SET status='legacy_missing' WHERE id=:id",
+        {"id": retrospective_project["publish_hypothesis_id"]},
+    )
+    retrospective, _ = await BlindReviewService(seeded_db).create(
+        "u1",
+        retrospective_project["id"],
+        BlindReviewCreate(
+            result_snapshot_ids=[retrospective_snapshot["id"]],
+            expected_project_version=retrospective_project["version"],
+            idempotency_key="retrospective-reason-review",
+        ),
+    )
+    assert retrospective["review"]["eligibility_reason_code"] == "eligible_clean"
+    assert retrospective["review"]["eligible_for_rule_upgrade"] is True
+    assert retrospective["review"]["comparison"]["intent_review"]["intent"] == "share"
 
     revoked_project, _, revoked_snapshot = await _published_with_snapshot(
         seeded_db, suffix="revoked-reason"

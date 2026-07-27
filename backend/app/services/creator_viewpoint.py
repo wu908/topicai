@@ -21,7 +21,7 @@ from app.models.v2.creator_viewpoint import (
 from app.services.ai_trace import AITraceService
 from app.services.content_genome import ContentGenomeService
 from app.services.creator_state import CreatorStateService
-from app.services.v2_utils import now, request_hash
+from app.services.v2_utils import effective_intent_status, now, request_hash
 
 
 class CreatorViewpointService:
@@ -65,7 +65,7 @@ class CreatorViewpointService:
         project = await self._project(owner, project_id)
         if project["version"] != body.expected_project_version:
             raise VersionConflictException(project["version"], body.expected_project_version)
-        if project["intent_status"] != "confirmed":
+        if effective_intent_status(project) not in {"working_confirmed", "locked"}:
             raise ValueError("content intent must be confirmed before proposing a viewpoint")
         if body.source_content_version_id:
             version = await self.db.fetch_one(
