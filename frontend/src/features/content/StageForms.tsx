@@ -23,8 +23,10 @@ import {
 import type {
   CalibrationWorkspace,
   ContentProject,
+  ExpectedBehavior,
   HumanGate,
   HumanGateDecisionInput,
+  HypothesisLockInput,
   PerformanceMetrics,
 } from '@/types/contracts/v2/content';
 
@@ -231,16 +233,7 @@ export function VersionForm({
 }
 
 interface HypothesisFormProps extends WorkspaceFormProps {
-  lockHypothesis: (projectId: string, input: {
-    content_version_id: string;
-    audience_problem: string;
-    reader_promise: string;
-    expected_behaviors: string[];
-    basis_refs: string[];
-    uncertainties: string[];
-    expected_project_version: number;
-    idempotency_key: string;
-  }) => Promise<unknown>;
+  lockHypothesis: (projectId: string, input: HypothesisLockInput) => Promise<unknown>;
 }
 
 const behaviorOptions = [
@@ -259,48 +252,101 @@ export function HypothesisForm({
 }: HypothesisFormProps) {
   const [problem, setProblem] = useState('');
   const [promise, setPromise] = useState('');
-  const [behaviors, setBehaviors] = useState<string[]>(['save']);
+  const [viewpoint, setViewpoint] = useState('');
+  const [continuation, setContinuation] = useState('');
+  const [audienceChange, setAudienceChange] = useState(workspace.project.audience_change || '');
+  const [primaryResponse, setPrimaryResponse] = useState<ExpectedBehavior>('save');
+  const [supportingResponses, setSupportingResponses] = useState<ExpectedBehavior[]>([]);
   const [basis, setBasis] = useState('');
   const [uncertainties, setUncertainties] = useState('');
+  const [observationWindow, setObservationWindow] = useState(7);
   const version = workspace.current_version;
+  const intent = workspace.project.content_intent;
+  const intentFieldsComplete = intent === 'solve'
+    ? problem.trim() && promise.trim()
+    : intent === 'share'
+      ? viewpoint.trim()
+      : continuation.trim();
 
   return (
     <Paper component="section" variant="outlined" sx={panelSx}>
       <Typography component="h2" variant="h5" mb={2}>
-        确认这篇内容要帮谁
+        锁定发布意图
       </Typography>
       <Typography variant="body2" color="text.secondary" mb={2}>
-        发布前先说清楚读者的问题和你的答案。确认后，系统才会把这版内容作为本次发布的依据。
+        已完成“工作意图确认”。现在补全发布判断；锁定后，意图和判断将作为本次发布不可覆盖的历史依据。
       </Typography>
       <Stack spacing={2}>
         <TextField
-          label="读者遇到什么问题"
-          value={problem}
-          onChange={(e) => setProblem(e.target.value)}
+          label="预期受众变化"
+          value={audienceChange}
+          onChange={(event) => setAudienceChange(event.target.value)}
           multiline
           minRows={2}
         />
+        {intent === 'solve' ? <>
+          <TextField
+            label="读者遇到什么问题"
+            value={problem}
+            onChange={(e) => setProblem(e.target.value)}
+            multiline
+            minRows={2}
+          />
+          <TextField
+            label="你准备给出的答案"
+            value={promise}
+            onChange={(e) => setPromise(e.target.value)}
+            multiline
+            minRows={2}
+          />
+        </> : null}
+        {intent === 'share' ? (
+          <TextField
+            label="创作者视角或经历锚点"
+            value={viewpoint}
+            onChange={(e) => setViewpoint(e.target.value)}
+            multiline
+            minRows={2}
+          />
+        ) : null}
+        {intent === 'record' ? (
+          <TextField
+            label="读者可持续关注的过程或变化"
+            value={continuation}
+            onChange={(e) => setContinuation(e.target.value)}
+            multiline
+            minRows={2}
+          />
+        ) : null}
         <TextField
-          label="你准备给出的答案"
-          value={promise}
-          onChange={(e) => setPromise(e.target.value)}
-          multiline
-          minRows={2}
-        />
+          select
+          label="主要反应"
+          value={primaryResponse}
+          onChange={(event) => {
+            const next = event.target.value as ExpectedBehavior;
+            setPrimaryResponse(next);
+            setSupportingResponses((current) => current.filter((item) => item !== next));
+          }}
+        >
+          {behaviorOptions.map(([value, label]) => (
+            <MenuItem key={value} value={value}>{label}</MenuItem>
+          ))}
+        </TextField>
         <Box>
           <Typography variant="body2" color="text.secondary" mb={0.5}>
-            你希望读者做什么
+            附加反应（最多 2 项）
           </Typography>
           <FormGroup row>
-            {behaviorOptions.map(([value, label]) => (
+            {behaviorOptions.filter(([value]) => value !== primaryResponse).map(([value, label]) => (
               <FormControlLabel
                 key={value}
                 label={label}
                 control={
                   <Checkbox
-                    checked={behaviors.includes(value)}
+                    checked={supportingResponses.includes(value)}
+                    disabled={!supportingResponses.includes(value) && supportingResponses.length >= 2}
                     onChange={(_, checked) =>
-                      setBehaviors((current) =>
+                      setSupportingResponses((current) =>
                         checked
                           ? [...current, value]
                           : current.filter((item) => item !== value),
@@ -328,33 +374,51 @@ export function HypothesisForm({
           multiline
           minRows={2}
         />
+        <TextField
+          label="观察窗口（天）"
+          value={observationWindow}
+          onChange={(event) => setObservationWindow(Number(event.target.value))}
+          type="number"
+          inputProps={{ min: 1, max: 365 }}
+        />
         <Box>
           <Button
             variant="contained"
             startIcon={<CheckCircleOutline />}
             disabled={
-              busy || !version || !problem.trim() || !promise.trim() || behaviors.length === 0
+              busy || !version || !audienceChange.trim() || !intentFieldsComplete
+              || observationWindow < 1 || observationWindow > 365
             }
             onClick={() => {
               if (!version) return;
               void onCommand(() =>
                 lockHypothesis(workspace.project.id, {
                   content_version_id: version.id,
-                  audience_problem: problem.trim(),
-                  reader_promise: promise.trim(),
-                  expected_behaviors: behaviors,
+                  content_intent: intent,
+                  audience_change: audienceChange.trim(),
+                  primary_response: primaryResponse,
+                  supporting_responses: supportingResponses,
+                  ...(intent === 'solve' ? {
+                    audience_problem: problem.trim(),
+                    reader_promise: promise.trim(),
+                  } : intent === 'share' ? {
+                    viewpoint_anchor: viewpoint.trim(),
+                  } : {
+                    continuation_promise: continuation.trim(),
+                  }),
                   basis_refs: basis.split('\n').map((item) => item.trim()).filter(Boolean),
                   uncertainties: uncertainties
                     .split('\n')
                     .map((item) => item.trim())
                     .filter(Boolean),
+                  observation_window_days: observationWindow,
                   expected_project_version: workspace.project.version,
                   idempotency_key: makeKey('hypothesis'),
                 }),
               );
             }}
           >
-            确认并锁定
+            锁定发布意图
           </Button>
         </Box>
       </Stack>

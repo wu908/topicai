@@ -54,11 +54,15 @@ describe('v2 content project API', () => {
     });
     await lockPublishHypothesis('p1', {
       content_version_id: 'v1',
+      content_intent: 'solve',
+      audience_change: 'Readers can apply one method',
+      primary_response: 'save',
+      supporting_responses: ['profile_visit'],
       audience_problem: 'Problem',
       reader_promise: 'Promise',
-      expected_behaviors: ['save'],
       basis_refs: [],
       uncertainties: [],
+      observation_window_days: 7,
       expected_project_version: 2,
       idempotency_key: 'hypothesis-key',
     });

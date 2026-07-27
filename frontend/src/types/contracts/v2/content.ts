@@ -10,7 +10,13 @@ export type ProjectStatus =
 export type ContentIntent = 'solve' | 'share' | 'record';
 export type ContentFormat = 'graphic_note' | 'vlog_plan';
 export type AutomationLevel = 'guided' | 'autopilot_to_ready';
-export type IntentStatus = 'candidate' | 'confirmed' | 'legacy_missing';
+export type IntentStatus =
+  | 'candidate'
+  | 'working_confirmed'
+  | 'locked'
+  | 'legacy_unclassified'
+  | 'retrospective';
+export type ExpectedBehavior = 'save' | 'comment' | 'profile_visit' | 'follow' | 'other';
 export type EvidenceSourceType = 'user_fact' | 'external_fact' | 'ai_inference' | 'validated_insight';
 export type EvidenceConfirmationStatus = 'proposed' | 'confirmed' | 'rejected' | 'revoked';
 export type EvidencePrivacyLevel = 'public' | 'private' | 'sensitive';
@@ -18,6 +24,7 @@ export type EvidencePrivacyLevel = 'public' | 'private' | 'sensitive';
 export type IntentActionType =
   | 'create_project'
   | 'confirm_intent'
+  | 'lock_intent'
   | 'answer_key_question'
   | 'review_candidate'
   | 'confirm_publish_scope'
@@ -180,10 +187,18 @@ export interface CandidateReview {
 
 export interface PublishHypothesis {
   id: string;
+  content_intent: ContentIntent | null;
+  audience_change: string | null;
+  primary_response: ExpectedBehavior | null;
+  supporting_responses: ExpectedBehavior[];
   audience_problem: string;
   reader_promise: string;
-  expected_behaviors: string[];
+  viewpoint_anchor: string | null;
+  continuation_promise: string | null;
+  expected_behaviors: ExpectedBehavior[];
+  basis_refs: string[];
   uncertainties: string[];
+  observation_window_days: number | null;
   status: 'locked' | 'draft' | 'superseded' | 'legacy_missing';
 }
 
@@ -740,11 +755,17 @@ export interface CandidateRestoreInput {
 
 export interface HypothesisLockInput {
   content_version_id: string;
-  audience_problem: string;
-  reader_promise: string;
-  expected_behaviors: string[];
+  content_intent: ContentIntent;
+  audience_change: string;
+  primary_response: ExpectedBehavior;
+  supporting_responses: ExpectedBehavior[];
+  audience_problem?: string;
+  reader_promise?: string;
+  viewpoint_anchor?: string;
+  continuation_promise?: string;
   basis_refs: string[];
   uncertainties: string[];
+  observation_window_days: number;
   expected_project_version: number;
   idempotency_key: string;
 }

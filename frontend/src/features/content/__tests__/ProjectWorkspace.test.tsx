@@ -358,7 +358,7 @@ describe('ProjectWorkspace', () => {
       ...workspace.project,
       content_intent: 'share' as const,
       content_format: 'graphic_note' as const,
-      intent_status: 'confirmed' as const,
+      intent_status: 'locked' as const,
     };
     const sourceProjects = ['one', 'two'].map((suffix, index) => ({
       ...currentProject,
@@ -396,7 +396,7 @@ describe('ProjectWorkspace', () => {
       ...workspace.project,
       content_intent: 'share' as const,
       content_format: 'graphic_note' as const,
-      intent_status: 'confirmed' as const,
+      intent_status: 'locked' as const,
     };
     const candidate = {
       id: 'series-candidate',
@@ -460,7 +460,7 @@ describe('ProjectWorkspace', () => {
       ...workspace.project,
       content_intent: 'share' as const,
       content_format: 'graphic_note' as const,
-      intent_status: 'confirmed' as const,
+      intent_status: 'locked' as const,
     };
     const confirmedSeries = {
       id: 'series-confirmed',

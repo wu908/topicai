@@ -124,10 +124,10 @@ function nextStepGuide(workspace: CalibrationWorkspace): NextStepGuide {
       };
     case 'lock_hypothesis':
       return {
-        title: '确认这篇笔记要帮谁解决什么',
-        description: '用一句话说清楚读者遇到的问题，以及你准备给出的答案。确认后才进入发布。',
+        title: '补全发布判断并锁定意图',
+        description: '确认预期受众变化、主要反应、依据和观察窗口。锁定后才进入发布。',
         progress: '第 2 步，共 5 步',
-        helper: '这不是考试答案，而是发布前你愿意验证的一次判断。',
+        helper: '工作意图已经确认；这一步会单独锁定本次发布的意图和判断。',
       };
     case 'record_publication':
       return {
@@ -368,7 +368,7 @@ export default function ProjectWorkspace({
             <h2>这篇内容的进度</h2>
             <p>完成一个动作，再进入下一步</p>
           </div>
-          <OutlineItem icon={<FactCheckOutlined />} title="内容意图" value={`${intentLabel}：${purpose}`} state={workspace.project.intent_status === 'confirmed' ? 'confirmed' : 'pending'} />
+          <OutlineItem icon={<FactCheckOutlined />} title="内容意图" value={`${intentLabel}：${purpose}`} state={workspace.project.intent_status === 'working_confirmed' || workspace.project.intent_status === 'locked' ? 'confirmed' : 'pending'} />
           <OutlineItem
             icon={<TimelineOutlined />}
             title="需要的真实素材"

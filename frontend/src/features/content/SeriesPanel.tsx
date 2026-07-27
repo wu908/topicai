@@ -57,7 +57,7 @@ export default function SeriesPanel({
   const eligible = projects
     .filter(
       (project) =>
-        project.intent_status === 'confirmed'
+        (project.intent_status === 'working_confirmed' || project.intent_status === 'locked')
         && project.content_intent === currentProject.content_intent
         && project.content_format === currentProject.content_format
         && eligibleStatuses.has(project.status)
