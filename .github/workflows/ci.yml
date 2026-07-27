@@ -43,7 +43,7 @@ jobs:
       - name: Check backend quality and security
         run: |
           python -m ruff check app config tests
-          python -m mypy app config
+          python -m mypy --no-site-packages app config
           python -m bandit -q -r app -lll
 
       - name: Run backend tests and coverage gate
