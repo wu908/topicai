@@ -33,13 +33,14 @@ async def seeded_db(test_db):
     return test_db
 
 
-async def _project_and_version(db):
+async def _project_and_version(db, *, content_intent="solve"):
     project, _ = await ContentProjectService(db).create(
         "u1",
         ContentProjectCreate(
             title="把踩坑经验写成一篇笔记",
             primary_goal="stable_publish",
             target_audience="刚开始做知识型账号的人",
+            content_intent=content_intent,
             idempotency_key="project-1",
         ),
     )
@@ -53,6 +54,10 @@ async def _project_and_version(db):
             idempotency_key="version-1",
         ),
     )
+    await db.execute(
+        "UPDATE content_projects SET intent_status='working_confirmed' WHERE id=:id",
+        {"id": project["id"]},
+    )
     project = await ContentProjectService(db).get("u1", project["id"])
     return project, version
 
@@ -62,9 +67,13 @@ async def test_lock_hypothesis_and_version_atomically(seeded_db):
     project, version = await _project_and_version(seeded_db)
     request = PublishHypothesisLock(
         content_version_id=version["id"],
+        content_intent="solve",
+        audience_change="读者能够按真实经验开始第一篇内容",
+        primary_response="save",
+        supporting_responses=["profile_visit"],
+        observation_window_days=7,
         audience_problem="不知道知识型账号第一篇该写什么",
         reader_promise="用三个真实踩坑案例给出可执行起步顺序",
-        expected_behaviors=["save", "profile_visit"],
         basis_refs=["user_fact:three-failures"],
         uncertainties=["收藏是否会转化为主页访问"],
         expected_project_version=project["version"],
@@ -78,8 +87,90 @@ async def test_lock_hypothesis_and_version_atomically(seeded_db):
     assert replayed is False
     assert result["hypothesis"]["status"] == "locked"
     assert result["project"]["status"] == "ready_to_publish"
+    assert result["project"]["intent_status"] == "locked"
+    assert result["project"]["intent_locked_at"]
     assert result["project"]["locked_publish_version_id"] == version["id"]
     assert result["project"]["publish_hypothesis_id"] == result["hypothesis"]["id"]
+    assert result["hypothesis"]["content_intent"] == "solve"
+    assert result["hypothesis"]["audience_change"] == "读者能够按真实经验开始第一篇内容"
+    assert result["hypothesis"]["primary_response"] == "save"
+    assert result["hypothesis"]["supporting_responses_json"] == '["profile_visit"]'
+    assert result["hypothesis"]["observation_window_days"] == 7
+
+
+@pytest.mark.asyncio
+async def test_share_lock_persists_viewpoint_without_solve_fields(seeded_db):
+    project, version = await _project_and_version(
+        seeded_db, content_intent="share"
+    )
+    result, _ = await PublishHypothesisService(seeded_db).lock(
+        "u1",
+        project["id"],
+        PublishHypothesisLock(
+            content_version_id=version["id"],
+            content_intent="share",
+            audience_change="读者理解一次真实经历带来的观点变化",
+            primary_response="comment",
+            supporting_responses=["follow"],
+            basis_refs=["user_fact:first-post"],
+            uncertainties=[],
+            observation_window_days=14,
+            viewpoint_anchor="这次经历让我停止追逐所有热点",
+            expected_project_version=project["version"],
+            idempotency_key="share-hypothesis",
+        ),
+    )
+
+    assert result["hypothesis"]["viewpoint_anchor"] == "这次经历让我停止追逐所有热点"
+    assert result["hypothesis"]["audience_problem"] == ""
+    assert result["hypothesis"]["reader_promise"] == ""
+
+
+@pytest.mark.asyncio
+async def test_lock_requires_working_intent_confirmation(seeded_db):
+    project, version = await _project_and_version(seeded_db)
+    await seeded_db.execute(
+        "UPDATE content_projects SET intent_status='candidate' WHERE id=:id",
+        {"id": project["id"]},
+    )
+    body = PublishHypothesisLock(
+        content_version_id=version["id"],
+        content_intent="solve",
+        audience_change="读者知道如何开始第一篇内容",
+        primary_response="save",
+        observation_window_days=7,
+        audience_problem="不知道第一篇写什么",
+        reader_promise="给出真实起步顺序",
+        expected_project_version=project["version"],
+        idempotency_key="candidate-lock",
+    )
+
+    with pytest.raises(ValueError, match="working confirmed"):
+        await PublishHypothesisService(seeded_db).lock("u1", project["id"], body)
+
+
+@pytest.mark.asyncio
+async def test_lock_rejects_legacy_confirmed_row_with_lock_evidence(seeded_db):
+    project, version = await _project_and_version(seeded_db)
+    await seeded_db.execute(
+        "UPDATE content_projects SET intent_status='confirmed',intent_locked_at=:locked "
+        "WHERE id=:id",
+        {"locked": "2026-07-26T00:00:00Z", "id": project["id"]},
+    )
+    body = PublishHypothesisLock(
+        content_version_id=version["id"],
+        content_intent="solve",
+        audience_change="读者知道如何开始第一篇内容",
+        primary_response="save",
+        observation_window_days=7,
+        audience_problem="不知道第一篇写什么",
+        reader_promise="给出真实起步顺序",
+        expected_project_version=project["version"],
+        idempotency_key="legacy-locked-row",
+    )
+
+    with pytest.raises(ValueError, match="working confirmed"):
+        await PublishHypothesisService(seeded_db).lock("u1", project["id"], body)
 
 
 @pytest.mark.asyncio
@@ -90,9 +181,12 @@ async def test_post_lock_amendments_append_without_mutating_hypothesis(seeded_db
         project["id"],
         PublishHypothesisLock(
             content_version_id=version["id"],
+            content_intent="solve",
+            audience_change="Original audience change",
+            primary_response="save",
+            observation_window_days=7,
             audience_problem="Original audience problem",
             reader_promise="Original promise",
-            expected_behaviors=["save"],
             expected_project_version=project["version"],
             idempotency_key="amendment-lock",
         ),
@@ -131,9 +225,12 @@ async def test_lock_is_idempotent_but_rejects_payload_reuse(seeded_db):
     project, version = await _project_and_version(seeded_db)
     request = PublishHypothesisLock(
         content_version_id=version["id"],
+        content_intent="solve",
+        audience_change="读者知道如何开始第一篇内容",
+        primary_response="save",
+        observation_window_days=7,
         audience_problem="不知道第一篇写什么",
         reader_promise="给出真实起步顺序",
-        expected_behaviors=["save"],
         basis_refs=["user_fact:first-post"],
         uncertainties=[],
         expected_project_version=project["version"],
@@ -148,7 +245,7 @@ async def test_lock_is_idempotent_but_rejects_payload_reuse(seeded_db):
     assert second_replayed is True
     assert second["hypothesis"]["id"] == first["hypothesis"]["id"]
 
-    changed = request.model_copy(update={"reader_promise": "换一个承诺"})
+    changed = request.model_copy(update={"audience_change": "换一个预期变化"})
     with pytest.raises(IdempotencyConflictException):
         await service.lock("u1", project["id"], changed)
 
@@ -158,9 +255,12 @@ async def test_version_conflict_rolls_back_hypothesis(seeded_db):
     project, version = await _project_and_version(seeded_db)
     request = PublishHypothesisLock(
         content_version_id=version["id"],
+        content_intent="solve",
+        audience_change="读者知道如何开始第一篇内容",
+        primary_response="save",
+        observation_window_days=7,
         audience_problem="不知道第一篇写什么",
         reader_promise="给出真实起步顺序",
-        expected_behaviors=["save"],
         basis_refs=[],
         uncertainties=[],
         expected_project_version=project["version"] - 1,
@@ -206,9 +306,12 @@ async def test_idempotency_replay_is_owner_scoped(seeded_db):
     refreshed = await ContentProjectService(seeded_db).get("u1", project["id"])
     lock_request = PublishHypothesisLock(
         content_version_id=version["id"],
+        content_intent="solve",
+        audience_change="只有所有者能读取判断",
+        primary_response="save",
+        observation_window_days=7,
         audience_problem="所有者的判断",
         reader_promise="不向其他用户泄漏",
-        expected_behaviors=["save"],
         expected_project_version=refreshed["version"],
         idempotency_key="private-hypothesis-key",
     )

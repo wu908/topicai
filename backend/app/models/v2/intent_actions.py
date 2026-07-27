@@ -45,6 +45,7 @@ class HumanGateType(StrEnum):
 class ActionType(StrEnum):
     CREATE_PROJECT = "create_project"
     CONFIRM_INTENT = "confirm_intent"
+    LOCK_INTENT = "lock_intent"
     ANSWER_KEY_QUESTION = "answer_key_question"
     REVIEW_CANDIDATE = "review_candidate"
     CONFIRM_PUBLISH_SCOPE = "confirm_publish_scope"

@@ -12,7 +12,7 @@ from app.models.v2.action_domain import AITraceCreate
 from app.services.ai_trace import AITraceService
 from app.services.creator_state import CreatorStateService
 from app.services.content_genome import ContentGenomeService
-from app.services.v2_utils import now, request_hash
+from app.services.v2_utils import effective_intent_status, now, request_hash
 
 
 INTENT_CONFIG = {
@@ -42,6 +42,7 @@ INTENT_CONFIG = {
 
 TODAY_ACTION_PRIORITY = {
     "review_candidate": 100,
+    "lock_intent": 98,
     "record_publication": 95,
     "add_performance": 90,
     "review_result": 85,
@@ -371,7 +372,8 @@ class IntentOrchestratorService:
         return await self._ensure_action(owner_user_id, project, action_type)
 
     async def _derive_action(self, owner_user_id: str, project: dict[str, Any]) -> str:
-        if project.get("intent_status") != "confirmed":
+        intent_status = effective_intent_status(project)
+        if intent_status not in {"working_confirmed", "locked", "retrospective"}:
             return "confirm_intent"
         if not project.get("current_version_id"):
             return "answer_key_question"
@@ -389,7 +391,11 @@ class IntentOrchestratorService:
         if invalid_evidence:
             return "answer_key_question"
         if not project.get("publish_hypothesis_id"):
-            return "review_candidate"
+            return (
+                "lock_intent"
+                if project.get("last_action") == "candidate_confirmed"
+                else "review_candidate"
+            )
         publication = await self.db.fetch_one(
             "SELECT id FROM publish_records_v2 WHERE owner_user_id=:owner AND project_id=:project",
             {"owner": owner_user_id, "project": project["id"]},
@@ -595,13 +601,18 @@ class IntentOrchestratorService:
         return await self._normalize_with_gate(owner_user_id, created)
 
     def _action_spec(self, action_type: str, project: dict[str, Any] | None) -> dict[str, Any]:
-        intent = (project or {}).get("content_intent", "solve")
+        intent = (
+            (project or {}).get("content_intent")
+            or (project or {}).get("retrospective_intent")
+            or "solve"
+        )
         config = INTENT_CONFIG[intent]
         audience = (project or {}).get("target_audience") or "目标读者尚未确认"
         project_id = (project or {}).get("id", "")
         specs = {
             "create_project": ("确定下一条内容从哪里开始", "有模糊想法可以直接创建；还不知道做什么，可以先盘点真实经历并完成三篇低成本实验。", [], ["content_seed"], 3, None, {"action_type": "create_project", "path": "/content"}),
             "confirm_intent": (f"确认这是一条“{config['label']}”内容吗？", "内容意图会决定 AI 接下来问什么、怎么组织内容以及发布后观察什么。", ["project:title", f"project:audience:{audience}"], ["confirmed_intent", "audience_change"], 2, "intent", {"action_type": "confirm_intent", "path": f"/content/{project_id}"}),
+            "lock_intent": ("锁定发布意图与发布前判断", "锁定后意图与 Publish Judgment 成为不可覆盖的发布历史。", ["content:current_version", "project:intent"], ["complete_publish_judgment"], 3, None, {"action_type": "lock_intent", "path": f"/content/{project_id}"}),
             "answer_key_question": (config["question"], "只补一个最关键的真实信息，AI 就能先准备候选内容，不需要你填写完整 Brief。", ["project:intent", "project:title"], ["first_party_evidence"], 5, "user_fact", {"action_type": "create_version", "path": f"/content/{project_id}", "mode": "generic_structure", "limitations": ["missing_first_party_evidence", "must_not_represent_creator_experience"]}),
             "review_candidate": ("确认候选内容是否准确表达了你", "发布前只需要确认事实、表达和公开范围；已确认内容不会被自动覆盖。", ["content:current_version", "project:intent"], ["fact_accuracy", "public_scope"], 8, "content_version", {"action_type": "lock_hypothesis", "path": f"/content/{project_id}"}),
             "record_publication": ("发布后，把笔记链接留在这里", "系统不会替你发布。记录真实发布时间后，AI 才能安排复盘。", ["content:locked_version"], ["publication_time"], 2, "publication", {"action_type": "record_publication", "path": f"/content/{project_id}"}),

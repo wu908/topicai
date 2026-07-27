@@ -23,7 +23,7 @@ from app.services.ai_trace import AITraceService
 from app.services.content_genome import ContentGenomeService
 from app.services.content_project import ContentProjectService
 from app.services.creator_series import CreatorSeriesService
-from app.services.v2_utils import now, request_hash
+from app.services.v2_utils import effective_intent_status, now, request_hash
 
 
 PUBLISHED_STATUSES = {"published", "awaiting_review", "settled"}
@@ -377,9 +377,9 @@ class ContentOpportunityService:
                 idempotency_key=f"opportunity-project:{opportunity['id']}",
             ),
         )
-        if project["intent_status"] != "confirmed":
+        if effective_intent_status(project) not in {"working_confirmed", "locked"}:
             await self.db.execute(
-                "UPDATE content_projects SET intent_status='confirmed',last_action="
+                "UPDATE content_projects SET intent_status='working_confirmed',last_action="
                 "'opportunity_accepted',last_action_at=:now,updated_at=:now,version=version+1 "
                 "WHERE id=:id AND owner_user_id=:owner AND intent_status='candidate'",
                 {"now": now(), "id": project["id"], "owner": owner},

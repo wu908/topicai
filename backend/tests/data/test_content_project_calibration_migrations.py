@@ -36,6 +36,7 @@ def test_content_project_calibration_schema_applies_and_replays(tmp_path):
     assert any(item.version == "028_action_experiment_metrics" for item in first)
     assert any(item.version == "032_source_verification_opportunities" for item in first)
     assert any(item.version == "033_calibration_completeness" for item in first)
+    assert any(item.version == "035_intent_lock_action" for item in first)
 
     with sqlite3.connect(db_path) as conn:
         tables = _tables(conn)
@@ -114,6 +115,7 @@ def test_intent_action_migration_upgrades_from_019_and_replays(tmp_path):
         "032_source_verification_opportunities",
         "033_calibration_completeness",
         "034_intent_model_migration",
+        "035_intent_lock_action",
     ]
     assert replay == []
     with sqlite3.connect(db_path) as conn:
@@ -174,6 +176,7 @@ def test_action_lifecycle_migration_rebuilds_phase_15_constraints(tmp_path):
         "032_source_verification_opportunities",
         "033_calibration_completeness",
         "034_intent_model_migration",
+        "035_intent_lock_action",
     ]
     with sqlite3.connect(db_path) as conn:
         action_sql = conn.execute(
@@ -234,6 +237,7 @@ def test_source_verification_migration_preserves_series_opportunities(tmp_path):
         "032_source_verification_opportunities",
         "033_calibration_completeness",
         "034_intent_model_migration",
+        "035_intent_lock_action",
     ]
     with sqlite3.connect(db_path) as conn:
         opportunity = conn.execute(
@@ -417,11 +421,21 @@ def test_intent_model_migration_adds_intent_status_values_and_columns(tmp_path):
             "('p1','u1','Legacy confirmed project','inbox','stable_publish','all',"
             "'2026-07-23T00:00:00Z','2026-07-23T00:00:00Z','2026-07-23T00:00:00Z','confirmed')"
         )
+        conn.execute(
+            "INSERT INTO next_best_actions (id,owner_user_id,project_id,action_type,title,reason,"
+            "estimated_effort_minutes,fallback_action_json,status,version,idempotency_key,"
+            "request_hash,created_at,updated_at) VALUES "
+            "('a1','u1','p1','confirm_intent','Confirm','Legacy action',2,'{}','proposed',1,"
+            "'action-key','action-hash','2026-07-23T00:00:00Z','2026-07-23T00:00:00Z')"
+        )
         conn.commit()
 
-    # Apply 034
+    # Apply 034 and its follow-up for databases that may already have recorded 034.
     upgraded = apply(db_path, DEFAULT_MIGRATIONS_DIR)
+    replay = apply(db_path, DEFAULT_MIGRATIONS_DIR)
     assert any(item.version == "034_intent_model_migration" for item in upgraded)
+    assert any(item.version == "035_intent_lock_action" for item in upgraded)
+    assert replay == []
 
     with sqlite3.connect(db_path) as conn:
         # Verify new columns exist
@@ -447,6 +461,12 @@ def test_intent_model_migration_adds_intent_status_values_and_columns(tmp_path):
             "SELECT intent_status FROM content_projects WHERE id='p1'"
         ).fetchone()[0]
         assert old_status == "confirmed"
+        conn.execute(
+            "UPDATE next_best_actions SET action_type='lock_intent' WHERE id='a1'"
+        )
+        assert conn.execute(
+            "SELECT action_type FROM next_best_actions WHERE id='a1'"
+        ).fetchone()[0] == "lock_intent"
 
         # Test new intent_status values can be written
         conn.execute(
@@ -474,11 +494,14 @@ def test_intent_model_migration_adds_intent_status_values_and_columns(tmp_path):
         conn.execute(
             "INSERT INTO content_projects (id,owner_user_id,title,status,primary_goal,"
             "target_audience,last_action_at,created_at,updated_at,intent_status,"
-            "retrospective_intent) VALUES "
+            "retrospective_intent,content_intent) VALUES "
             "('p5','u1','Retrospective project','settled','stable_publish','all',"
             "'2026-07-23T00:00:00Z','2026-07-23T00:00:00Z','2026-07-23T00:00:00Z',"
-            "'retrospective','share')"
+            "'retrospective','share',NULL)"
         )
+        assert conn.execute(
+            "SELECT content_intent FROM content_projects WHERE id='p5'"
+        ).fetchone()[0] is None
 
         # Verify invalid retrospective_intent is rejected
         with pytest.raises(sqlite3.IntegrityError):
@@ -507,3 +530,92 @@ def test_intent_model_migration_adds_intent_status_values_and_columns(tmp_path):
         ).fetchone()
         assert hypothesis == ("solve", "Understand X", "save", 30)
 
+
+def test_intent_lock_action_migration_upgrades_database_with_034_recorded(tmp_path):
+    db_path = tmp_path / "intent-lock-action.db"
+    through_034 = tmp_path / "through-034"
+    through_034.mkdir()
+    for path in DEFAULT_MIGRATIONS_DIR.glob("[0-9][0-9][0-9]_*.sql"):
+        if int(path.name[:3]) <= 34:
+            shutil.copy2(path, through_034 / path.name)
+
+    apply(db_path, through_034)
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("PRAGMA foreign_keys=OFF")
+        action_sql = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='next_best_actions'"
+        ).fetchone()[0]
+        dependent_sql = [
+            row[0]
+            for row in conn.execute(
+                "SELECT sql FROM sqlite_master WHERE tbl_name='next_best_actions' "
+                "AND type IN ('index','trigger') AND sql IS NOT NULL"
+            )
+        ]
+        event_trigger_sql = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type='trigger' "
+            "AND name='trg_action_events_experiment_context'"
+        ).fetchone()[0]
+        legacy_sql = action_sql.replace(
+            "next_best_actions", "next_best_actions_pre_035", 1
+        ).replace(",'lock_intent'", "", 1)
+        columns = [
+            row[1] for row in conn.execute("PRAGMA table_info(next_best_actions)")
+        ]
+        column_list = ",".join(columns)
+        conn.execute(legacy_sql)
+        conn.execute(
+            f"INSERT INTO next_best_actions_pre_035 ({column_list}) "
+            f"SELECT {column_list} FROM next_best_actions"
+        )
+        conn.execute("DROP TRIGGER trg_action_events_experiment_context")
+        conn.execute("DROP TABLE next_best_actions")
+        conn.execute(
+            "ALTER TABLE next_best_actions_pre_035 RENAME TO next_best_actions"
+        )
+        for sql in dependent_sql:
+            conn.execute(sql)
+        conn.execute(event_trigger_sql)
+        conn.commit()
+
+    upgraded = apply(db_path, DEFAULT_MIGRATIONS_DIR)
+
+    assert [item.version for item in upgraded] == ["035_intent_lock_action"]
+    with sqlite3.connect(db_path) as conn:
+        action_sql = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='next_best_actions'"
+        ).fetchone()[0]
+        assert "'lock_intent'" in action_sql
+
+
+def test_intent_lock_action_migration_repairs_interrupted_artifacts(tmp_path):
+    db_path = tmp_path / "intent-lock-action-recovery.db"
+    apply(db_path, DEFAULT_MIGRATIONS_DIR)
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            "DELETE FROM schema_migrations WHERE version='035_intent_lock_action'"
+        )
+        conn.execute("DROP INDEX uq_next_best_actions_owner_idempotency")
+        conn.execute("DROP INDEX idx_next_best_actions_owner_status")
+        conn.execute("DROP INDEX idx_next_best_actions_project_status")
+        conn.execute("DROP TRIGGER trg_next_best_actions_experiment_context")
+        conn.execute("DROP TRIGGER trg_action_events_experiment_context")
+        conn.commit()
+
+    repaired = apply(db_path, DEFAULT_MIGRATIONS_DIR)
+
+    assert [item.version for item in repaired] == ["035_intent_lock_action"]
+    with sqlite3.connect(db_path) as conn:
+        artifacts = {
+            row[0]
+            for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type IN ('index','trigger')"
+            )
+        }
+    assert {
+        "uq_next_best_actions_owner_idempotency",
+        "idx_next_best_actions_owner_status",
+        "idx_next_best_actions_project_status",
+        "trg_next_best_actions_experiment_context",
+        "trg_action_events_experiment_context",
+    } <= artifacts

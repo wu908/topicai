@@ -7,6 +7,7 @@ import json
 from typing import Any
 
 from app.services.creator_rule import CreatorRuleService
+from app.services.v2_utils import effective_intent_status
 
 
 class ContentGenomeService:
@@ -32,11 +33,20 @@ class ContentGenomeService:
                 raise ValueError(f"project not found: {project}")
             project = project_row
 
+        intent_status = effective_intent_status(project)
+        content_intent = (
+            project.get("retrospective_intent")
+            if intent_status == "retrospective"
+            else project.get("content_intent")
+        )
         return await self.search(
             owner_user_id,
             project_id=project["id"],
-            content_intent=project.get("content_intent"),
-            intent_confirmed=project.get("intent_status") == "confirmed",
+            content_intent=(
+                None if intent_status == "legacy_unclassified" else content_intent
+            ),
+            intent_confirmed=intent_status
+            in {"working_confirmed", "locked", "retrospective"},
             audience=project.get("target_audience"),
             content_format=project.get("content_format") or project.get("format"),
             experiment=experiment,

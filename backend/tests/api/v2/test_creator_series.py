@@ -35,24 +35,27 @@ async def _published_project(test_db, suffix):
             idempotency_key=f"api-series-version-{suffix}",
         ),
     )
+    await test_db.execute(
+        "UPDATE content_projects SET intent_status='working_confirmed' WHERE id=:id",
+        {"id": project["id"]},
+    )
     project = await ContentProjectService(test_db).get("u1", project["id"])
     await PublishHypothesisService(test_db).lock(
         "u1",
         project["id"],
         PublishHypothesisLock(
             content_version_id=version["id"],
-            audience_problem="创作者不知道如何稳定更新",
-            reader_promise="展示一次真实更新过程",
-            expected_behaviors=["follow"],
+            content_intent="share",
+            audience_change="读者持续看到创作者建立更新节奏",
+            primary_response="follow",
+            supporting_responses=[],
             basis_refs=[f"content-version:{version['id']}"],
             uncertainties=["读者是否期待下一篇"],
+            observation_window_days=7,
+            viewpoint_anchor="稳定更新来自真实过程而非临时决定",
             expected_project_version=project["version"],
             idempotency_key=f"api-series-hypothesis-{suffix}",
         ),
-    )
-    await test_db.execute(
-        "UPDATE content_projects SET intent_status='confirmed' WHERE id=:id",
-        {"id": project["id"]},
     )
     project = await ContentProjectService(test_db).get("u1", project["id"])
     action = await IntentOrchestratorService(test_db).ensure_project_action("u1", project["id"])
@@ -184,7 +187,7 @@ async def test_series_candidate_confirm_list_workspace_and_revoke(
     accepted_data = accepted.json()["data"]
     assert accepted_data["status"] == "accepted"
     assert accepted_data["project"]["opportunity_id"] == opportunity_data["id"]
-    assert accepted_data["project"]["intent_status"] == "confirmed"
+    assert accepted_data["project"]["intent_status"] == "working_confirmed"
 
     refreshed_workspace = await client.get(
         f"/api/v2/projects/{first['id']}/calibration"

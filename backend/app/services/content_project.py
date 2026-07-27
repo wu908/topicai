@@ -8,7 +8,7 @@ from sqlalchemy import text
 
 from app.core.exceptions import IdempotencyConflictException
 from app.models.v2.content_project import ContentProjectCreate
-from app.services.v2_utils import now, request_hash, row_dict
+from app.services.v2_utils import normalize_project_intent, now, request_hash, row_dict
 
 
 class ContentProjectService:
@@ -358,7 +358,7 @@ class ContentProjectService:
 
     @staticmethod
     def _normalize(row: Any) -> dict[str, Any]:
-        result = dict(row)
+        result = normalize_project_intent(row)
         for field in (
             "material_requirements_json",
             "expected_responses_json",

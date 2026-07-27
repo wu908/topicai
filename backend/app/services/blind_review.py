@@ -10,7 +10,12 @@ from app.core.exceptions import IdempotencyConflictException, VersionConflictExc
 from app.models.v2.action_domain import AITraceCreate
 from app.models.v2.calibration import BlindReviewCreate
 from app.services.ai_trace import AITraceService
-from app.services.v2_utils import decode_json_fields, now, request_hash
+from app.services.v2_utils import (
+    decode_json_fields,
+    effective_intent_status,
+    now,
+    request_hash,
+)
 
 
 class BlindReviewService:
@@ -173,9 +178,14 @@ class BlindReviewService:
                 revoked_evidence_ids = await self._revoked_evidence_ids(
                     session, owner_user_id, hypothesis["content_version_id"]
                 )
-                is_legacy = (
+                intent_status = effective_intent_status(project)
+                is_retrospective = intent_status == "retrospective"
+                is_legacy = not is_retrospective and (
                     hypothesis["status"] == "legacy_missing"
-                    or project.get("intent_status") == "legacy_missing"
+                    or intent_status == "legacy_unclassified"
+                )
+                hypothesis_usable = hypothesis["status"] == "locked" or (
+                    is_retrospective and hypothesis["status"] == "legacy_missing"
                 )
                 if contamination_status == "contaminated":
                     calibration_state = "calibration_invalid"
@@ -188,7 +198,7 @@ class BlindReviewService:
                     eligibility_reason_code = "legacy_hypothesis"
                 elif (
                     missing
-                    or hypothesis["status"] != "locked"
+                    or not hypothesis_usable
                     or not has_comparable_metric
                 ):
                     calibration_state = "insufficient"
@@ -432,7 +442,11 @@ class BlindReviewService:
         stored with the review so the later learning gate confirms the exact
         evidence and wording the user saw.
         """
-        intent = project.get("content_intent") or "solve"
+        intent = (
+            project.get("content_intent")
+            or project.get("retrospective_intent")
+            or "solve"
+        )
         labels = {"solve": "解决", "share": "分享", "record": "记录"}
         observed_facts = [
             {

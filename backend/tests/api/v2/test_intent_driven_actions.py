@@ -6,7 +6,10 @@ import json
 import pytest
 from sqlalchemy import text
 
+from app.core.exceptions import VersionConflictException
 from app.models.v2.intent_actions import HumanGateDecision
+from app.services.candidate_review import CandidateReviewService
+from app.services.content_genome import ContentGenomeService
 from app.services.creator_state import CreatorStateService
 from app.services.intent_actions import HumanGateService
 
@@ -41,7 +44,7 @@ async def test_each_intent_changes_the_key_question(client, intent, title_fragme
 
 
 @pytest.mark.asyncio
-async def test_legacy_project_maps_to_solve_but_requires_confirmation(client, test_db):
+async def test_legacy_project_remains_unclassified_and_requires_confirmation(client, test_db):
     session = await test_db.get_session()
     async with session:
         async with session.begin():
@@ -55,10 +58,210 @@ async def test_legacy_project_maps_to_solve_but_requires_confirmation(client, te
                 )
             )
     project = await client.get("/api/v2/projects/legacy-project")
-    assert project.json()["data"]["content_intent"] == "solve"
-    assert project.json()["data"]["intent_status"] == "legacy_missing"
+    assert project.json()["data"]["content_intent"] is None
+    assert project.json()["data"]["intent_status"] == "legacy_unclassified"
     action = await client.get("/api/v2/projects/legacy-project/next-action")
     assert action.json()["data"]["action_type"] == "confirm_intent"
+
+
+@pytest.mark.asyncio
+async def test_legacy_confirmed_status_maps_from_lock_evidence(client, test_db):
+    created = (
+        await client.post(
+            "/api/v2/projects",
+            json={
+                "title": "旧确认项目",
+                "target_audience": "知识型创作者",
+                "idempotency_key": "legacy-confirmed-project",
+            },
+        )
+    ).json()["data"]
+    await test_db.execute(
+        "UPDATE content_projects SET intent_status='confirmed' WHERE id=:id",
+        {"id": created["id"]},
+    )
+
+    working = await client.get(f"/api/v2/projects/{created['id']}")
+    assert working.json()["data"]["intent_status"] == "working_confirmed"
+
+    await test_db.execute(
+        "UPDATE content_projects SET intent_locked_at=:locked WHERE id=:id",
+        {"locked": "2026-07-26T00:00:00Z", "id": created["id"]},
+    )
+    locked = await client.get(f"/api/v2/projects/{created['id']}")
+    assert locked.json()["data"]["intent_status"] == "locked"
+
+
+@pytest.mark.asyncio
+async def test_working_confirmation_cannot_overwrite_locked_intent(client, test_db):
+    created = (
+        await client.post(
+            "/api/v2/projects",
+            json={
+                "title": "已锁定项目",
+                "content_intent": "solve",
+                "idempotency_key": "locked-confirmation-project",
+            },
+        )
+    ).json()["data"]
+    await test_db.execute(
+        "UPDATE content_projects SET intent_status='locked',intent_locked_at=:locked "
+        "WHERE id=:id",
+        {"locked": "2026-07-26T00:00:00Z", "id": created["id"]},
+    )
+
+    response = await client.post(
+        f"/api/v2/projects/{created['id']}/intent:confirm",
+        json={
+            "content_intent": "share",
+            "audience_change": "不应覆盖已锁定的发布意图",
+            "expected_project_version": created["version"],
+            "idempotency_key": "locked-confirmation-retry",
+        },
+    )
+
+    assert response.status_code == 400
+    project = (await client.get(f"/api/v2/projects/{created['id']}")).json()["data"]
+    assert project["content_intent"] == "solve"
+    assert project["intent_status"] == "locked"
+
+
+@pytest.mark.asyncio
+async def test_candidate_confirmation_detects_concurrent_project_change(
+    client, test_db, monkeypatch
+):
+    project = (
+        await client.post(
+            "/api/v2/projects",
+            json={
+                "title": "并发确认项目",
+                "content_intent": "solve",
+                "idempotency_key": "candidate-race-project",
+            },
+        )
+    ).json()["data"]
+    version = (
+        await client.post(
+            f"/api/v2/projects/{project['id']}/versions",
+            json={
+                "title": "候选版本",
+                "body_text": "这是一段已准备确认的候选内容。",
+                "expected_project_version": project["version"],
+                "idempotency_key": "candidate-race-version",
+            },
+        )
+    ).json()["data"]
+    await test_db.execute(
+        "INSERT INTO next_best_actions (id,owner_user_id,project_id,action_type,"
+        "content_intent,title,reason,estimated_effort_minutes,automation_level,"
+        "human_gate_type,fallback_action_json,status,version,idempotency_key,request_hash,"
+        "created_at,updated_at) VALUES ('candidate-race-action','u1',:project,"
+        "'review_candidate','solve','确认候选内容','等待用户确认',1,'guided',"
+        "'content_version','{}','proposed',1,'candidate-race-action-key',"
+        "'candidate-race-action-hash','2026-07-27T00:00:00Z','2026-07-27T00:00:00Z')",
+        {"project": project["id"]},
+    )
+    gate = await HumanGateService(test_db).ensure_for_action(
+        "u1", "candidate-race-action", {"ai_trace_id": "candidate-race-trace"}
+    )
+    validation_complete = asyncio.Event()
+    continue_confirmation = asyncio.Event()
+
+    async def pause_after_validation(*_args, **_kwargs):
+        validation_complete.set()
+        await continue_confirmation.wait()
+
+    monkeypatch.setattr(
+        CandidateReviewService, "assert_ready_to_lock", pause_after_validation
+    )
+    decision = asyncio.create_task(
+        HumanGateService(test_db).decide(
+            "u1",
+            gate["id"],
+            HumanGateDecision(
+                decision="confirm",
+                decision_payload={"facts_confirmed": True},
+                expected_gate_version=gate["version"],
+                idempotency_key="candidate-race-decision",
+            ),
+        )
+    )
+    await validation_complete.wait()
+    await test_db.execute(
+        "UPDATE content_projects SET version=version+1 WHERE id=:id",
+        {"id": project["id"]},
+    )
+    continue_confirmation.set()
+
+    with pytest.raises(VersionConflictException):
+        await decision
+    stored = await test_db.fetch_one(
+        "SELECT current_version_id,last_action FROM content_projects WHERE id=:id",
+        {"id": project["id"]},
+    )
+    assert stored["current_version_id"] == version["id"]
+    assert stored["last_action"] != "candidate_confirmed"
+
+
+@pytest.mark.asyncio
+async def test_user_classifies_legacy_intent_without_changing_publication_intent(
+    client, test_db
+):
+    async with await test_db.get_session() as session:
+        async with session.begin():
+            await session.execute(
+                text(
+                    "INSERT INTO content_projects (id,owner_user_id,title,status,"
+                    "primary_goal,target_audience,last_action_at,version,created_at,updated_at,"
+                    "intent_status) VALUES "
+                    "('retrospective-project','u1','历史内容','published','stable_publish',"
+                    "'知识型创作者','2026-07-20T00:00:00Z',1,'2026-07-20T00:00:00Z',"
+                    "'2026-07-20T00:00:00Z','legacy_missing')"
+                )
+            )
+    stored_before = await test_db.fetch_one(
+        "SELECT content_intent FROM content_projects WHERE id='retrospective-project'"
+    )
+    assert stored_before["content_intent"] == "solve"
+
+    body = {
+        "retrospective_intent": "share",
+        "classification_basis": "用户确认这是一次个人经历分享",
+        "expected_project_version": 1,
+        "idempotency_key": "retrospective-classification-1",
+    }
+    classified = await client.post(
+        "/api/v2/projects/retrospective-project/intent:classify-retrospective",
+        json=body,
+    )
+
+    assert classified.status_code == 201
+    project = classified.json()["data"]["project"]
+    assert project["intent_status"] == "retrospective"
+    assert project["retrospective_intent"] == "share"
+    assert project["content_intent"] is None
+    stored_after = await test_db.fetch_one(
+        "SELECT content_intent FROM content_projects WHERE id='retrospective-project'"
+    )
+    assert stored_after["content_intent"] is None
+    genome = await ContentGenomeService(test_db).for_project(
+        "u1", "retrospective-project"
+    )
+    assert genome["query"]["content_intent"] == "share"
+    assert genome["query"]["intent_confirmed"] is True
+    next_action = await client.get(
+        "/api/v2/projects/retrospective-project/next-action"
+    )
+    assert next_action.status_code == 200
+    assert next_action.json()["data"]["action_type"] == "answer_key_question"
+    assert "改变了你的看法或感受" in next_action.json()["data"]["title"]
+
+    replay = await client.post(
+        "/api/v2/projects/retrospective-project/intent:classify-retrospective",
+        json=body,
+    )
+    assert replay.status_code == 200
+    assert replay.json()["meta"]["idempotency_replayed"] is True
 
 
 @pytest.mark.asyncio
@@ -104,7 +307,7 @@ async def test_growth_creator_completes_confirmed_learning_loop(
     )
     assert confirmed.status_code == 201
     project = confirmed.json()["data"]["project"]
-    assert project["intent_status"] == "confirmed"
+    assert project["intent_status"] == "working_confirmed"
 
     question = confirmed.json()["data"]["next_action"]
     assert question["action_type"] == "answer_key_question"
@@ -193,7 +396,7 @@ async def test_growth_creator_completes_confirmed_learning_loop(
     assert gate_payload["payload"]["content_version_id"] == review["content_version_id"]
     assert gate_payload["payload"]["ai_trace_id"] == candidate["ai_trace_id"]
 
-    locked = await client.post(
+    candidate_confirmed = await client.post(
         f"/api/v2/human-gates/{gate_payload['id']}:decide",
         json={
             "decision": "confirm",
@@ -202,16 +405,41 @@ async def test_growth_creator_completes_confirmed_learning_loop(
             "idempotency_key": "intent-candidate-confirm",
         },
     )
-    assert locked.status_code == 201
-    assert locked.json()["data"]["gate"]["status"] == "confirmed"
-    assert locked.json()["data"]["next_action"]["action_type"] == "record_publication"
+    assert candidate_confirmed.status_code == 201
+    assert candidate_confirmed.json()["data"]["gate"]["status"] == "confirmed"
+    lock_action = candidate_confirmed.json()["data"]["next_action"]
+    assert lock_action["action_type"] == "lock_intent"
+
+    lock_project = (
+        await client.get(f"/api/v2/projects/{project['id']}")
+    ).json()["data"]
+    lock_response = await client.post(
+        f"/api/v2/projects/{project['id']}/publish-hypothesis:lock",
+        json={
+            "content_version_id": review["content_version_id"],
+            "content_intent": "record",
+            "audience_change": "读者愿意持续关注我的变化过程",
+            "primary_response": "follow",
+            "supporting_responses": ["comment"],
+            "basis_refs": [f"version:{review['content_version_id']}"],
+            "uncertainties": ["平台分发和具体表现不可预测"],
+            "observation_window_days": 7,
+            "continuation_promise": "继续记录每周更新节奏的变化",
+            "expected_project_version": lock_project["version"],
+            "idempotency_key": "intent-publish-lock",
+        },
+    )
+    assert lock_response.status_code == 201
+    publication_action = (
+        await client.get(f"/api/v2/projects/{project['id']}/next-action")
+    ).json()["data"]
+    assert publication_action["action_type"] == "record_publication"
 
     workspace_response = await client.get(
         f"/api/v2/projects/{project['id']}/calibration"
     )
     assert workspace_response.status_code == 200
     workspace = workspace_response.json()["data"]
-    publication_action = locked.json()["data"]["next_action"]
     publication_gate = (
         await client.post(f"/api/v2/actions/{publication_action['id']}/human-gate")
     ).json()["data"]

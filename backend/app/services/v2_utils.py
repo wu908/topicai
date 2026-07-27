@@ -36,6 +36,23 @@ def row_dict(row: Any) -> dict[str, Any] | None:
     return dict(row) if row is not None else None
 
 
+def effective_intent_status(project: Any) -> str:
+    status = project.get("intent_status")
+    if status == "confirmed":
+        return "locked" if project.get("intent_locked_at") else "working_confirmed"
+    if status == "legacy_missing":
+        return "legacy_unclassified"
+    return status
+
+
+def normalize_project_intent(project: Any) -> dict[str, Any]:
+    result = dict(project)
+    result["intent_status"] = effective_intent_status(result)
+    if result["intent_status"] in {"legacy_unclassified", "retrospective"}:
+        result["content_intent"] = None
+    return result
+
+
 def decode_json_fields(row: Any, *fields: str) -> dict[str, Any]:
     result = dict(row)
     for field in fields:

@@ -22,13 +22,17 @@ from app.models.v2.intent_actions import (
     HumanGateType,
     IntentConfirmation,
 )
-from app.models.v2.publish_hypothesis import PublishHypothesisLock
+from app.models.v2.publish_hypothesis import RetrospectiveIntentClassification
 from app.services.content_version import ContentVersionService
 from app.services.creator_state import CreatorStateService
 from app.services.evidence import EvidenceService
 from app.services.intent_orchestrator import INTENT_CONFIG, IntentOrchestratorService
-from app.services.publish_hypothesis import PublishHypothesisService
-from app.services.v2_utils import now, request_hash
+from app.services.v2_utils import (
+    effective_intent_status,
+    normalize_project_intent,
+    now,
+    request_hash,
+)
 
 
 class IntentConfirmationService:
@@ -60,10 +64,13 @@ class IntentConfirmationService:
                 project = await self._project(session, owner_user_id, project_id)
                 if project["version"] != body.expected_project_version:
                     raise VersionConflictException(project["version"], body.expected_project_version)
+                if effective_intent_status(project) in {"locked", "retrospective"}:
+                    raise ValueError("intent is immutable after lock or retrospective classification")
                 timestamp = now()
                 updated = await session.execute(
                     text(
-                        "UPDATE content_projects SET content_intent=:intent,intent_status='confirmed',"
+                        "UPDATE content_projects SET content_intent=:intent,"
+                        "intent_status='working_confirmed',"
                         "audience_change=:change,material_requirements_json=:materials,"
                         "expected_responses_json=:responses,success_signals_json=:signals,"
                         "last_action='intent_confirmed',last_action_at=:now,updated_at=:now,"
@@ -131,6 +138,100 @@ class IntentConfirmationService:
         )
         return {"project": self._normalize_project(updated_project), "next_action": next_action}, False
 
+    async def classify_retrospective(
+        self,
+        owner_user_id: str,
+        project_id: str,
+        body: RetrospectiveIntentClassification,
+    ) -> tuple[dict[str, Any], bool]:
+        digest = request_hash(
+            {"project_id": project_id, "body": body.model_dump(mode="json")}
+        )
+        session = await self.db.get_session()
+        async with session:
+            async with session.begin():
+                replay = (
+                    await session.execute(
+                        text(
+                            "SELECT * FROM action_events WHERE owner_user_id=:owner "
+                            "AND idempotency_key=:key"
+                        ),
+                        {"owner": owner_user_id, "key": body.idempotency_key},
+                    )
+                ).mappings().first()
+                if replay:
+                    if replay["request_hash"] != digest:
+                        raise IdempotencyConflictException()
+                    project = await self._project(session, owner_user_id, project_id)
+                    return {"project": self._normalize_project(project)}, True
+
+                project = await self._project(session, owner_user_id, project_id)
+                if project["version"] != body.expected_project_version:
+                    raise VersionConflictException(
+                        project["version"], body.expected_project_version
+                    )
+                if project["status"] not in {"published", "awaiting_review", "settled"}:
+                    raise ValueError("retrospective classification requires historical content")
+                if project["intent_status"] not in {
+                    "legacy_missing",
+                    "legacy_unclassified",
+                }:
+                    raise ValueError("project is not legacy unclassified")
+
+                timestamp = now()
+                updated = await session.execute(
+                    text(
+                        "UPDATE content_projects SET intent_status='retrospective',"
+                        "content_intent=NULL,retrospective_intent=:intent,"
+                        "last_action='retrospective_intent_classified',"
+                        "last_action_at=:now,updated_at=:now,version=version+1 "
+                        "WHERE id=:project AND owner_user_id=:owner AND version=:expected "
+                        "AND intent_status IN ('legacy_missing','legacy_unclassified') "
+                        "AND retrospective_intent IS NULL"
+                    ),
+                    {
+                        "intent": body.retrospective_intent.value,
+                        "now": timestamp,
+                        "project": project_id,
+                        "owner": owner_user_id,
+                        "expected": body.expected_project_version,
+                    },
+                )
+                if updated.rowcount != 1:
+                    raise VersionConflictException(
+                        project["version"], body.expected_project_version
+                    )
+                action_id = await self._synthetic_action(
+                    session, owner_user_id, project, timestamp, digest
+                )
+                payload = {
+                    "retrospective_intent": body.retrospective_intent.value,
+                    "classification_basis": body.classification_basis.strip(),
+                }
+                await session.execute(
+                    text(
+                        "INSERT INTO action_events (id,owner_user_id,action_id,project_id,"
+                        "event_type,from_status,to_status,payload_json,action_version,"
+                        "idempotency_key,request_hash,created_at) VALUES "
+                        "(:id,:owner,:action,:project,'gate_confirmed','proposed','completed',"
+                        ":payload,1,:key,:hash,:now)"
+                    ),
+                    {
+                        "id": str(uuid.uuid4()),
+                        "owner": owner_user_id,
+                        "action": action_id,
+                        "project": project_id,
+                        "payload": json.dumps(payload, ensure_ascii=False),
+                        "key": body.idempotency_key,
+                        "hash": digest,
+                        "now": timestamp,
+                    },
+                )
+                updated_project = await self._project(
+                    session, owner_user_id, project_id
+                )
+        return {"project": self._normalize_project(updated_project)}, False
+
     @staticmethod
     async def _project(session, owner: str, project: str):
         row = (
@@ -166,7 +267,7 @@ class IntentConfirmationService:
 
     @staticmethod
     def _normalize_project(row: Any) -> dict[str, Any]:
-        result = dict(row)
+        result = normalize_project_intent(row)
         for field in ("material_requirements_json", "expected_responses_json", "success_signals_json"):
             result[field.removesuffix("_json")] = json.loads(result.pop(field))
         return result
@@ -1030,29 +1131,29 @@ class HumanGateService:
             for item in json.loads(version["evidence_snapshot_json"]):
                 if item.get("evidence_id"):
                     await EvidenceService(self.db).assert_reusable(owner, item["evidence_id"])
-        intent = project["content_intent"]
-        behaviors = {
-            "solve": ["save", "follow"],
-            "share": ["comment", "follow"],
-            "record": ["follow", "comment"],
-        }[intent]
-        problem = project["target_audience"].strip() or {
-            "solve": "需要解决这一具体问题的读者",
-            "share": "与这段经历有相似感受的读者",
-            "record": "想持续了解这一变化过程的读者",
-        }[intent]
-        promise = project["audience_change"] or "获得一条基于真实经历的内容"
-        body = PublishHypothesisLock(
-            content_version_id=project["current_version_id"],
-            audience_problem=problem,
-            reader_promise=promise,
-            expected_behaviors=behaviors,
-            basis_refs=[f"project:{project['id']}:confirmed_intent", f"version:{project['current_version_id']}"],
-            uncertainties=["平台分发和具体表现不可预测"],
-            expected_project_version=project["version"],
-            idempotency_key=f"gate:{gate['id']}:publish-lock",
+        updated = await self.db.execute(
+            "UPDATE content_projects SET last_action='candidate_confirmed',"
+            "last_action_at=:now,updated_at=:now,version=version+1 "
+            "WHERE id=:project AND owner_user_id=:owner AND version=:expected "
+            "AND current_version_id=:content_version",
+            {
+                "now": now(),
+                "project": project["id"],
+                "owner": owner,
+                "expected": project["version"],
+                "content_version": project["current_version_id"],
+            },
         )
-        await PublishHypothesisService(self.db).lock(owner, project["id"], body)
+        if updated is None or updated.rowcount != 1:
+            current = await self.db.fetch_one(
+                "SELECT version FROM content_projects WHERE id=:project "
+                "AND owner_user_id=:owner",
+                {"project": project["id"], "owner": owner},
+            )
+            raise VersionConflictException(
+                current["version"] if current else project["version"],
+                project["version"],
+            )
 
     async def _gate(self, owner: str, gate_id: str) -> dict[str, Any]:
         row = await self.db.fetch_one(

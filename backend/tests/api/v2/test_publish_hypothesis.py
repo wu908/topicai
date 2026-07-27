@@ -4,6 +4,39 @@ import pytest
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "body",
+    [
+        {
+            "content_version_id": "v1",
+            "content_intent": "share",
+            "audience_change": "读者理解一次观点变化",
+            "primary_response": "comment",
+            "observation_window_days": 7,
+            "viewpoint_anchor": "一次真实经历",
+            "audience_problem": "不属于 share 的字段",
+            "expected_project_version": 1,
+            "idempotency_key": "invalid-share-fields",
+        },
+        {
+            "content_version_id": "v1",
+            "content_intent": "record",
+            "audience_change": "读者持续关注变化",
+            "primary_response": "follow",
+            "observation_window_days": 7,
+            "expected_project_version": 1,
+            "idempotency_key": "missing-record-field",
+        },
+    ],
+)
+async def test_lock_rejects_incomplete_or_cross_intent_fields(client, body):
+    response = await client.post(
+        "/api/v2/projects/any-project/publish-hypothesis:lock", json=body
+    )
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_create_version_and_lock_publish_hypothesis(client):
     project_response = await client.post(
         "/api/v2/projects",
@@ -30,16 +63,35 @@ async def test_create_version_and_lock_publish_hypothesis(client):
     version = version_response.json()["data"]
 
     refreshed = (await client.get(f"/api/v2/projects/{project['id']}")).json()["data"]
+    confirmation = await client.post(
+        f"/api/v2/projects/{project['id']}/intent:confirm",
+        json={
+            "content_intent": "solve",
+            "audience_change": "读者能够开始第一篇内容",
+            "material_requirements": [],
+            "expected_responses": ["save"],
+            "success_signals": ["saves"],
+            "expected_project_version": refreshed["version"],
+            "idempotency_key": "api-intent-confirm-1",
+        },
+    )
+    assert confirmation.status_code == 201
+    confirmed = confirmation.json()["data"]["project"]
+    assert confirmed["intent_status"] == "working_confirmed"
     lock_response = await client.post(
         f"/api/v2/projects/{project['id']}/publish-hypothesis:lock",
         json={
             "content_version_id": version["id"],
+            "content_intent": "solve",
+            "audience_change": "读者能够按真实经验开始第一篇内容",
+            "primary_response": "save",
+            "supporting_responses": ["profile_visit"],
+            "observation_window_days": 7,
             "audience_problem": "不知道第一篇写什么",
             "reader_promise": "提供真实而可执行的起步顺序",
-            "expected_behaviors": ["save", "profile_visit"],
             "basis_refs": ["user_fact:first-post"],
             "uncertainties": ["关注转化仍需验证"],
-            "expected_project_version": refreshed["version"],
+            "expected_project_version": confirmed["version"],
             "idempotency_key": "api-hypothesis-1",
         },
     )
@@ -72,12 +124,16 @@ async def test_create_version_and_lock_publish_hypothesis(client):
         f"/api/v2/projects/{project['id']}/publish-hypothesis:lock",
         json={
             "content_version_id": version["id"],
+            "content_intent": "solve",
+            "audience_change": "读者能够按真实经验开始第一篇内容",
+            "primary_response": "save",
+            "supporting_responses": ["profile_visit"],
+            "observation_window_days": 7,
             "audience_problem": "不知道第一篇写什么",
             "reader_promise": "提供真实而可执行的起步顺序",
-            "expected_behaviors": ["save", "profile_visit"],
             "basis_refs": ["user_fact:first-post"],
             "uncertainties": ["关注转化仍需验证"],
-            "expected_project_version": refreshed["version"],
+            "expected_project_version": confirmed["version"],
             "idempotency_key": "api-hypothesis-1",
         },
     )

@@ -1,0 +1,5 @@
+-- Spec-010 follow-up: expand next_best_actions.action_type for explicit Intent Lock.
+--
+-- The CHECK constraint requires a SQLite table rebuild. That rebuild lives in
+-- runner.py's _post_step_035_intent_lock_action so databases that already
+-- recorded migration 034 still receive the new action type safely.
