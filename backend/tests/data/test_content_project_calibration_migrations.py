@@ -117,6 +117,7 @@ def test_intent_action_migration_upgrades_from_019_and_replays(tmp_path):
         "034_intent_model_migration",
         "035_intent_lock_action",
         "036_creator_series_scope",
+        "037_capability_trust",
     ]
     assert replay == []
     with sqlite3.connect(db_path) as conn:
@@ -179,6 +180,7 @@ def test_action_lifecycle_migration_rebuilds_phase_15_constraints(tmp_path):
         "034_intent_model_migration",
         "035_intent_lock_action",
         "036_creator_series_scope",
+        "037_capability_trust",
     ]
     with sqlite3.connect(db_path) as conn:
         action_sql = conn.execute(
@@ -241,6 +243,7 @@ def test_source_verification_migration_preserves_series_opportunities(tmp_path):
         "034_intent_model_migration",
         "035_intent_lock_action",
         "036_creator_series_scope",
+        "037_capability_trust",
     ]
     with sqlite3.connect(db_path) as conn:
         opportunity = conn.execute(
@@ -586,6 +589,7 @@ def test_intent_lock_action_migration_upgrades_database_with_034_recorded(tmp_pa
     assert [item.version for item in upgraded] == [
         "035_intent_lock_action",
         "036_creator_series_scope",
+        "037_capability_trust",
     ]
     with sqlite3.connect(db_path) as conn:
         action_sql = conn.execute(

@@ -62,6 +62,8 @@ class CreatorState(StrictModel):
     candidate_acceptance_rate: float = Field(ge=0, le=1)
     unresolved_correction_count: int = Field(ge=0)
     autopilot_consent: bool
+    # ADR 0002: per-capability accepted counts for auto-prepare capabilities.
+    capability_trust: dict[str, int]
     source_refs: list[Any]
     version: int = Field(ge=1)
     created_at: str
