@@ -9,7 +9,6 @@ from app.models.v2.intent_actions import AccountGateRequest, HumanGateType
 from app.services.account_data import AccountDataService
 from app.services.intent_actions import HumanGateService
 
-
 router = APIRouter(prefix="/account", tags=["Account data v2"])
 
 

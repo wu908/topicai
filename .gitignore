@@ -74,13 +74,8 @@ frontend/coverage/
 *.cache
 .mcp_config*
 
-# Prototype drafts and plan docs (working files)
-topicai-v2-improved.html
-topicai-v3-complete.html
-topicai-v3-fixed.html
-topicai-v3-login-meta.html
-scheme-b-direction-2.html
-原型分析报告.md
+# Prototype drafts and plan docs (working files, stored in docs/prototypes/)
+docs/prototypes/
 
 # Toolchain extensions (regenerable; do not commit)
 .agents/

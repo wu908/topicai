@@ -412,7 +412,7 @@ class ActionResponseService:
                 action_id,
                 {**event_payload, "statement": answer},
             )
-        result = {
+        result: dict[str, Any] = {
             "action": updated_action,
             "event": {"id": event_id, "event_type": event_type, "payload": event_payload},
             "next_action": updated_action if updated_action.get("human_gate") else None,

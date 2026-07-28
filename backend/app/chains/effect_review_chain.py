@@ -361,7 +361,7 @@ def _heuristic_attribute(
 
 def _maybe_load_json(v: Any) -> Any:
     """Load JSON text if ``v`` is a string; pass through dicts/lists."""
-    if v is None or isinstance(v, (dict, list)):
+    if v is None or isinstance(v, dict | list):
         return v
     if isinstance(v, str):
         try:

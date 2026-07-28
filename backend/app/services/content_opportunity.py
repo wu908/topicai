@@ -25,7 +25,6 @@ from app.services.content_project import ContentProjectService
 from app.services.creator_series import CreatorSeriesService
 from app.services.v2_utils import effective_intent_status, now, request_hash
 
-
 PUBLISHED_STATUSES = {"published", "awaiting_review", "settled"}
 MATERIALS_BY_INTENT = {
     "solve": ["真实问题场景", "实际使用的方法", "案例或适用限制"],

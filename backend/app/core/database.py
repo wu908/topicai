@@ -182,10 +182,10 @@ class Database:
         itself calls this once the pragmas + session factory are set up.
         """
         from app.data.migrations.runner import (
-            DEFAULT_MIGRATIONS_DIR,
             _INTENT_ACTION_EVENT_TRIGGER_SQL,
             _INTENT_ACTION_INDEX_TRIGGER_SQL,
             _INTENT_MODEL_CONTENT_PROJECTS_SQL,
+            DEFAULT_MIGRATIONS_DIR,
             _intent_action_table_sql,
             _list_migration_files,
             _sha256,

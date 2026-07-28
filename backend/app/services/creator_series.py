@@ -22,7 +22,6 @@ from app.services.ai_trace import AITraceService
 from app.services.creator_state import CreatorStateService
 from app.services.v2_utils import effective_intent_status, now, request_hash
 
-
 ELIGIBLE_SERIES_STATUSES = {"published", "awaiting_review", "settled"}
 
 

@@ -8,7 +8,6 @@ from sqlalchemy import text
 
 from app.services.v2_utils import now
 
-
 JSON_FIELDS = (
     "facts_json",
     "inferences_json",

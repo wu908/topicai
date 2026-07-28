@@ -12,7 +12,6 @@ from app.models.v2.account_data import OwnerDataExport
 from app.services.content_genome import ContentGenomeService
 from app.services.v2_utils import now
 
-
 EXPORT_TABLES: tuple[tuple[str, str], ...] = (
     ("content_projects", "owner_user_id"),
     ("content_versions", "owner_user_id"),

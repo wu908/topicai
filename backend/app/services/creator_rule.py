@@ -80,7 +80,7 @@ class CreatorRuleService:
                 f"at least {self.MIN_SAMPLES} comparable observations are required before proposing a rule"
             )
         rule_key = hashlib.sha256(
-            f"{intent}:{observation['statement'].strip()}".encode("utf-8")
+            f"{intent}:{observation['statement'].strip()}".encode()
         ).hexdigest()[:32]
         session = await self.db.get_session()
         async with session:

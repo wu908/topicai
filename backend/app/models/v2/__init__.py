@@ -1,5 +1,16 @@
 """Typed contracts for the TopicAI ContentProject API."""
 from app.models.v2.account_data import OwnerDataExport
+from app.models.v2.action_domain import (
+    ActionEvent,
+    AITrace,
+    AITraceCreate,
+    ContentGenome,
+    CreatorState,
+    Evidence,
+    Experiment,
+    HumanGate,
+    NextBestAction,
+)
 from app.models.v2.calibration import (
     BenchmarkSampleCreate,
     BenchmarkSampleInclusionUpdate,
@@ -8,32 +19,6 @@ from app.models.v2.calibration import (
     ObservationTransition,
     PerformanceSnapshotCreate,
     PublishRecordCreate,
-)
-from app.models.v2.publish_hypothesis import (
-    PublishHypothesisAmendmentCreate,
-    PublishHypothesisLock,
-    RetrospectiveIntentClassification,
-)
-from app.models.v2.action_domain import (
-    AITrace,
-    AITraceCreate,
-    ActionEvent,
-    ContentGenome,
-    CreatorState,
-    Evidence,
-    Experiment,
-    HumanGate,
-    NextBestAction,
-)
-from app.models.v2.intent_actions import (
-    AccountGateRequest,
-    ActionLifecycleCommand,
-    ActionResponse,
-    AutomationLevel,
-    ContentIntent,
-    HumanGateDecision,
-    IntentConfirmation,
-    IntentStatus,
 )
 from app.models.v2.evidence import (
     EvidenceConfirmationStatus,
@@ -49,11 +34,26 @@ from app.models.v2.experiment_metrics import (
     CalibrationQuality,
     ExperimentAssignmentUpsert,
     ExperimentId,
-    MetricsWindow,
     MetricsFilter,
+    MetricsWindow,
     PrivacyBoundary,
     RateMetric,
     SafeActionEvent,
+)
+from app.models.v2.intent_actions import (
+    AccountGateRequest,
+    ActionLifecycleCommand,
+    ActionResponse,
+    AutomationLevel,
+    ContentIntent,
+    HumanGateDecision,
+    IntentConfirmation,
+    IntentStatus,
+)
+from app.models.v2.publish_hypothesis import (
+    PublishHypothesisAmendmentCreate,
+    PublishHypothesisLock,
+    RetrospectiveIntentClassification,
 )
 
 __all__ = [

@@ -162,14 +162,14 @@ class CalibrationWorkspaceService:
             else None
         )
 
-        from app.services.intent_orchestrator import IntentOrchestratorService
         from app.services.candidate_review import CandidateReviewService
-        from app.services.creator_rule import CreatorRuleService
-        from app.services.creator_state import CreatorStateService
         from app.services.content_genome import ContentGenomeService
-        from app.services.creator_viewpoint import CreatorViewpointService
-        from app.services.creator_series import CreatorSeriesService
         from app.services.content_opportunity import ContentOpportunityService
+        from app.services.creator_rule import CreatorRuleService
+        from app.services.creator_series import CreatorSeriesService
+        from app.services.creator_state import CreatorStateService
+        from app.services.creator_viewpoint import CreatorViewpointService
+        from app.services.intent_orchestrator import IntentOrchestratorService
 
         return {
             "project": self._normalize_project(project),

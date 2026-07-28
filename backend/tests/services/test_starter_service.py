@@ -1,7 +1,6 @@
 """Service contracts for the bounded starter experiment."""
 
 import pytest
-from sqlalchemy import text
 
 from app.models.v2.starter import (
     DirectionGenerate,

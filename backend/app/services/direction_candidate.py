@@ -13,7 +13,6 @@ from app.services.ai_trace import AITraceService
 from app.services.starter_assessment import StarterAssessmentService
 from app.services.v2_utils import now, request_hash
 
-
 DIRECTION_COPY = {
     "experience_assets": {
         "label": "把一段真实经历变成可复用的经验",

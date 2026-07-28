@@ -124,6 +124,6 @@ async def test_viewpoint_routes_are_typed_in_openapi_and_owner_scoped(
     assert other_owner_list.json()["data"]["items"] == []
 
     openapi = (await client.get("/openapi.json")).json()["paths"]
-    assert f"/api/v2/projects/{{project_id}}/viewpoint-candidates" in openapi
-    assert f"/api/v2/creator-viewpoints/{{viewpoint_id}}:decide" in openapi
-    assert f"/api/v2/creator-viewpoints/{{viewpoint_id}}:revoke" in openapi
+    assert "/api/v2/projects/{project_id}/viewpoint-candidates" in openapi
+    assert "/api/v2/creator-viewpoints/{viewpoint_id}:decide" in openapi
+    assert "/api/v2/creator-viewpoints/{viewpoint_id}:revoke" in openapi

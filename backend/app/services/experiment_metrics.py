@@ -488,7 +488,7 @@ class ExperimentMetricsService:
         return {
             "event_id": row["id"],
             "user_id_hash": hashlib.sha256(
-                f"topicai-action-metrics-v1:{owner}".encode("utf-8")
+                f"topicai-action-metrics-v1:{owner}".encode()
             ).hexdigest(),
             "action_id": row["action_id"],
             "action_type": row["action_type"],

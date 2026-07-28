@@ -10,10 +10,9 @@ from sqlalchemy import text
 
 from app.models.v2.action_domain import AITraceCreate
 from app.services.ai_trace import AITraceService
-from app.services.creator_state import CreatorStateService
 from app.services.content_genome import ContentGenomeService
+from app.services.creator_state import CreatorStateService
 from app.services.v2_utils import effective_intent_status, now, request_hash
-
 
 INTENT_CONFIG = {
     "solve": {

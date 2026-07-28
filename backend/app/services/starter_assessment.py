@@ -10,7 +10,6 @@ from app.core.exceptions import IdempotencyConflictException
 from app.models.v2.starter import StarterAssessmentCreate
 from app.services.v2_utils import now, request_hash
 
-
 ASSET_FIELDS = ("experience_assets", "skill_assets", "interest_assets")
 
 
