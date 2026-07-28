@@ -23,6 +23,7 @@ const modeLabels = {
 const actionLabels: Record<IntentAction['action_type'], string> = {
   create_project: '开始一条内容',
   confirm_intent: '确认内容想产生的影响',
+  lock_intent: '锁定发布意图',
   answer_key_question: '补充一个关键真实细节',
   review_candidate: '确认候选内容',
   confirm_publish_scope: '确认公开范围',
@@ -36,6 +37,7 @@ const actionLabels: Record<IntentAction['action_type'], string> = {
 const outcomeLabels: Record<IntentAction['action_type'], string> = {
   create_project: '得到一个可以继续推进的内容项目',
   confirm_intent: '后续提问、结构和复盘信号会按这个目的调整',
+  lock_intent: '把本次发布意图和发布判断保存为不可覆盖的历史依据',
   answer_key_question: 'AI 可以基于你确认的事实准备候选内容',
   review_candidate: '锁定一个不会被重新生成覆盖的发布版本',
   confirm_publish_scope: '明确哪些内容可以公开',

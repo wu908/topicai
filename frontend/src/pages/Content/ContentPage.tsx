@@ -76,7 +76,7 @@ import './ContentPage.css';
 
 const nextActionLabels: Record<NextAction, string> = {
   create_version: '先写下真实经历',
-  lock_hypothesis: '确认要帮助谁',
+  lock_hypothesis: '锁定发布意图',
   record_publication: '记录已经发布',
   add_snapshot: '回填实际表现',
   run_blind_review: '对照发布结果',
