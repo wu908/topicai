@@ -624,6 +624,8 @@ export interface CreatorState {
   candidate_acceptance_rate: number;
   unresolved_correction_count: number;
   autopilot_consent: boolean;
+  /** ADR 0002: accepted-result count per auto-prepare capability. */
+  capability_trust: Record<string, number>;
   autopilot_eligible: boolean;
   version: number;
 }
