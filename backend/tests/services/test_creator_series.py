@@ -202,15 +202,6 @@ async def test_candidate_requires_published_same_scope_projects_and_stays_provis
             "u1", _candidate_input(first, draft, "series-draft-source")
         )
 
-    different_intent = await _published_project(
-        series_db, suffix="different-intent", intent="solve"
-    )
-    with pytest.raises(ValueError, match="share content intent and format"):
-        await service.propose(
-            "u1",
-            _candidate_input(first, different_intent, "series-scope-mismatch"),
-        )
-
 
 @pytest.mark.asyncio
 async def test_available_model_produces_structured_series_candidate(series_db):
@@ -645,3 +636,256 @@ async def test_today_surfaces_a_pending_series_opportunity_after_active_work_is_
     assert manual["action"]["status"] == "completed"
     assert manual["event"]["event_type"] == "manual_selected"
     assert manual["event"]["payload"]["fallback_action"]["path"] == "/opportunities"
+
+
+# ── Spec-011: Creator Series scope / intent constraint removal ────────────────
+
+
+@pytest.mark.asyncio
+async def test_mixed_intent_series_is_proposed_and_stores_member_scope(series_db):
+    """Series from projects with different intents can now be proposed."""
+    share_project = await _published_project(series_db, suffix="mixed-share", intent="share")
+    solve_project = await _published_project(series_db, suffix="mixed-solve", intent="solve")
+    service = CreatorSeriesService(series_db)
+
+    candidate, _ = await service.propose(
+        "u1", _candidate_input(share_project, solve_project, "mixed-scope-propose")
+    )
+    assert candidate["status"] == "proposed"
+
+    scope = candidate["scope"]
+    # Spec-011: member lists present in scope
+    assert set(scope["member_intents"]) == {"share", "solve"}
+    assert len(scope["member_intents"]) == 2
+    # Scalar is null when members disagree
+    assert candidate["content_intent"] is None
+
+
+@pytest.mark.asyncio
+async def test_uniform_series_still_sets_scalar_intent_format(series_db):
+    """Series from same-intent/format projects still populates scalar fields."""
+    first = await _published_project(series_db, suffix="uniform-one", intent="share")
+    second = await _published_project(series_db, suffix="uniform-two", intent="share")
+    service = CreatorSeriesService(series_db)
+
+    candidate, _ = await service.propose(
+        "u1", _candidate_input(first, second, "uniform-scope-propose")
+    )
+    scope = candidate["scope"]
+    assert scope["member_intents"] == ["share"]  # deduplicated per spec §3.2
+    # Scalar populated since unanimous
+    assert candidate["content_intent"] == "share"
+    assert scope.get("content_intent") == "share"
+
+
+@pytest.mark.asyncio
+async def test_assert_sources_available_validates_member_intent_sets(series_db):
+    """_assert_sources_available compares member sets, works for mixed series."""
+    share_project = await _published_project(series_db, suffix="assert-share", intent="share")
+    solve_project = await _published_project(series_db, suffix="assert-solve", intent="solve")
+    service = CreatorSeriesService(series_db)
+
+    candidate, _ = await service.propose(
+        "u1", _candidate_input(share_project, solve_project, "assert-propose")
+    )
+    # Confirm should work (sources still valid)
+    confirmed, _ = await service.decide(
+        "u1",
+        candidate["id"],
+        SeriesDecision(
+            decision="confirm",
+            confirmed_name="混合意图系列",
+            confirmed_promise="为不同需求的读者提供多角度内容",
+            confirmed_continuation_prompt="下一篇从解决问题的角度切入",
+            expected_series_version=candidate["version"],
+            idempotency_key="assert-confirm",
+        ),
+    )
+    assert confirmed["status"] == "confirmed"
+
+    # If a project's intent changed the member set no longer matches
+    await series_db.execute(
+        "UPDATE content_projects SET content_intent='record' WHERE id=:id",
+        {"id": solve_project["id"]},
+    )
+    with pytest.raises(ValueError, match="no longer match the candidate scope"):
+        await service.get_usable("u1", confirmed["id"])
+
+
+@pytest.mark.asyncio
+async def test_genome_any_member_match_includes_mixed_intent_series(series_db):
+    """A series with members of intent A and B appears in genome for both A and B queries."""
+    share_project = await _published_project(series_db, suffix="genome-share", intent="share")
+    solve_project = await _published_project(series_db, suffix="genome-solve", intent="solve")
+    target_share = await _target_project(series_db, suffix="genome-target-share")
+    service = CreatorSeriesService(series_db)
+
+    candidate, _ = await service.propose(
+        "u1", _candidate_input(share_project, solve_project, "genome-mixed-propose")
+    )
+    confirmed, _ = await service.decide(
+        "u1",
+        candidate["id"],
+        SeriesDecision(
+            decision="confirm",
+            confirmed_name="多角度稳定更新",
+            confirmed_promise="从不同意图出发，都指向同一个读者价值",
+            confirmed_continuation_prompt="下一篇以解决问题为切入点继续延展",
+            expected_series_version=candidate["version"],
+            idempotency_key="genome-mixed-confirm",
+        ),
+    )
+    series_ref = f"creator-series:{confirmed['id']}"
+
+    # share-intent project genome should find the series via member "share"
+    genome_share = await ContentGenomeService(series_db).for_project("u1", target_share["id"])
+    series_refs_in_context = [item["source_ref"] for item in genome_share["series_context"]]
+    assert series_ref in series_refs_in_context
+
+    # solve-intent query genome should also find the series via member "solve".
+    # The format is supplied the way for_project() supplies it; a query with no
+    # format degrades any scoped item to needs_context (pre-existing behavior).
+    genome_solve = await ContentGenomeService(series_db).search(
+        "u1",
+        content_intent="solve",
+        intent_confirmed=True,
+        content_format="graphic_note",
+    )
+    series_refs_solve = [item["source_ref"] for item in genome_solve["series_context"]]
+    assert series_ref in series_refs_solve
+
+    # record-intent query should NOT find the series (no member has record), and
+    # the series must not even appear as a node for that intent.
+    genome_record = await ContentGenomeService(series_db).search(
+        "u1",
+        content_intent="record",
+        intent_confirmed=True,
+        content_format="graphic_note",
+    )
+    series_refs_record = [item["source_ref"] for item in genome_record["series_context"]]
+    assert series_ref not in series_refs_record
+    assert not any(item["id"] == series_ref for item in genome_record["nodes"])
+
+
+@pytest.mark.asyncio
+async def test_series_extension_draft_includes_content_intent_and_format(series_db):
+    """Proposed series extension carries content_intent and content_format from draft."""
+    first = await _published_project(series_db, suffix="ext-intent-one", intent="share")
+    second = await _published_project(series_db, suffix="ext-intent-two", intent="share")
+    series_service = CreatorSeriesService(series_db)
+    candidate, _ = await series_service.propose(
+        "u1", _candidate_input(first, second, "ext-intent-series-propose")
+    )
+    series, _ = await series_service.decide(
+        "u1",
+        candidate["id"],
+        SeriesDecision(
+            decision="confirm",
+            confirmed_name="均一意图系列",
+            confirmed_promise="让读者持续看到同类内容",
+            confirmed_continuation_prompt="继续分享更新经历",
+            expected_series_version=candidate["version"],
+            idempotency_key="ext-intent-confirm",
+        ),
+    )
+
+    opportunity, _ = await ContentOpportunityService(series_db).propose_series_extension(
+        "u1",
+        series["id"],
+        SeriesExtensionCreate(
+            expected_series_version=series["version"],
+            idempotency_key="ext-intent-propose",
+        ),
+    )
+    # Uniform share series → extension should propose share intent
+    assert opportunity["content_intent"] == "share"
+    assert opportunity["content_format"] in {"graphic_note", "vlog_plan"}
+
+
+@pytest.mark.asyncio
+async def test_mixed_series_extension_draft_uses_last_member_intent(series_db):
+    """For mixed-intent series, the extension draft uses the last member's intent."""
+    first = await _published_project(series_db, suffix="mixed-ext-solve", intent="solve")
+    second = await _published_project(series_db, suffix="mixed-ext-share", intent="share")
+    series_service = CreatorSeriesService(series_db)
+    candidate, _ = await series_service.propose(
+        "u1", _candidate_input(first, second, "mixed-ext-propose")
+    )
+    series, _ = await series_service.decide(
+        "u1",
+        candidate["id"],
+        SeriesDecision(
+            decision="confirm",
+            confirmed_name="混合延展系列",
+            confirmed_promise="跨越不同意图，围绕同一读者承诺",
+            confirmed_continuation_prompt="从分享视角记录下一次迭代",
+            expected_series_version=candidate["version"],
+            idempotency_key="mixed-ext-confirm",
+        ),
+    )
+
+    opportunity, _ = await ContentOpportunityService(series_db).propose_series_extension(
+        "u1",
+        series["id"],
+        SeriesExtensionCreate(
+            expected_series_version=series["version"],
+            idempotency_key="mixed-ext-extension",
+        ),
+    )
+    # Last member is "share" (second project), so draft should propose share
+    assert opportunity["content_intent"] == "share"
+    # Limitations should warn about mixed series
+    assert any("多种内容意图" in lim for lim in opportunity["limitations"])
+
+
+@pytest.mark.asyncio
+async def test_confirmed_content_intent_override_updates_opportunity_and_project(series_db):
+    """Accepting a series extension with confirmed_content_intent overrides the proposed intent."""
+    first = await _published_project(series_db, suffix="override-one", intent="share")
+    second = await _published_project(series_db, suffix="override-two", intent="share")
+    series_service = CreatorSeriesService(series_db)
+    candidate, _ = await series_service.propose(
+        "u1", _candidate_input(first, second, "override-series-propose")
+    )
+    series, _ = await series_service.decide(
+        "u1",
+        candidate["id"],
+        SeriesDecision(
+            decision="confirm",
+            confirmed_name="可覆盖系列",
+            confirmed_promise="让读者持续看到真实变化",
+            confirmed_continuation_prompt="下一篇用解决问题的方式呈现",
+            expected_series_version=candidate["version"],
+            idempotency_key="override-confirm",
+        ),
+    )
+
+    opportunity, _ = await ContentOpportunityService(series_db).propose_series_extension(
+        "u1",
+        series["id"],
+        SeriesExtensionCreate(
+            expected_series_version=series["version"],
+            idempotency_key="override-propose",
+        ),
+    )
+    # Original proposal: share (uniform series)
+    assert opportunity["content_intent"] == "share"
+
+    accepted, _ = await ContentOpportunityService(series_db).decide(
+        "u1",
+        opportunity["id"],
+        OpportunityDecision(
+            decision="accept",
+            confirmed_title="用解决问题的方式呈现上一次迭代的结果",
+            confirmed_audience_change="读者看到同一个人如何在不同框架下思考问题",
+            confirmed_material_requirements=["迭代记录", "解决过程", "结论对比"],
+            confirmed_content_intent="solve",
+            expected_opportunity_version=opportunity["version"],
+            idempotency_key="override-accept",
+        ),
+    )
+    assert accepted["status"] == "accepted"
+    # The opportunity row now reflects the override
+    assert accepted["content_intent"] == "solve"
+    # The created project also has the overridden intent
+    assert accepted["project"]["content_intent"] == "solve"

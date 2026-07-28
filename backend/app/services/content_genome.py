@@ -387,13 +387,22 @@ class ContentGenomeService:
                 )
 
         for series in series_items:
-            if query["content_intent"] and self._normalized_text(
-                series["content_intent"]
-            ) != query["content_intent"]:
+            # Spec-011: match if any member project had the queried intent/format,
+            # rather than requiring a unanimous scalar on the series row.
+            scope = series.get("scope") or {}
+            member_intents = scope.get("member_intents") or (
+                [series["content_intent"]] if series.get("content_intent") else []
+            )
+            member_formats = scope.get("member_formats") or (
+                [series["content_format"]] if series.get("content_format") else []
+            )
+            if query["content_intent"] and not any(
+                self._normalized_text(i) == query["content_intent"] for i in member_intents
+            ):
                 continue
-            if query["format"] and self._normalized_text(
-                series["content_format"]
-            ) != query["format"]:
+            if query["format"] and not any(
+                self._normalized_text(f) == query["format"] for f in member_formats
+            ):
                 continue
             applicability = CreatorRuleService._applicability(series["scope"])
             status, reason_codes = self._match_status(query, applicability)
@@ -423,6 +432,8 @@ class ContentGenomeService:
                     "rationale": series["proposed_rationale"],
                     "content_intent": series["content_intent"],
                     "content_format": series["content_format"],
+                    "member_intents": member_intents,
+                    "member_formats": member_formats,
                     "applicability": applicability,
                     "source_project_ids": source_ids,
                     "status": status,
@@ -462,6 +473,8 @@ class ContentGenomeService:
                         "rationale": series["proposed_rationale"],
                         "content_intent": series["content_intent"],
                         "content_format": series["content_format"],
+                        "member_intents": member_intents,
+                        "member_formats": member_formats,
                         "applicability": applicability,
                         "source_project_refs": source_ids,
                         "reason": "user_confirmed_series_matches_project_context",

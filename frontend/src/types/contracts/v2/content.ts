@@ -339,8 +339,8 @@ export interface CreatorViewpoint {
 
 export interface CreatorSeries {
   id: string;
-  content_intent: ContentIntent;
-  content_format: ContentFormat;
+  content_intent: ContentIntent | null;
+  content_format: ContentFormat | null;
   proposed_name: string;
   proposed_promise: string;
   proposed_rationale: string;
@@ -348,7 +348,13 @@ export interface CreatorSeries {
   confirmed_name: string | null;
   confirmed_promise: string | null;
   confirmed_continuation_prompt: string | null;
-  scope: Record<string, unknown>;
+  scope: {
+    member_intents?: ContentIntent[];
+    member_formats?: ContentFormat[];
+    content_intent?: ContentIntent | null;
+    format?: ContentFormat | null;
+    [key: string]: unknown;
+  };
   source_project_ids: string[];
   status: 'proposed' | 'confirmed' | 'rejected' | 'revoked';
   proposal_source: 'ai' | 'deterministic_fallback';
@@ -488,8 +494,11 @@ export interface ContentGenomeSeriesContext {
   promise: string;
   continuation_prompt: string;
   rationale: string;
-  content_intent: ContentIntent;
-  content_format: ContentFormat;
+  /** Null when members disagree; read member_intents for the authoritative set. */
+  content_intent: ContentIntent | null;
+  content_format: ContentFormat | null;
+  member_intents: ContentIntent[];
+  member_formats: ContentFormat[];
   applicability: {
     intent: string;
     experiment: string;
@@ -720,6 +729,9 @@ export interface OpportunityDecisionInput {
   confirmed_title?: string;
   confirmed_audience_change?: string;
   confirmed_material_requirements?: string[];
+  /** Spec-011: override the AI-proposed intent/format when accepting a series_extension. */
+  confirmed_content_intent?: ContentIntent;
+  confirmed_content_format?: ContentFormat;
   reason?: string;
   expected_opportunity_version: number;
   idempotency_key: string;

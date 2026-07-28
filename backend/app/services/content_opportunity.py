@@ -16,6 +16,7 @@ from app.models.v2.content_opportunity import (
     OpportunityDecision,
     OpportunityDraft,
     SeriesExtensionCreate,
+    SeriesExtensionDraft,
     UserSourceOpportunityCreate,
 )
 from app.models.v2.content_project import ContentProjectCreate
@@ -192,7 +193,7 @@ class ContentOpportunityService:
         evidence_refs.extend(item["source_ref"] for item in viewpoint_context)
         evidence_refs = list(dict.fromkeys(evidence_refs))
         draft, proposal_source = await self._draft(
-            series, evidence_context, viewpoint_context
+            owner, series, evidence_context, viewpoint_context
         )
 
         opportunity_id = str(uuid.uuid4())
@@ -258,8 +259,8 @@ class ContentOpportunityService:
                         "id": opportunity_id,
                         "owner": owner,
                         "source": f"creator-series:{series_id}",
-                        "intent": series["content_intent"],
-                        "format": series["content_format"],
+                        "intent": draft.content_intent,
+                        "format": draft.content_format,
                         "title": draft.title.strip(),
                         "change": draft.audience_change.strip(),
                         "rationale": draft.rationale.strip(),
@@ -314,6 +315,9 @@ class ContentOpportunityService:
         materials = body.confirmed_material_requirements
         if materials is None:
             materials = json.loads(opportunity["proposed_material_requirements_json"] or "[]")
+        # Spec-011: user may override the AI-proposed intent/format at accept time.
+        confirmed_intent = body.confirmed_content_intent if status == "accepted" else None
+        confirmed_format = body.confirmed_content_format if status == "accepted" else None
         timestamp = now()
         session = await self.db.get_session()
         async with session:
@@ -322,7 +326,10 @@ class ContentOpportunityService:
                     text(
                         "UPDATE content_opportunities SET status=:status,confirmed_title=:title,"
                         "confirmed_audience_change=:change,confirmed_material_requirements_json="
-                        ":materials,decided_at=:now,updated_at=:now,version=version+1 "
+                        ":materials,"
+                        "content_intent=COALESCE(:confirmed_intent,content_intent),"
+                        "content_format=COALESCE(:confirmed_format,content_format),"
+                        "decided_at=:now,updated_at=:now,version=version+1 "
                         "WHERE id=:id AND owner_user_id=:owner AND status='proposed' "
                         "AND version=:expected"
                     ),
@@ -331,6 +338,8 @@ class ContentOpportunityService:
                         "title": title if status == "accepted" else None,
                         "change": audience_change if status == "accepted" else None,
                         "materials": json.dumps(materials, ensure_ascii=False) if status == "accepted" else None,
+                        "confirmed_intent": confirmed_intent,
+                        "confirmed_format": confirmed_format,
                         "now": timestamp,
                         "id": opportunity_id,
                         "owner": owner,
@@ -393,31 +402,78 @@ class ContentOpportunityService:
         result["project"] = project
         return result
 
-    async def _draft(self, series, evidence_context, viewpoint_context):
+    async def _latest_member_intent_format(
+        self, owner: str, series: dict[str, Any]
+    ) -> tuple[str, str]:
+        """Return the intent/format of the series' most recently published member.
+
+        Spec-011: ``scope.member_intents`` is a sorted set, so it carries no
+        recency information. For a mixed series the newest member is the closest
+        thing to a signal about where the series is heading, and it is only ever
+        a *proposal* the user must confirm.
+        """
+        source_ids = series.get("source_project_ids") or []
+        if not source_ids:
+            return "solve", "graphic_note"
+        placeholders = ",".join(f":p{index}" for index in range(len(source_ids)))
+        params = {f"p{index}": value for index, value in enumerate(source_ids)}
+        row = await self.db.fetch_one(
+            "SELECT p.content_intent,p.content_format FROM content_projects p "
+            "JOIN publish_records_v2 pr ON pr.project_id=p.id "
+            "AND pr.owner_user_id=p.owner_user_id "
+            f"WHERE p.owner_user_id=:owner AND p.id IN ({placeholders}) "
+            "ORDER BY pr.published_at DESC, pr.created_at DESC LIMIT 1",
+            {"owner": owner, **params},
+        )
+        if row is None:
+            return "solve", "graphic_note"
+        return row["content_intent"], row["content_format"]
+
+    async def _draft(
+        self, owner: str, series: dict[str, Any], evidence_context, viewpoint_context
+    ) -> tuple[SeriesExtensionDraft, str]:
+        # Determine the intent/format to propose for this extension. A uniform
+        # series has an authoritative scalar; a mixed one has none, so fall back
+        # to its newest member and flag that the user has to confirm the choice.
+        mixed_series = not (series.get("content_intent") and series.get("content_format"))
+        if mixed_series:
+            ext_intent, ext_format = await self._latest_member_intent_format(owner, series)
+        else:
+            ext_intent = series["content_intent"]
+            ext_format = series["content_format"]
+
         if self.llm and self.llm.is_available("text"):
             context = [item["statement"] for item in [*evidence_context, *viewpoint_context]][:12]
             prompt = (
                 f"基于已确认系列「{wrap_user_input(series['confirmed_name'])}」提出唯一一篇下一步内容机会。"
                 f"系列价值：{wrap_user_input(series['confirmed_promise'])}。"
                 f"已确认延展方向：{wrap_user_input(series['confirmed_continuation_prompt'])}。"
+                f"建议内容意图（solve/share/record）：{ext_intent}，"
+                f"建议内容格式（graphic_note/vlog_plan）：{ext_format}。"
                 "不得生成全文，不得引入证据外事实。返回 title、audience_change、rationale、"
-                "material_requirements、unknown_refs、limitations。\n"
+                "material_requirements、unknown_refs、limitations、content_intent、content_format。\n"
                 + "\n".join(f"- {wrap_user_input(item)}" for item in context)
             )
             try:
                 return await asyncio.to_thread(
-                    self.llm.generate_structured, prompt, OpportunityDraft,
+                    self.llm.generate_structured, prompt, SeriesExtensionDraft,
                     "你是系列内容机会规划助手。输出只是候选，必须等待用户确认后才能创建项目。",
                 ), "ai"
             except Exception:
                 pass
-        return OpportunityDraft(
+
+        limitations = ["模型不可用；候选直接来自用户已确认的系列延展方向"]
+        if mixed_series:
+            limitations.append("系列包含多种内容意图/格式，建议确认前检查 content_intent 和 content_format 是否合适")
+        return SeriesExtensionDraft(
             title=series["confirmed_continuation_prompt"],
             audience_change=series["confirmed_promise"],
             rationale=f"这是已确认系列「{series['confirmed_name']}」的下一步延展方向。",
-            material_requirements=MATERIALS_BY_INTENT[series["content_intent"]],
+            material_requirements=MATERIALS_BY_INTENT[ext_intent],
             unknown_refs=["next_story_specifics"],
-            limitations=["模型不可用；候选直接来自用户已确认的系列延展方向"],
+            limitations=limitations,
+            content_intent=ext_intent,
+            content_format=ext_format,
         ), "deterministic_fallback"
 
     async def _assert_no_active_extension(self, owner: str, series_id: str) -> None:

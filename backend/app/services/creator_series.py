@@ -57,18 +57,25 @@ class CreatorSeriesService:
             expected = body.expected_project_versions[project["id"]]
             if project["version"] != expected:
                 raise VersionConflictException(project["version"], expected)
-        intents = {project["content_intent"] for project in projects}
-        formats = {project["content_format"] for project in projects}
-        if len(intents) != 1 or len(formats) != 1:
-            raise ValueError("series source projects must share content intent and format")
+        # Spec-011: a series is connected by an ongoing audience promise, so its
+        # members may differ in intent and format. The authoritative information
+        # is the member sets; the scalar columns are a convenience read that only
+        # carries a value when the members agree.
+        member_intents = sorted({project["content_intent"] for project in projects})
+        member_formats = sorted({project["content_format"] for project in projects})
+        intent = member_intents[0] if len(member_intents) == 1 else None
+        content_format = member_formats[0] if len(member_formats) == 1 else None
+        scope = {
+            "member_intents": member_intents,
+            "member_formats": member_formats,
+            "content_intent": intent,
+            "format": content_format,
+        }
 
         draft, proposal_source = await self._draft(projects)
         series_id = str(uuid.uuid4())
         trace_id = str(uuid.uuid4())
         timestamp = now()
-        intent = next(iter(intents))
-        content_format = next(iter(formats))
-        scope = {"content_intent": intent, "format": content_format}
         source_ids = [project["id"] for project in projects]
         publish_refs = [f"publish-record:{project['publish_record_id']}" for project in projects]
 
@@ -401,11 +408,21 @@ class CreatorSeriesService:
         projects = await self._eligible_projects(owner, source_ids)
         if not projects:
             raise ValueError("series source projects are no longer available")
-        if any(
-            item["content_intent"] != series["content_intent"]
-            or item["content_format"] != series["content_format"]
-            for item in projects
-        ):
+        # Spec-011: the member intent/format sets are authoritative, so drift is
+        # detected by comparing those sets rather than the scalar columns (which
+        # are NULL whenever the members disagree).
+        scope = json.loads(series.get("scope_json") or "{}")
+        stored_intents = sorted(
+            scope.get("member_intents")
+            or ([series["content_intent"]] if series["content_intent"] else [])
+        )
+        stored_formats = sorted(
+            scope.get("member_formats")
+            or ([series["content_format"]] if series["content_format"] else [])
+        )
+        current_intents = sorted({item["content_intent"] for item in projects})
+        current_formats = sorted({item["content_format"] for item in projects})
+        if current_intents != stored_intents or current_formats != stored_formats:
             raise ValueError("series source projects no longer match the candidate scope")
 
     async def _series(self, owner: str, series_id: str) -> dict[str, Any]:
