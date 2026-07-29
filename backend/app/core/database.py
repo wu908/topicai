@@ -182,6 +182,7 @@ class Database:
         itself calls this once the pragmas + session factory are set up.
         """
         from app.data.migrations.runner import (
+            _CREATOR_SERIES_SCOPE_SQL,
             _INTENT_ACTION_EVENT_TRIGGER_SQL,
             _INTENT_ACTION_INDEX_TRIGGER_SQL,
             _INTENT_MODEL_CONTENT_PROJECTS_SQL,
@@ -372,6 +373,71 @@ class Database:
                 if violations:
                     raise sqlite3.IntegrityError(
                         f"intent model migration broke foreign keys: {violations}"
+                    )
+
+            # Migration 036 (Spec-011): creator_series.content_intent /
+            # content_format become nullable, because a series is connected by
+            # an ongoing audience promise and its members may differ. Same
+            # rebuild-on-the-same-connection shape as 034 above, since 026
+            # created the table with NOT NULL and the memory path skips
+            # post-steps.
+            series_sql = (
+                await conn.execute(
+                    text(
+                        "SELECT sql FROM sqlite_master "
+                        "WHERE type='table' AND name='creator_series'"
+                    )
+                )
+            ).scalar_one_or_none()
+            if series_sql and "content_intent IS NULL" not in series_sql:
+                await conn.commit()
+                await conn.execute(text("PRAGMA foreign_keys=OFF"))
+                await conn.commit()
+                try:
+                    columns = [
+                        row[1]
+                        for row in (
+                            await conn.execute(text("PRAGMA table_info(creator_series)"))
+                        ).fetchall()
+                    ]
+                    column_list = ",".join(columns)
+                    await conn.execute(text(_CREATOR_SERIES_SCOPE_SQL))
+                    await conn.execute(
+                        text(
+                            f"INSERT INTO creator_series_scope_new ({column_list}) "
+                            f"SELECT {column_list} FROM creator_series"
+                        )
+                    )
+                    await conn.execute(text("DROP TABLE creator_series"))
+                    await conn.execute(
+                        text(
+                            "ALTER TABLE creator_series_scope_new "
+                            "RENAME TO creator_series"
+                        )
+                    )
+                    await conn.execute(
+                        text(
+                            "CREATE UNIQUE INDEX IF NOT EXISTS "
+                            "uq_creator_series_owner_idempotency "
+                            "ON creator_series(owner_user_id, idempotency_key)"
+                        )
+                    )
+                    await conn.execute(
+                        text(
+                            "CREATE INDEX IF NOT EXISTS idx_creator_series_owner_status "
+                            "ON creator_series(owner_user_id, status, updated_at DESC)"
+                        )
+                    )
+                    await conn.commit()
+                finally:
+                    await conn.execute(text("PRAGMA foreign_keys=ON"))
+                    await conn.commit()
+                violations = (
+                    await conn.execute(text("PRAGMA foreign_key_check"))
+                ).fetchall()
+                if violations:
+                    raise sqlite3.IntegrityError(
+                        f"creator series scope migration broke foreign keys: {violations}"
                     )
 
     async def get_session(self) -> AsyncSession:

@@ -9,6 +9,8 @@ import {
 } from '@mui/icons-material';
 import type {
   ContentProject,
+  ContentIntent,
+  ContentFormat,
   CreatorSeries,
   ContentOpportunity,
 } from '@/types/contracts/v2/content';
@@ -41,6 +43,34 @@ const eligibleStatuses = new Set<ContentProject['status']>([
   'settled',
 ]);
 
+const intentLabels: Record<ContentIntent, string> = {
+  solve: '解决问题',
+  share: '分享观点',
+  record: '记录过程',
+};
+
+const formatLabels: Record<ContentFormat, string> = {
+  graphic_note: '图文笔记',
+  vlog_plan: '视频脚本',
+};
+
+/**
+ * Spec-011: a series' authoritative intent/format information is its member
+ * sets. The scalar columns are only populated when every member agrees, so a
+ * mixed series reads `content_intent === null` and must fall back to the scope.
+ */
+function memberIntents(series: CreatorSeries): ContentIntent[] {
+  const fromScope = series.scope?.member_intents;
+  if (fromScope?.length) return fromScope;
+  return series.content_intent ? [series.content_intent] : [];
+}
+
+function memberFormats(series: CreatorSeries): ContentFormat[] {
+  const fromScope = series.scope?.member_formats;
+  if (fromScope?.length) return fromScope;
+  return series.content_format ? [series.content_format] : [];
+}
+
 export default function SeriesPanel({
   currentProject,
   projects,
@@ -54,12 +84,12 @@ export default function SeriesPanel({
   onDecideOpportunity,
   onOpenProject,
 }: SeriesPanelProps) {
+  // Spec-011: a series is connected by an ongoing audience promise, so members
+  // may differ in intent and format. Only publication state still gates them.
   const eligible = projects
     .filter(
       (project) =>
         (project.intent_status === 'working_confirmed' || project.intent_status === 'locked')
-        && project.content_intent === currentProject.content_intent
-        && project.content_format === currentProject.content_format
         && eligibleStatuses.has(project.status)
         && Boolean(project.locked_publish_version_id),
     )
@@ -73,11 +103,17 @@ export default function SeriesPanel({
   const [opportunityDrafts, setOpportunityDrafts] = useState<
     Record<string, { title: string; audienceChange: string; materials: string }>
   >({});
-  const relevantSeries = series.filter(
-    (item) =>
-      item.content_intent === currentProject.content_intent
-      && item.content_format === currentProject.content_format,
-  );
+  // Spec-011: a series is relevant when ANY of its members shares this
+  // project's intent and any member shares its format. Matching on the scalar
+  // columns would hide every mixed series, whose scalars are null.
+  const relevantSeries = series.filter((item) => {
+    const intents = memberIntents(item);
+    const formats = memberFormats(item);
+    return (
+      intents.includes(currentProject.content_intent)
+      && formats.includes(currentProject.content_format)
+    );
+  });
   const pending = relevantSeries.filter((item) => item.status === 'proposed');
   const confirmed = relevantSeries.filter((item) => item.status === 'confirmed');
   const selected = eligible.filter((project) => selectedIds.includes(project.id));
@@ -109,7 +145,7 @@ export default function SeriesPanel({
       </div>
 
       {eligible.length < 2 ? (
-        <p className="genome-context-empty">至少发布两篇同类型内容后，才能发现系列关系。</p>
+        <p className="genome-context-empty">至少发布两篇内容后，才能发现系列关系。</p>
       ) : (
         <div className="series-source-list" aria-label="系列来源内容">
           {eligible.map((project) => (
@@ -227,6 +263,11 @@ export default function SeriesPanel({
             <strong>{item.confirmed_name}</strong>
             <p>{item.confirmed_promise}</p>
             <small>下一篇方向：{item.confirmed_continuation_prompt}</small>
+            <small className="series-member-scope">
+              成员意图：{memberIntents(item).map((value) => intentLabels[value]).join(' · ') || '未记录'}
+              {' ｜ '}
+              成员格式：{memberFormats(item).map((value) => formatLabels[value]).join(' · ') || '未记录'}
+            </small>
 
             {related?.status === 'proposed' && values && onDecideOpportunity ? (
               <div className="series-opportunity">

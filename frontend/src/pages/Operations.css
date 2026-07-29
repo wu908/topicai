@@ -61,6 +61,23 @@
   line-height: 1.5;
 }
 
+.operations-capability-list {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.operations-capability-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--v3-text-sec);
+  font-size: 13px;
+}
+
 .operations-form {
   display: grid;
   gap: 12px;

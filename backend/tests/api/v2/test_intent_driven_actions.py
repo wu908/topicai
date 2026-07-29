@@ -1053,6 +1053,22 @@ async def test_rejected_evidence_never_enters_creator_state(client):
 
 
 @pytest.mark.asyncio
+async def test_creator_state_exposes_per_capability_trust(client):
+    """Spec-012 / ADR 0002: capability_trust must reach the wire.
+
+    The Me page renders per-capability progress from this field, so it has to
+    survive serialisation rather than being an internal-only computation.
+    """
+    response = await client.get("/api/v2/creator-state")
+    assert response.status_code == 200
+    state = response.json()["data"]
+    assert "capability_trust" in state
+    assert state["capability_trust"] == {}
+    assert state["autopilot_eligible"] is False
+    assert state["automation_trust_level"] == "guided"
+
+
+@pytest.mark.asyncio
 async def test_revoked_evidence_blocks_candidate_lock(client):
     created = await client.post(
         "/api/v2/projects",

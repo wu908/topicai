@@ -47,6 +47,7 @@ migration that needs Python-driven back-fill.
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import sqlite3
 from collections.abc import Callable
@@ -552,6 +553,125 @@ def _post_step_034_intent_model(conn: sqlite3.Connection) -> None:
         )
 
 
+_CREATOR_SERIES_SCOPE_SQL = """
+    CREATE TABLE creator_series_scope_new (
+        id TEXT PRIMARY KEY,
+        owner_user_id TEXT NOT NULL,
+        content_intent TEXT CHECK (content_intent IN ('solve','share','record')
+                                   OR content_intent IS NULL),
+        content_format TEXT CHECK (content_format IN ('graphic_note','vlog_plan')
+                                   OR content_format IS NULL),
+        proposed_name TEXT NOT NULL,
+        proposed_promise TEXT NOT NULL,
+        proposed_rationale TEXT NOT NULL,
+        proposed_continuation_prompt TEXT NOT NULL,
+        confirmed_name TEXT,
+        confirmed_promise TEXT,
+        confirmed_continuation_prompt TEXT,
+        scope_json TEXT NOT NULL DEFAULT '{}',
+        source_project_ids_json TEXT NOT NULL DEFAULT '[]',
+        status TEXT NOT NULL CHECK (status IN ('proposed','confirmed','rejected','revoked')),
+        proposal_source TEXT NOT NULL CHECK (proposal_source IN ('ai','deterministic_fallback')),
+        ai_trace_id TEXT NOT NULL,
+        limitations_json TEXT NOT NULL DEFAULT '[]',
+        version INTEGER NOT NULL DEFAULT 1 CHECK (version >= 1),
+        idempotency_key TEXT NOT NULL,
+        request_hash TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        confirmed_at TEXT,
+        revoked_at TEXT,
+        FOREIGN KEY (owner_user_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (ai_trace_id) REFERENCES ai_traces_v2(id)
+    )
+    """
+
+
+def _backfill_creator_series_scope(conn: sqlite3.Connection) -> None:
+    """Record member intent/format sets in scope_json for pre-036 rows.
+
+    Existing rows were built under the same-intent/same-format constraint,
+    so each one's single scalar value *is* its complete member set.
+    Idempotent: rows that already carry ``member_intents`` are left alone.
+    """
+    rows = conn.execute(
+        "SELECT id, content_intent, content_format, scope_json FROM creator_series"
+    ).fetchall()
+    for series_id, intent, content_format, scope_json in rows:
+        try:
+            scope = json.loads(scope_json or "{}")
+        except ValueError:
+            scope = {}
+        if not isinstance(scope, dict):
+            scope = {}
+        if "member_intents" in scope and "member_formats" in scope:
+            continue
+        scope["member_intents"] = [intent] if intent else []
+        scope["member_formats"] = [content_format] if content_format else []
+        conn.execute(
+            "UPDATE creator_series SET scope_json=:scope WHERE id=:id",
+            {"scope": json.dumps(scope, ensure_ascii=False), "id": series_id},
+        )
+    conn.commit()
+
+
+def _post_step_036_creator_series_scope(conn: sqlite3.Connection) -> None:
+    """Drop the NOT NULL on creator_series intent/format and back-fill scope.
+
+    Spec-011: a Creator Series is connected by an ongoing audience promise,
+    so its members may differ in intent and format. The two scalar columns
+    stay for backward compatibility but become nullable — NULL means
+    "members disagree, no single value is authoritative".
+
+    SQLite forbids dropping NOT NULL, so the table is rebuilt with the same
+    foreign_keys=OFF pattern as _post_step_034_intent_model (creator_series
+    is a parent of creator_series_events).
+
+    Idempotent: the rebuild is skipped once the columns are already nullable.
+    """
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='creator_series'"
+    ).fetchone()
+    if not row:
+        return
+    if "content_intent IS NULL" in row[0]:
+        _backfill_creator_series_scope(conn)
+        return
+
+    conn.commit()
+    conn.execute("PRAGMA foreign_keys=OFF")
+    try:
+        conn.execute(_CREATOR_SERIES_SCOPE_SQL)
+        columns = [
+            item[1]
+            for item in conn.execute("PRAGMA table_info(creator_series)").fetchall()
+        ]
+        column_list = ",".join(columns)
+        conn.execute(
+            f"INSERT INTO creator_series_scope_new ({column_list}) "
+            f"SELECT {column_list} FROM creator_series"
+        )
+        conn.execute("DROP TABLE creator_series")
+        conn.execute("ALTER TABLE creator_series_scope_new RENAME TO creator_series")
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_creator_series_owner_idempotency "
+            "ON creator_series(owner_user_id, idempotency_key)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_creator_series_owner_status "
+            "ON creator_series(owner_user_id, status, updated_at DESC)"
+        )
+        conn.commit()
+    finally:
+        conn.execute("PRAGMA foreign_keys=ON")
+    violations = conn.execute("PRAGMA foreign_key_check").fetchall()
+    if violations:
+        raise sqlite3.IntegrityError(
+            f"creator series scope migration broke foreign keys: {violations}"
+        )
+    _backfill_creator_series_scope(conn)
+
+
 #: Migration stem -> post-step callable. Add an entry only when a
 #: migration needs Python-driven back-fill that pure SQL cannot express.
 MIGRATION_POST_STEPS: dict[str, PostStep] = {
@@ -559,6 +679,7 @@ MIGRATION_POST_STEPS: dict[str, PostStep] = {
     "030_action_lifecycle": _post_step_030_action_lifecycle,
     "034_intent_model_migration": _post_step_034_intent_model,
     "035_intent_lock_action": _post_step_035_intent_lock_action,
+    "036_creator_series_scope": _post_step_036_creator_series_scope,
 }
 
 

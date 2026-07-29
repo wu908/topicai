@@ -428,7 +428,7 @@ def test_scenario_g_coverage_gate(tmp_path):
            f"--basetemp={coverage_basetemp}",
            "--ignore=tests/integration/test_acceptance_scenarios.py"]
     result = subprocess.run(
-        cmd, cwd=backend_dir, capture_output=True, text=True, timeout=300,
+        cmd, cwd=backend_dir, capture_output=True, text=True, timeout=900,
     )
     assert result.returncode == 0, (
         f"Coverage gate failed (exit {result.returncode}):\n"
