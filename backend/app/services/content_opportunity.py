@@ -14,7 +14,6 @@ from app.core.llm import LLMClient, wrap_user_input
 from app.models.v2.action_domain import AITraceCreate
 from app.models.v2.content_opportunity import (
     OpportunityDecision,
-    OpportunityDraft,
     SeriesExtensionCreate,
     SeriesExtensionDraft,
     UserSourceOpportunityCreate,

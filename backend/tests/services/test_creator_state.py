@@ -12,7 +12,7 @@ import pytest
 import pytest_asyncio
 from sqlalchemy import text
 
-from app.services.creator_state import CreatorStateService, _AUTO_PREPARE_CAPABILITIES
+from app.services.creator_state import _AUTO_PREPARE_CAPABILITIES, CreatorStateService
 
 
 @pytest_asyncio.fixture
