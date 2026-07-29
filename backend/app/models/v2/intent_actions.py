@@ -54,6 +54,10 @@ class ActionType(StrEnum):
     REVIEW_RESULT = "review_result"
     CONFIRM_LEARNING = "confirm_learning"
     MANAGE_LEARNING = "manage_learning"
+    # Terminal: historical content with no locked publish record cannot be
+    # reviewed against a pre-publication judgment. Its retrospective
+    # classification only scopes future comparison and learning.
+    SCOPE_LEARNING = "scope_learning"
 
 
 class IntentConfirmation(StrictModel):

@@ -32,7 +32,8 @@ export type IntentActionType =
   | 'add_performance'
   | 'review_result'
   | 'confirm_learning'
-  | 'manage_learning';
+  | 'manage_learning'
+  | 'scope_learning';
 
 export interface HumanGate {
   id: string;

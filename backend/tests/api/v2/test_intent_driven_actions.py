@@ -1495,3 +1495,102 @@ async def test_gate_decision_idempotency_key_is_bound_to_one_action(client, test
         "SELECT status FROM human_gates WHERE id=:id", {"id": gates[1]["id"]}
     )
     assert second_gate["status"] == "pending"
+
+
+async def _legacy_published_project(client, test_db, slug: str) -> dict:
+    """A historical project with a recorded body but no locked publish record.
+
+    This is the canonical legacy shape from spec 010: `legacy_unclassified`
+    means 历史内容，无锁定记录 — published content that never went through
+    Working Intent Confirmation or Intent Lock.
+    """
+    project = (
+        await client.post(
+            "/api/v2/projects",
+            json={
+                "title": "历史内容",
+                "content_intent": "solve",
+                "idempotency_key": f"{slug}-project",
+            },
+        )
+    ).json()["data"]
+    await client.post(
+        f"/api/v2/projects/{project['id']}/versions",
+        json={
+            "title": "历史正文",
+            "body_text": "这是一段早于本系统发布的历史内容正文。",
+            "expected_project_version": project["version"],
+            "idempotency_key": f"{slug}-version",
+        },
+    )
+    await test_db.execute(
+        "UPDATE content_projects SET status='published',"
+        "intent_status='legacy_unclassified',publish_hypothesis_id=NULL,"
+        "locked_publish_version_id=NULL,version=version+1 WHERE id=:id",
+        {"id": project["id"]},
+    )
+    return (await client.get(f"/api/v2/projects/{project['id']}")).json()["data"]
+
+
+@pytest.mark.asyncio
+async def test_legacy_unclassified_action_does_not_fabricate_an_intent_label(
+    client, test_db
+):
+    """ADR 0002: content_intent stays NULL for historical content.
+
+    The DB default for content_intent is 'solve', and the orchestrator reads
+    the row un-normalized, so the proposed action used to be titled
+    确认这是一条“解决”内容吗？ — naming an intent the user never confirmed,
+    for an endpoint that now rejects legacy projects outright.
+    """
+    project = await _legacy_published_project(client, test_db, "legacy-label")
+    assert project["content_intent"] is None
+    assert project["intent_status"] == "legacy_unclassified"
+
+    action = (
+        await client.get(f"/api/v2/projects/{project['id']}/next-action")
+    ).json()["data"]
+
+    assert action["action_type"] == "confirm_intent"
+    assert "解决" not in action["title"]
+    assert action["content_intent"] is None
+    # It must ask for a retrospective classification, not a working intent.
+    assert "当时" in action["title"]
+
+
+@pytest.mark.asyncio
+async def test_retrospective_project_is_not_pushed_into_the_publish_pipeline(
+    client, test_db
+):
+    """A retrospective project can never lock a publish hypothesis.
+
+    Its content_intent stays NULL (ADR 0002 / spec 010 invariant 6), and
+    PublishHypothesisService.lock requires working_confirmed, so
+    review_candidate and lock_intent are both dead ends. Spec 010 §7 puts
+    retrospective content in the learning scope instead.
+    """
+    project = await _legacy_published_project(client, test_db, "retro-route")
+    classified = await client.post(
+        f"/api/v2/projects/{project['id']}/intent:classify-retrospective",
+        json={
+            "retrospective_intent": "share",
+            "classification_basis": "当时是在讲一段个人经历",
+            "expected_project_version": project["version"],
+            "idempotency_key": "retro-route-classification",
+        },
+    )
+    assert classified.status_code == 201
+    classified_project = classified.json()["data"]["project"]
+    assert classified_project["intent_status"] == "retrospective"
+    assert classified_project["content_intent"] is None
+    assert classified_project["publish_hypothesis_id"] is None
+
+    response = await client.get(f"/api/v2/projects/{project['id']}/next-action")
+    assert response.status_code == 200, response.text
+    action = response.json()["data"]
+
+    assert action["action_type"] not in {"review_candidate", "lock_intent"}
+    assert action["action_type"] == "scope_learning"
+    assert action["human_gate_type"] is None
+    # The reason must explain why review is impossible, not invite a lock.
+    assert "发布前判断" in action["reason"]

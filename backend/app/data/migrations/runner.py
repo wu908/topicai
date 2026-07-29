@@ -389,14 +389,51 @@ def _intent_action_table_sql(action_sql: str) -> str:
     )
 
 
-def _post_step_035_intent_lock_action(conn: sqlite3.Connection) -> None:
+def _scope_learning_table_sql(action_sql: str) -> str:
+    """Widen the action_type CHECK for scope_learning, renaming if needed.
+
+    The rename is skipped when the caller already renamed the table (the
+    in-memory migration path composes this with _intent_action_table_sql), since
+    "CREATE TABLE next_best_actions" is a prefix of the renamed form and would
+    otherwise be rewritten twice.
+    """
+    renamed = (
+        action_sql
+        if "next_best_actions_intent_new" in action_sql
+        else action_sql.replace(
+            "CREATE TABLE next_best_actions",
+            "CREATE TABLE next_best_actions_intent_new",
+            1,
+        ).replace(
+            'CREATE TABLE "next_best_actions"',
+            "CREATE TABLE next_best_actions_intent_new",
+            1,
+        )
+    )
+    return renamed.replace(
+        "'confirm_learning','manage_learning'",
+        "'confirm_learning','manage_learning','scope_learning'",
+        1,
+    )
+
+
+def _expand_intent_action_types(
+    conn: sqlite3.Connection,
+    sentinel: str,
+    build_sql: Callable[[str], str],
+) -> None:
+    """Rebuild next_best_actions so its action_type CHECK accepts one more value.
+
+    SQLite cannot alter a CHECK constraint in place, so the table is recreated
+    with the same foreign_keys=OFF pattern as _post_step_030_action_lifecycle.
+    """
     row = conn.execute(
         "SELECT sql FROM sqlite_master WHERE type='table' AND name='next_best_actions'"
     ).fetchone()
     if not row:
         return
-    if "'lock_intent'" not in row[0]:
-        replacement_sql = _intent_action_table_sql(row[0])
+    if sentinel not in row[0]:
+        replacement_sql = build_sql(row[0])
         if replacement_sql == row[0]:
             raise sqlite3.IntegrityError("intent action constraint could not be expanded")
 
@@ -431,6 +468,14 @@ def _post_step_035_intent_lock_action(conn: sqlite3.Connection) -> None:
         raise sqlite3.IntegrityError(
             f"intent action migration broke foreign keys: {violations}"
         )
+
+
+def _post_step_035_intent_lock_action(conn: sqlite3.Connection) -> None:
+    _expand_intent_action_types(conn, "'lock_intent'", _intent_action_table_sql)
+
+
+def _post_step_038_scope_learning_action(conn: sqlite3.Connection) -> None:
+    _expand_intent_action_types(conn, "'scope_learning'", _scope_learning_table_sql)
 
 
 _INTENT_MODEL_CONTENT_PROJECTS_SQL = """
@@ -680,6 +725,7 @@ MIGRATION_POST_STEPS: dict[str, PostStep] = {
     "034_intent_model_migration": _post_step_034_intent_model,
     "035_intent_lock_action": _post_step_035_intent_lock_action,
     "036_creator_series_scope": _post_step_036_creator_series_scope,
+    "038_scope_learning_action": _post_step_038_scope_learning_action,
 }
 
 
