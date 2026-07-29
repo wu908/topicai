@@ -109,8 +109,11 @@ export default function SeriesPanel({
   const relevantSeries = series.filter((item) => {
     const intents = memberIntents(item);
     const formats = memberFormats(item);
+    // 历史内容的发布意图为空，用回溯分类结果参与匹配；两者都没有就不算相关。
+    const currentIntent = currentProject.content_intent ?? currentProject.retrospective_intent;
     return (
-      intents.includes(currentProject.content_intent)
+      currentIntent !== null
+      && intents.includes(currentIntent)
       && formats.includes(currentProject.content_format)
     );
   });

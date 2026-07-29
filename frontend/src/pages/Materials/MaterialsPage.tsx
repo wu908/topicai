@@ -10,6 +10,11 @@ import '../Operations.css';
 
 type MaterialProject = ContentProject & { confirmedEvidenceCount: number };
 const intentLabels = { solve: '解决', share: '分享', record: '记录' } as const;
+// 历史内容的发布意图为空，只有回溯分类过才有可显示的意图。
+const intentLabel = (project: MaterialProject) => {
+  const intent = project.content_intent ?? project.retrospective_intent;
+  return intent ? `${intentLabels[intent]}内容` : '未分类内容';
+};
 
 export default function MaterialsPage() {
   const navigate = useNavigate();
@@ -47,7 +52,7 @@ export default function MaterialsPage() {
           {projects.length ? <div className="operations-list">{projects.map((project) => (
             <article className="operations-row" key={project.id}>
               <div className="operations-row-header">
-                <div><h2>{project.title}</h2><p className="operations-meta">{intentLabels[project.content_intent]}内容</p></div>
+                <div><h2>{project.title}</h2><p className="operations-meta">{intentLabel(project)}</p></div>
                 <Chip size="small" label={project.material_requirements.length ? `已确认 ${project.confirmedEvidenceCount} 条真实素材` : '素材需求待明确'} />
               </div>
               <p className="operations-row-copy">{project.audience_change || '先确认这条内容希望给读者带来的变化，AI 才能判断需要什么素材。'}</p>

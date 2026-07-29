@@ -21,6 +21,8 @@ const api = vi.hoisted(() => ({
   revokeCreatorSeries: vi.fn(),
   openHumanGate: vi.fn(),
   decideHumanGate: vi.fn(),
+  confirmProjectIntent: vi.fn(),
+  classifyRetrospectiveIntent: vi.fn(),
 }));
 
 vi.mock('@/services/api/v2/projects', () => api);
@@ -88,6 +90,27 @@ const workspace: CalibrationWorkspace = {
   },
 };
 
+const legacyPublishedProject: ContentProject = {
+  ...project,
+  status: 'published',
+  intent_status: 'legacy_unclassified',
+  content_intent: null,
+  retrospective_intent: null,
+  version: 4,
+};
+
+const intentActionWorkspace = (overrides: Partial<ContentProject>): CalibrationWorkspace => ({
+  ...workspace,
+  project: { ...legacyPublishedProject, ...overrides },
+  orchestrated_action: {
+    ...workspace.orchestrated_action!,
+    id: 'intent-action',
+    action_type: 'confirm_intent',
+    title: 'Confirm intent',
+    human_gate: null,
+  },
+});
+
 function renderPage(path = '/content') {
   return render(
     <MemoryRouter initialEntries={[path]}>
@@ -122,6 +145,8 @@ describe('ContentPage', () => {
     api.proposeSeriesCandidate.mockResolvedValue({ id: 'series1' });
     api.decideSeriesCandidate.mockResolvedValue({ id: 'series1', status: 'confirmed' });
     api.revokeCreatorSeries.mockResolvedValue({ id: 'series1', status: 'revoked' });
+    api.confirmProjectIntent.mockResolvedValue({});
+    api.classifyRetrospectiveIntent.mockResolvedValue({ project: legacyPublishedProject });
   });
 
   it('shows a real project creation form when the project list is empty', async () => {
@@ -328,5 +353,58 @@ describe('ContentPage', () => {
         }),
       );
     });
+  });
+
+  it('routes a published legacy project to retrospective classification instead of intent confirmation', async () => {
+    api.listProjects.mockResolvedValue({ items: [legacyPublishedProject], total: 1 });
+    api.getCalibrationWorkspace.mockResolvedValue(intentActionWorkspace({}));
+    renderPage('/content/p1');
+
+    expect(
+      await screen.findByRole('heading', { name: '这条已发布的内容，当时想让读者发生什么变化？' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/AI 只能提议，最终由你确认/)).toBeInTheDocument();
+    expect(screen.getByText(/发布意图仍然为空/)).toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: '这条内容想让读者发生什么变化？' }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('希望读者发生的变化')).not.toBeInTheDocument();
+  });
+
+  it('requires a classification basis before writing the retrospective intent', async () => {
+    api.listProjects.mockResolvedValue({ items: [legacyPublishedProject], total: 1 });
+    api.getCalibrationWorkspace.mockResolvedValue(intentActionWorkspace({}));
+    renderPage('/content/p1');
+
+    const submit = await screen.findByRole('button', { name: '确认回溯分类' });
+    expect(submit).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText('判断依据'), {
+      target: { value: '当时的评论都在问具体步骤' },
+    });
+    expect(submit).toBeEnabled();
+    fireEvent.click(submit);
+
+    await waitFor(() => {
+      expect(api.classifyRetrospectiveIntent).toHaveBeenCalledWith('p1', {
+        retrospective_intent: 'solve',
+        classification_basis: '当时的评论都在问具体步骤',
+        expected_project_version: 4,
+        idempotency_key: 'retrospective-p1-4',
+      });
+    });
+    expect(api.confirmProjectIntent).not.toHaveBeenCalled();
+  });
+
+  it('keeps normal intent confirmation for an unpublished project', async () => {
+    const draft = { ...legacyPublishedProject, status: 'preparing' as const, intent_status: 'candidate' as const };
+    api.listProjects.mockResolvedValue({ items: [draft], total: 1 });
+    api.getCalibrationWorkspace.mockResolvedValue(intentActionWorkspace(draft));
+    renderPage('/content/p1');
+
+    expect(
+      await screen.findByRole('heading', { name: '这条内容想让读者发生什么变化？' }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '确认回溯分类' })).not.toBeInTheDocument();
   });
 });

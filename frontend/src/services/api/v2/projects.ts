@@ -21,6 +21,7 @@ import type {
   EvidenceRevocationInput,
   IntentAction,
   IntentConfirmationInput,
+  RetrospectiveClassificationInput,
   TodayWorkspace,
   CandidateReview,
   SegmentDecisionInput,
@@ -121,6 +122,17 @@ export const getProjectNextAction = (projectId: string) =>
 
 export const confirmProjectIntent = (projectId: string, input: IntentConfirmationInput) =>
   getData(v2Client.post<ApiEnvelope<unknown>>(`/projects/${projectId}/intent:confirm`, input));
+
+export const classifyRetrospectiveIntent = (
+  projectId: string,
+  input: RetrospectiveClassificationInput,
+) =>
+  getData(
+    v2Client.post<ApiEnvelope<{ project: ContentProject }>>(
+      `/projects/${projectId}/intent:classify-retrospective`,
+      input,
+    ),
+  );
 
 export const respondToAction = (actionId: string, input: ActionResponseInput) =>
   getData(v2Client.post<ApiEnvelope<unknown>>(`/actions/${actionId}:respond`, input));

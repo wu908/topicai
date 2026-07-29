@@ -21,6 +21,7 @@ import {
   createProject,
   decideCandidateSegment,
   confirmProjectIntent,
+  classifyRetrospectiveIntent,
   getCalibrationWorkspace,
   listProjects,
   lockPublishHypothesis,
@@ -422,9 +423,12 @@ function IntentActionPanel({
   busy: boolean;
   runCommand: (command: () => Promise<unknown>) => Promise<void>;
 }) {
-  const [intent, setIntent] = useState<ContentIntent>(workspace.project.content_intent || 'solve');
+  const [intent, setIntent] = useState<ContentIntent>(
+    workspace.project.content_intent || workspace.project.retrospective_intent || 'solve',
+  );
   const [audienceChange, setAudienceChange] = useState(workspace.project.audience_change || '');
   const [answer, setAnswer] = useState('');
+  const [classificationBasis, setClassificationBasis] = useState('');
   const [gate, setGate] = useState<HumanGate | null>(action.human_gate);
 
   useEffect(() => {
@@ -437,6 +441,30 @@ function IntentActionPanel({
   }, [action.action_type, action.id, gate, workspace.candidate_review?.can_lock, workspace.next_action]);
 
   const copy = intentCopy[intent];
+  // ADR 0002: 已发布的历史内容只能回溯分类。发布意图保持为空，
+  // 因此这里必须拦在普通意图确认表单之前。
+  const needsRetrospective = action.action_type === 'confirm_intent'
+    && workspace.project.intent_status === 'legacy_unclassified'
+    && ['published', 'awaiting_review', 'settled'].includes(workspace.project.status);
+
+  if (needsRetrospective) {
+    return (
+      <Paper component="section" variant="outlined" sx={{ p: { xs: 2, sm: 3 }, borderColor: 'var(--v3-border)', boxShadow: 'none' }}>
+        <Stack spacing={2}>
+          <div><Chip size="small" label="回溯分类" /><h2>这条已发布的内容，当时想让读者发生什么变化？</h2><p>历史内容不再补填发布意图。AI 只能提议，最终由你确认；确认后只记录你回看时的判断，这条内容的发布意图保持不变。</p></div>
+          <TextField select label="回溯意图" value={intent} onChange={(event) => setIntent(event.target.value as ContentIntent)}>
+            <MenuItem value="solve">解决：教会一个方法</MenuItem>
+            <MenuItem value="share">分享：表达经历或观点</MenuItem>
+            <MenuItem value="record">记录：留下过程和变化</MenuItem>
+          </TextField>
+          <TextField label="判断依据" value={classificationBasis} onChange={(event) => setClassificationBasis(event.target.value)} multiline minRows={2} helperText="写下你依据什么这样判断，例如当时的读者反馈或你的写作动机。" />
+          <Alert severity="info">确认后只写入回溯意图，发布意图仍然为空，不会影响这条内容的历史记录。</Alert>
+          <Button variant="contained" startIcon={<CheckCircleOutline />} disabled={busy || !classificationBasis.trim()} onClick={() => void runCommand(() => classifyRetrospectiveIntent(workspace.project.id, { retrospective_intent: intent, classification_basis: classificationBasis.trim(), expected_project_version: workspace.project.version, idempotency_key: `retrospective-${workspace.project.id}-${workspace.project.version}` }))}>确认回溯分类</Button>
+        </Stack>
+      </Paper>
+    );
+  }
+
   if (action.action_type === 'confirm_intent') {
     return (
       <Paper component="section" variant="outlined" sx={{ p: { xs: 2, sm: 3 }, borderColor: 'var(--v3-border)', boxShadow: 'none' }}>
