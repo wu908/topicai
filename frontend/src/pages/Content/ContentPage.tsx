@@ -237,7 +237,7 @@ export default function ContentPage() {
                 <span>
                   <span className="content-project-row-title">{project.title}</span>
                   <span className="content-project-row-meta">
-                    {project.content_intent === 'solve' ? '解决' : project.content_intent === 'share' ? '分享' : '记录'}内容
+                    {projectIntentLabel(project)}
                   </span>
                 </span>
                 <span className="content-project-row-meta">
@@ -412,6 +412,13 @@ const intentCopy: Record<ContentIntent, { label: string; audience: string; mater
   record: { label: '记录', audience: '读者看完后愿意持续关注你的过程和变化', materials: ['起点', '过程片段', '转折', '当前结果'], responses: ['持续关注', '追问进展', '系列期待'], signals: ['阅读完成', '回访读者', '系列继续率'] },
 };
 
+// ADR 0002：历史内容的发布意图为空，回溯分类结果才是可显示的判断。两者都没有
+// 就显示“未分类”，不能兜底成某个具体意图。
+function projectIntentLabel(project: ContentProject): string {
+  const intent = project.content_intent ?? project.retrospective_intent;
+  return intent ? `${intentCopy[intent].label}内容` : '未分类内容';
+}
+
 function IntentActionPanel({
   workspace,
   action,
@@ -531,7 +538,7 @@ function IntentActionPanel({
     return (
       <Paper component="section" variant="outlined" sx={{ p: { xs: 2, sm: 3 }, borderColor: 'var(--v3-border)', boxShadow: 'none' }}>
         <Stack spacing={2}>
-          <div><Chip size="small" label={`${intentCopy[workspace.project.content_intent || 'solve'].label}内容`} /><h2>{action.title}</h2><p>{action.reason}</p></div>
+          <div><Chip size="small" label={projectIntentLabel(workspace.project)} /><h2>{action.title}</h2><p>{action.reason}</p></div>
           <TextField label="你的回答" value={answer} onChange={(event) => setAnswer(event.target.value)} multiline minRows={6} placeholder="写下你亲自经历的细节，不需要先写成完整笔记。" />
           <Button variant="contained" startIcon={<ArrowForward />} disabled={busy || answer.trim().length < 10} onClick={() => void runCommand(() => respondToAction(action.id, { decision: 'accept', response_payload: { answer: answer.trim() }, expected_action_version: action.version, idempotency_key: `answer-${action.id}-${action.version}` }))}>让 AI 准备候选内容</Button>
         </Stack>

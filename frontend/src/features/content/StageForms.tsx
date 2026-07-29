@@ -267,7 +267,24 @@ export function HypothesisForm({
     ? problem.trim() && promise.trim()
     : intent === 'share'
       ? viewpoint.trim()
-      : continuation.trim();
+      : intent === 'record' ? continuation.trim() : false;
+
+  // ADR 0002：历史内容的发布意图始终为空，锁定发布前判断需要一个真实的发布意图，
+  // 所以这条路对它是走不通的。编排器目前仍会把回溯分类过的项目推到这一步，
+  // 这里必须说清楚原因，而不是留一个永远点不亮的按钮。
+  if (!intent) {
+    return (
+      <Paper component="section" variant="outlined" sx={panelSx}>
+        <Typography component="h2" variant="h5" mb={2}>
+          这条内容无法锁定发布前判断
+        </Typography>
+        <Alert severity="info">
+          它是一条历史内容，没有记录当时的发布意图。回溯分类只记录你现在回看时的判断，
+          不会补填当时的发布意图，因此这一步对它不适用。
+        </Alert>
+      </Paper>
+    );
+  }
 
   return (
     <Paper component="section" variant="outlined" sx={panelSx}>
@@ -391,8 +408,8 @@ export function HypothesisForm({
               || observationWindow < 1 || observationWindow > 365
             }
             onClick={() => {
-              // 发布假设必须挂在真实的发布意图上；历史内容走回溯分类，不到这里。
-              if (!version || !intent) return;
+              // intent 已由上面的历史内容分支收窄为非空。
+              if (!version) return;
               void onCommand(() =>
                 lockHypothesis(workspace.project.id, {
                   content_version_id: version.id,

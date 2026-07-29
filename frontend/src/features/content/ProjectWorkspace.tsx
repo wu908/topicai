@@ -314,13 +314,19 @@ export default function ProjectWorkspace({
   const problem = lineValue(hypothesis?.audience_problem, workspace.project.target_audience);
   const promise = lineValue(hypothesis?.reader_promise, '尚未确认这篇内容要解决什么问题。');
   const guide = nextStepGuide(workspace);
-  const intent = workspace.project.content_intent || 'solve';
-  const intentLabel = intent === 'solve' ? '解决' : intent === 'share' ? '分享' : '记录';
+  // ADR 0002：历史内容的发布意图始终为空，能显示的只有回溯分类结果。
+  // 两者都没有时不能兜底成“解决”，那等于替用户编造一个他没确认过的意图。
+  const intent = workspace.project.content_intent ?? workspace.project.retrospective_intent;
+  const intentLabel = intent === 'solve'
+    ? '解决'
+    : intent === 'share' ? '分享' : intent === 'record' ? '记录' : null;
   const purpose = intent === 'solve'
     ? '帮助读者解决一个具体问题'
     : intent === 'share'
       ? '让读者理解你的经历、观点或感受'
-      : '留下一个过程、变化或结果，邀请读者持续关注';
+      : intent === 'record'
+        ? '留下一个过程、变化或结果，邀请读者持续关注'
+        : null;
   const genome = workspace.content_genome;
 
   return (
@@ -335,7 +341,11 @@ export default function ProjectWorkspace({
               <h1>{title || workspace.project.title}</h1>
               <span className="workspace-status">{statusLabels[workspace.project.status]}</span>
             </div>
-            <p>{version ? `这是一条${intentLabel}内容：${purpose}。` : '先给出一个模糊想法，AI 会帮你找到这条内容的目的。'}</p>
+            <p>{!version
+              ? '先给出一个模糊想法，AI 会帮你找到这条内容的目的。'
+              : intentLabel
+                ? `这是一条${intentLabel}内容：${purpose}。`
+                : '这条历史内容还没有回溯分类，先确认它当时想让读者发生什么变化。'}</p>
           </div>
         </div>
         <div className="workspace-header-actions">
@@ -349,7 +359,7 @@ export default function ProjectWorkspace({
       <section className="workspace-purpose" aria-labelledby="workspace-purpose-heading">
         <div className="workspace-purpose-copy">
           <span className="workspace-eyebrow">这篇内容要完成什么</span>
-          <h2 id="workspace-purpose-heading">这条内容要{purpose}</h2>
+          <h2 id="workspace-purpose-heading">{purpose ? `这条内容要${purpose}` : '这条内容还没有分类'}</h2>
           <p>AI 会根据这个目的选择问题、结构和发布后的观察方式。你不需要先学会复杂的方法。</p>
         </div>
         <div className="workspace-next-step">
@@ -368,7 +378,7 @@ export default function ProjectWorkspace({
             <h2>这篇内容的进度</h2>
             <p>完成一个动作，再进入下一步</p>
           </div>
-          <OutlineItem icon={<FactCheckOutlined />} title="内容意图" value={`${intentLabel}：${purpose}`} state={workspace.project.intent_status === 'working_confirmed' || workspace.project.intent_status === 'locked' ? 'confirmed' : 'pending'} />
+          <OutlineItem icon={<FactCheckOutlined />} title="内容意图" value={intentLabel ? `${intentLabel}：${purpose}` : '尚未分类，可回溯确认当时的意图'} state={workspace.project.intent_status === 'working_confirmed' || workspace.project.intent_status === 'locked' ? 'confirmed' : 'pending'} />
           <OutlineItem
             icon={<TimelineOutlined />}
             title="需要的真实素材"
@@ -438,7 +448,7 @@ export default function ProjectWorkspace({
           <section className="editor-section">
             <div className="editor-section-heading">
               <span className="editor-section-number">1.</span>
-              <h2>{intent === 'solve' ? '读者要解决什么' : intent === 'share' ? '读者要理解什么' : '读者要持续关注什么'}</h2>
+              <h2>{intent === 'solve' ? '读者要解决什么' : intent === 'share' ? '读者要理解什么' : intent === 'record' ? '读者要持续关注什么' : '这条内容面向的读者'}</h2>
               {hypothesis ? <span className="confirmed-label"><LockOutlined fontSize="inherit" /> 已确认</span> : null}
             </div>
             <p className="editor-section-copy">{problem}</p>
@@ -447,7 +457,7 @@ export default function ProjectWorkspace({
           <section className="editor-section">
             <div className="editor-section-heading">
               <span className="editor-section-number">2.</span>
-              <h2>{intent === 'solve' ? '你准备给出的答案' : intent === 'share' ? '你的感受或观点' : '这次过程发生了什么'}</h2>
+              <h2>{intent === 'solve' ? '你准备给出的答案' : intent === 'share' ? '你的感受或观点' : intent === 'record' ? '这次过程发生了什么' : '这条内容当时给出了什么'}</h2>
               {hypothesis ? <span className="confirmed-label"><LockOutlined fontSize="inherit" /> 已确认</span> : null}
             </div>
             <p className="editor-section-copy">{promise}</p>

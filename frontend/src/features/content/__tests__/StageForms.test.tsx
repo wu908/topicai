@@ -140,4 +140,32 @@ describe('HypothesisForm', () => {
     expect(screen.getByRole('button', { name: '锁定发布意图' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '确认这个方向' })).not.toBeInTheDocument();
   });
+
+  // ADR 0002：历史内容的发布意图为空，锁定这一步对它不适用。编排器仍会把回溯分类过
+  // 的项目推到这里，所以要给出原因，而不是一个永远点不亮的按钮。
+  it('explains why a historical project cannot lock a Publish Judgment', () => {
+    render(
+      <HypothesisForm
+        workspace={{
+          ...workspace,
+          project: {
+            ...workspace.project,
+            content_intent: null,
+            retrospective_intent: 'share',
+            intent_status: 'retrospective',
+            status: 'published',
+          },
+        }}
+        busy={false}
+        onCommand={vi.fn()}
+        lockHypothesis={vi.fn()}
+        makeKey={() => 'lock-key'}
+      />,
+    );
+
+    expect(screen.getByRole('heading', { name: '这条内容无法锁定发布前判断' })).toBeInTheDocument();
+    expect(screen.getByText(/不会补填当时的发布意图/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '锁定发布意图' })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('预期受众变化')).not.toBeInTheDocument();
+  });
 });

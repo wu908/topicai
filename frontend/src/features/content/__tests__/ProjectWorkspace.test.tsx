@@ -69,6 +69,29 @@ describe('ProjectWorkspace', () => {
     vi.restoreAllMocks();
   });
 
+  // ADR 0002：发布意图为空的历史内容，表头不能声称它是一条“解决”内容。
+  it('does not assert a default intent for an unclassified historical project', () => {
+    renderWorkspace({
+      project: { ...workspace.project, content_intent: null, retrospective_intent: null, intent_status: 'legacy_unclassified', status: 'published' },
+    });
+
+    expect(screen.getByText(/这条历史内容还没有回溯分类/)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '这条内容还没有分类' })).toBeInTheDocument();
+    expect(screen.getByText('尚未分类，可回溯确认当时的意图')).toBeInTheDocument();
+    expect(screen.queryByText(/这是一条解决内容/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/帮助读者解决一个具体问题/)).not.toBeInTheDocument();
+  });
+
+  // 回溯分类过之后，显示的是用户确认的回溯意图，而不是默认值。
+  it('uses the confirmed retrospective intent once it exists', () => {
+    renderWorkspace({
+      project: { ...workspace.project, content_intent: null, retrospective_intent: 'share', intent_status: 'retrospective', status: 'published' },
+    });
+
+    expect(screen.getByText(/这是一条分享内容/)).toBeInTheDocument();
+    expect(screen.queryByText(/这是一条解决内容/)).not.toBeInTheDocument();
+  });
+
   it('anchors the editor in project evidence and keeps the current stage action available', () => {
     renderWorkspace();
 

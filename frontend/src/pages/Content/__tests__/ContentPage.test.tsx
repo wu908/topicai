@@ -166,6 +166,23 @@ describe('ContentPage', () => {
     expect(createButton).toBeEnabled();
   });
 
+  // ADR 0002：历史内容的发布意图为空，列表不能替用户兜底成某个具体意图。
+  it('labels historical projects from the retrospective intent, never a default', async () => {
+    api.listProjects.mockResolvedValue({
+      items: [
+        { ...project, id: 'legacy-1', title: '未分类历史内容', content_intent: null, retrospective_intent: null },
+        { ...project, id: 'legacy-2', title: '已回溯分类', content_intent: null, retrospective_intent: 'share' },
+      ],
+      total: 2,
+    });
+    renderPage();
+
+    expect(await screen.findByText('未分类历史内容')).toBeInTheDocument();
+    expect(screen.getByText('未分类内容')).toBeInTheDocument();
+    expect(screen.getByText('分享内容')).toBeInTheDocument();
+    expect(screen.queryByText('记录内容')).not.toBeInTheDocument();
+  });
+
   it('resumes at manual publication and submits the locked version', async () => {
     api.listProjects.mockResolvedValue({ items: [project], total: 1 });
     renderPage('/content/p1');
