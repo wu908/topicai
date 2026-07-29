@@ -265,6 +265,89 @@ async def test_user_classifies_legacy_intent_without_changing_publication_intent
 
 
 @pytest.mark.asyncio
+async def test_published_legacy_project_rejects_working_intent_confirmation(
+    client, test_db
+):
+    """ADR 0002: published historical content may only be classified
+    retrospectively. Working Intent Confirmation would write content_intent
+    and move the project to working_confirmed, which the invariant forbids.
+    """
+    async with await test_db.get_session() as session:
+        async with session.begin():
+            await session.execute(
+                text(
+                    "INSERT INTO content_projects (id,owner_user_id,title,status,"
+                    "primary_goal,target_audience,last_action_at,version,created_at,updated_at,"
+                    "intent_status) VALUES "
+                    "('legacy-confirm-project','u1','历史内容','published','stable_publish',"
+                    "'知识型创作者','2026-07-20T00:00:00Z',1,'2026-07-20T00:00:00Z',"
+                    "'2026-07-20T00:00:00Z','legacy_missing')"
+                )
+            )
+
+    rejected = await client.post(
+        "/api/v2/projects/legacy-confirm-project/intent:confirm",
+        json={
+            "content_intent": "solve",
+            "audience_change": "读者能解决一个具体问题",
+            "material_requirements": [],
+            "expected_responses": [],
+            "success_signals": [],
+            "expected_project_version": 1,
+            "idempotency_key": "legacy-confirm-attempt-1",
+        },
+    )
+
+    assert rejected.status_code == 400
+    assert "retrospective" in rejected.json()["message"].lower()
+    stored = await test_db.fetch_one(
+        "SELECT content_intent,intent_status,version FROM content_projects "
+        "WHERE id='legacy-confirm-project'"
+    )
+    assert stored["intent_status"] == "legacy_missing"
+    assert stored["version"] == 1
+
+
+@pytest.mark.asyncio
+async def test_unpublished_legacy_project_still_allows_intent_confirmation(
+    client, test_db
+):
+    """The guard is scoped to published history. A legacy row that was never
+    published still goes through normal Working Intent Confirmation.
+    """
+    async with await test_db.get_session() as session:
+        async with session.begin():
+            await session.execute(
+                text(
+                    "INSERT INTO content_projects (id,owner_user_id,title,status,"
+                    "primary_goal,target_audience,last_action_at,version,created_at,updated_at,"
+                    "intent_status) VALUES "
+                    "('legacy-draft-project','u1','未发布旧项目','preparing','stable_publish',"
+                    "'知识型创作者','2026-07-20T00:00:00Z',1,'2026-07-20T00:00:00Z',"
+                    "'2026-07-20T00:00:00Z','legacy_missing')"
+                )
+            )
+
+    confirmed = await client.post(
+        "/api/v2/projects/legacy-draft-project/intent:confirm",
+        json={
+            "content_intent": "share",
+            "audience_change": "读者更理解这段经历",
+            "material_requirements": [],
+            "expected_responses": [],
+            "success_signals": [],
+            "expected_project_version": 1,
+            "idempotency_key": "legacy-draft-confirm-1",
+        },
+    )
+
+    assert confirmed.status_code == 201
+    project = confirmed.json()["data"]["project"]
+    assert project["intent_status"] == "working_confirmed"
+    assert project["content_intent"] == "share"
+
+
+@pytest.mark.asyncio
 async def test_growth_creator_completes_confirmed_learning_loop(
     client, test_db, monkeypatch
 ):

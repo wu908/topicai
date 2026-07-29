@@ -22,6 +22,7 @@ import {
 } from '@mui/icons-material';
 import type {
   CalibrationWorkspace,
+  ContentIntent,
   ContentProject,
   ExpectedBehavior,
   HumanGate,
@@ -41,7 +42,7 @@ interface ProjectCreateFormProps extends CommandProps {
     title: string;
     primary_goal: ContentProject['primary_goal'];
     target_audience: string;
-    content_intent?: ContentProject['content_intent'];
+    content_intent?: ContentIntent;
     audience_change?: string;
     idempotency_key: string;
   }) => Promise<ContentProject>;
@@ -80,7 +81,7 @@ export function ProjectCreateForm({
   const [title, setTitle] = useState('');
   const [audience, setAudience] = useState('');
   const [goal, setGoal] = useState<ContentProject['primary_goal']>('stable_publish');
-  const [intent, setIntent] = useState<ContentProject['content_intent'] | ''>('');
+  const [intent, setIntent] = useState<ContentIntent | ''>('');
   const [audienceChange, setAudienceChange] = useState('');
 
   const submit = () =>
@@ -126,7 +127,7 @@ export function ProjectCreateForm({
           select
           label="这条内容更像什么"
           value={intent}
-          onChange={(event) => setIntent(event.target.value as ContentProject['content_intent'] | '')}
+          onChange={(event) => setIntent(event.target.value as ContentIntent | '')}
           helperText="先选一个大致方向，进入项目后仍可纠正。"
         >
           <MenuItem value="">不确定，让 AI 先判断</MenuItem>
@@ -390,7 +391,8 @@ export function HypothesisForm({
               || observationWindow < 1 || observationWindow > 365
             }
             onClick={() => {
-              if (!version) return;
+              // 发布假设必须挂在真实的发布意图上；历史内容走回溯分类，不到这里。
+              if (!version || !intent) return;
               void onCommand(() =>
                 lockHypothesis(workspace.project.id, {
                   content_version_id: version.id,

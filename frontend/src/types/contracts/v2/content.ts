@@ -117,7 +117,14 @@ export interface ContentProject {
   status: ProjectStatus;
   primary_goal: 'stable_publish' | 'follower_growth' | 'experiment';
   target_audience: string;
-  content_intent: ContentIntent;
+  /**
+   * Null while the project is legacy_unclassified or retrospective — ADR 0002
+   * keeps the Publication Intent unset for historical content. Read
+   * retrospective_intent for the user-confirmed classification instead.
+   */
+  content_intent: ContentIntent | null;
+  /** Set only by retrospective classification; never changes content_intent. */
+  retrospective_intent: ContentIntent | null;
   content_format: ContentFormat;
   intent_status: IntentStatus;
   audience_change: string | null;
@@ -641,6 +648,17 @@ export interface IntentConfirmationInput {
   material_requirements: string[];
   expected_responses: string[];
   success_signals: string[];
+  expected_project_version: number;
+  idempotency_key: string;
+}
+
+/**
+ * Retrospective Intent Classification for published historical content.
+ * Writes retrospective_intent only; content_intent stays NULL per ADR 0002.
+ */
+export interface RetrospectiveClassificationInput {
+  retrospective_intent: ContentIntent;
+  classification_basis: string;
   expected_project_version: number;
   idempotency_key: string;
 }

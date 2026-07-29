@@ -66,6 +66,16 @@ class IntentConfirmationService:
                     raise VersionConflictException(project["version"], body.expected_project_version)
                 if effective_intent_status(project) in {"locked", "retrospective"}:
                     raise ValueError("intent is immutable after lock or retrospective classification")
+                if (
+                    effective_intent_status(project) == "legacy_unclassified"
+                    and project["status"] in {"published", "awaiting_review", "settled"}
+                ):
+                    # ADR 0002: published history keeps content_intent NULL and is
+                    # only ever classified through intent:classify-retrospective.
+                    raise ValueError(
+                        "published historical content requires retrospective "
+                        "intent classification"
+                    )
                 timestamp = now()
                 updated = await session.execute(
                     text(
