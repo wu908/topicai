@@ -51,7 +51,36 @@ TODAY_ACTION_PRIORITY = {
     "series_opportunity": 55,
     "answer_key_question": 50,
     "create_project": 10,
+    # Terminal and informational: never displace real work in Today.
+    "scope_learning": 5,
 }
+
+
+# Used when no intent has been confirmed or classified yet. Every field stays
+# neutral so an action can never imply an intent the user has not chosen.
+_UNRESOLVED_INTENT_CONFIG: dict[str, Any] = {
+    "label": "",
+    "question": "这条内容里，哪个真实信息最关键？",
+    "materials": [],
+    "responses": [],
+    "signals": [],
+}
+
+
+def resolved_action_intent(project: dict[str, Any] | None) -> str | None:
+    """The intent an action may legitimately claim for a project, or None.
+
+    ADR 0002 keeps ``content_intent`` NULL for historical content, which only
+    carries a retrospective classification. The column defaults to ``'solve'``
+    in the database and rows reach the orchestrator un-normalized, so trust
+    ``intent_status`` rather than reading the column directly — otherwise an
+    unclassified legacy project looks like a confirmed 解决 project.
+    """
+    if not project:
+        return None
+    if effective_intent_status(project) in {"legacy_unclassified", "retrospective"}:
+        return project.get("retrospective_intent")
+    return project.get("content_intent")
 
 
 class IntentOrchestratorService:
@@ -390,6 +419,12 @@ class IntentOrchestratorService:
         if invalid_evidence:
             return "answer_key_question"
         if not project.get("publish_hypothesis_id"):
+            # Historical content has no locked publish record (spec 010: legacy_unclassified
+            # 是"历史内容，无锁定记录"), and ADR 0002 keeps its content_intent NULL — so it can
+            # never satisfy the working-confirmed precondition that lock_intent requires.
+            # Pushing it forward would only offer an action that always fails.
+            if intent_status == "retrospective":
+                return "scope_learning"
             return (
                 "lock_intent"
                 if project.get("last_action") == "candidate_confirmed"
@@ -512,7 +547,7 @@ class IntentOrchestratorService:
             "owner": owner_user_id,
             "project": project_id,
             "action_type": action_type,
-            "content_intent": project.get("content_intent") if project else None,
+            "content_intent": resolved_action_intent(project),
             "title": spec["title"],
             "reason": spec["reason"],
             "evidence": evidence_refs,
@@ -600,17 +635,22 @@ class IntentOrchestratorService:
         return await self._normalize_with_gate(owner_user_id, created)
 
     def _action_spec(self, action_type: str, project: dict[str, Any] | None) -> dict[str, Any]:
-        intent = (
-            (project or {}).get("content_intent")
-            or (project or {}).get("retrospective_intent")
-            or "solve"
-        )
-        config = INTENT_CONFIG[intent]
+        intent = resolved_action_intent(project)
+        config = INTENT_CONFIG.get(intent or "", _UNRESOLVED_INTENT_CONFIG)
         audience = (project or {}).get("target_audience") or "目标读者尚未确认"
         project_id = (project or {}).get("id", "")
+        # With no confirmed or classified intent there is nothing to confirm yet:
+        # ask what the content was for instead of naming an intent the user never
+        # chose. Retrospective classification leaves content_intent NULL (ADR 0002).
+        if intent:
+            intent_title = f"确认这是一条“{config['label']}”内容吗？"
+            intent_reason = "内容意图会决定 AI 接下来问什么、怎么组织内容以及发布后观察什么。"
+        else:
+            intent_title = "这条内容当时想让读者发生什么变化？"
+            intent_reason = "先由你说明当时的判断，AI 才能划定学习范围；发布意图不会被补写成发布前就已确认的决定。"
         specs = {
             "create_project": ("确定下一条内容从哪里开始", "有模糊想法可以直接创建；还不知道做什么，可以先盘点真实经历并完成三篇低成本实验。", [], ["content_seed"], 3, None, {"action_type": "create_project", "path": "/content"}),
-            "confirm_intent": (f"确认这是一条“{config['label']}”内容吗？", "内容意图会决定 AI 接下来问什么、怎么组织内容以及发布后观察什么。", ["project:title", f"project:audience:{audience}"], ["confirmed_intent", "audience_change"], 2, "intent", {"action_type": "confirm_intent", "path": f"/content/{project_id}"}),
+            "confirm_intent": (intent_title, intent_reason, ["project:title", f"project:audience:{audience}"], ["confirmed_intent", "audience_change"], 2, "intent", {"action_type": "confirm_intent", "path": f"/content/{project_id}"}),
             "lock_intent": ("锁定发布意图与发布前判断", "锁定后意图与 Publish Judgment 成为不可覆盖的发布历史。", ["content:current_version", "project:intent"], ["complete_publish_judgment"], 3, None, {"action_type": "lock_intent", "path": f"/content/{project_id}"}),
             "answer_key_question": (config["question"], "只补一个最关键的真实信息，AI 就能先准备候选内容，不需要你填写完整 Brief。", ["project:intent", "project:title"], ["first_party_evidence"], 5, "user_fact", {"action_type": "create_version", "path": f"/content/{project_id}", "mode": "generic_structure", "limitations": ["missing_first_party_evidence", "must_not_represent_creator_experience"]}),
             "review_candidate": ("确认候选内容是否准确表达了你", "发布前只需要确认事实、表达和公开范围；已确认内容不会被自动覆盖。", ["content:current_version", "project:intent"], ["fact_accuracy", "public_scope"], 8, "content_version", {"action_type": "lock_hypothesis", "path": f"/content/{project_id}"}),
@@ -619,6 +659,7 @@ class IntentOrchestratorService:
             "review_result": ("让 AI 对照发布前判断和真实结果", "复盘先区分事实与可能原因，不会把一次结果直接写成长期规律。", ["publication:hypothesis", "performance:latest"], [], 3, None, {"action_type": "run_blind_review", "path": f"/content/{project_id}"}),
             "confirm_learning": ("确认下一轮只做一个实验", "这次复盘只保留继续一项、停止一项、实验一项，确认后才进入长期经验候选。", ["review:latest"], ["next_experiment"], 5, "long_term_learning", {"action_type": "create_observation", "path": f"/content/{project_id}"}),
             "manage_learning": ("处理一条待验证经验", "只有跨内容得到支持并经你确认的结论，才会进入长期创作者状态。", ["observation:latest"], [], 4, None, {"action_type": "manage_observations", "path": f"/content/{project_id}"}),
+            "scope_learning": ("这条历史内容已归入学习范围", "当时没有留下发布前判断，没有可对照的预期，所以它不会进入复盘；回溯分类只用来决定它能为哪类内容提供参考。", ["project:retrospective_intent"], [], 1, None, {"action_type": "scope_learning", "path": f"/content/{project_id}"}),
         }
         title, reason, evidence, unknown, effort, gate, fallback = specs[action_type]
         return {

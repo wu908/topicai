@@ -118,6 +118,7 @@ def test_intent_action_migration_upgrades_from_019_and_replays(tmp_path):
         "035_intent_lock_action",
         "036_creator_series_scope",
         "037_capability_trust",
+        "038_scope_learning_action",
     ]
     assert replay == []
     with sqlite3.connect(db_path) as conn:
@@ -181,6 +182,7 @@ def test_action_lifecycle_migration_rebuilds_phase_15_constraints(tmp_path):
         "035_intent_lock_action",
         "036_creator_series_scope",
         "037_capability_trust",
+        "038_scope_learning_action",
     ]
     with sqlite3.connect(db_path) as conn:
         action_sql = conn.execute(
@@ -244,6 +246,7 @@ def test_source_verification_migration_preserves_series_opportunities(tmp_path):
         "035_intent_lock_action",
         "036_creator_series_scope",
         "037_capability_trust",
+        "038_scope_learning_action",
     ]
     with sqlite3.connect(db_path) as conn:
         opportunity = conn.execute(
@@ -590,12 +593,15 @@ def test_intent_lock_action_migration_upgrades_database_with_034_recorded(tmp_pa
         "035_intent_lock_action",
         "036_creator_series_scope",
         "037_capability_trust",
+        "038_scope_learning_action",
     ]
     with sqlite3.connect(db_path) as conn:
         action_sql = conn.execute(
             "SELECT sql FROM sqlite_master WHERE type='table' AND name='next_best_actions'"
         ).fetchone()[0]
         assert "'lock_intent'" in action_sql
+        # 038 expands the same constraint again without dropping 035's value.
+        assert "'scope_learning'" in action_sql
 
 
 def test_intent_lock_action_migration_repairs_interrupted_artifacts(tmp_path):

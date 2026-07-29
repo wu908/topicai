@@ -32,6 +32,7 @@ const actionLabels: Record<IntentAction['action_type'], string> = {
   review_result: '对照发布结果',
   confirm_learning: '确认下一轮实验',
   manage_learning: '处理一条待验证经验',
+  scope_learning: '查看这条历史内容',
 };
 
 const outcomeLabels: Record<IntentAction['action_type'], string> = {
@@ -46,6 +47,7 @@ const outcomeLabels: Record<IntentAction['action_type'], string> = {
   review_result: '区分事实、可能原因和下一轮实验',
   confirm_learning: '只沉淀一条经过你确认的下一轮实验',
   manage_learning: '决定这条经验继续验证、吸收还是停止',
+  scope_learning: '它只作为后续内容的参考，不会被当成可复盘的发布',
 };
 
 const refLabels: Record<string, string> = {
