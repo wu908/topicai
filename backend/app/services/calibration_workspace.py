@@ -22,7 +22,8 @@ class CalibrationWorkspaceService:
             "  THEN 'record_publication' "
             "WHEN NOT EXISTS (SELECT 1 FROM performance_snapshots_v2 ps "
             "  WHERE ps.project_id=p.id AND ps.owner_user_id=p.owner_user_id) "
-            "  THEN 'add_snapshot' "
+            "  THEN CASE WHEN p.status='published' THEN 'await_observation_window' "
+            "  ELSE 'add_snapshot' END "
             "WHEN NOT EXISTS (SELECT 1 FROM blind_reviews br "
             "  WHERE br.project_id=p.id AND br.owner_user_id=p.owner_user_id) "
             "  THEN 'run_blind_review' "
@@ -278,7 +279,11 @@ class CalibrationWorkspaceService:
         if publish_record is None:
             return "record_publication"
         if not snapshots:
-            return "add_snapshot"
+            return (
+                "await_observation_window"
+                if project["status"] == "published"
+                else "add_snapshot"
+            )
         if review is None:
             return "run_blind_review"
         if review["calibration_state"] == "calibration_invalid":

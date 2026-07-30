@@ -2,6 +2,8 @@
 
 import pytest
 
+from app.services.observation_window import ObservationWindowService
+
 
 async def _lock_project(client, suffix="api-loop"):
     project = (
@@ -79,7 +81,7 @@ async def _confirm_publication_gate(client, project_id: str, suffix: str) -> str
 
 
 @pytest.mark.asyncio
-async def test_manual_publish_snapshot_blind_review_and_observation(client):
+async def test_manual_publish_snapshot_blind_review_and_observation(client, test_db):
     project, version = await _lock_project(client)
     publication_gate_id = await _confirm_publication_gate(client, project["id"], "api")
     publication_body = {
@@ -103,6 +105,27 @@ async def test_manual_publish_snapshot_blind_review_and_observation(client):
     )
     assert publication_replay.status_code == 200
     assert publication_replay.json()["meta"]["idempotency_replayed"] is True
+
+    waiting_workspace = await client.get(
+        f"/api/v2/projects/{project['id']}/calibration"
+    )
+    assert waiting_workspace.status_code == 200
+    assert waiting_workspace.json()["data"]["next_action"] == "await_observation_window"
+
+    today = await client.get("/api/v2/today")
+    assert today.status_code == 200
+    assert today.json()["data"]["action"]["action_type"] == "await_observation_window"
+
+    assert (
+        await ObservationWindowService(test_db).mark_due(
+            as_of="2026-07-25T08:00:00Z"
+        )
+        == 1
+    )
+    due_workspace = await client.get(f"/api/v2/projects/{project['id']}/calibration")
+    assert due_workspace.status_code == 200
+    assert due_workspace.json()["data"]["next_action"] == "add_snapshot"
+    publication["project"] = due_workspace.json()["data"]["project"]
 
     snapshot_body = {
         "captured_at": "2026-07-21T08:00:00Z",

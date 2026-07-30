@@ -48,6 +48,7 @@ TODAY_ACTION_PRIORITY = {
     "confirm_learning": 80,
     "confirm_intent": 75,
     "manage_learning": 65,
+    "await_observation_window": 5,
     "series_opportunity": 55,
     "answer_key_question": 50,
     "create_project": 10,
@@ -442,7 +443,11 @@ class IntentOrchestratorService:
             {"owner": owner_user_id, "project": project["id"]},
         )
         if snapshot is None:
-            return "add_performance"
+            return (
+                "await_observation_window"
+                if project["status"] == "published"
+                else "add_performance"
+            )
         review = await self.db.fetch_one(
             "SELECT id FROM blind_reviews WHERE owner_user_id=:owner AND project_id=:project",
             {"owner": owner_user_id, "project": project["id"]},
@@ -655,6 +660,7 @@ class IntentOrchestratorService:
             "answer_key_question": (config["question"], "只补一个最关键的真实信息，AI 就能先准备候选内容，不需要你填写完整 Brief。", ["project:intent", "project:title"], ["first_party_evidence"], 5, "user_fact", {"action_type": "create_version", "path": f"/content/{project_id}", "mode": "generic_structure", "limitations": ["missing_first_party_evidence", "must_not_represent_creator_experience"]}),
             "review_candidate": ("确认候选内容是否准确表达了你", "发布前只需要确认事实、表达和公开范围；已确认内容不会被自动覆盖。", ["content:current_version", "project:intent"], ["fact_accuracy", "public_scope"], 8, "content_version", {"action_type": "lock_hypothesis", "path": f"/content/{project_id}"}),
             "record_publication": ("发布后，把笔记链接留在这里", "系统不会替你发布。记录真实发布时间后，AI 才能安排复盘。", ["content:locked_version"], ["publication_time"], 2, "publication", {"action_type": "record_publication", "path": f"/content/{project_id}"}),
+            "await_observation_window": ("等待观察窗口结束", "这篇内容仍在收集发布后的真实表现；窗口结束后，它会自动进入待复盘。", ["publication:record"], [], 0, None, {"action_type": "view_project", "path": f"/content/{project_id}"}),
             "add_performance": ("回填这篇内容的真实表现", f"这条{config['label']}内容需要用对应的观察信号复盘，而不是套用统一爆款分。", ["publication:record"], config["signals"], 4, None, {"action_type": "add_snapshot", "path": f"/content/{project_id}"}),
             "review_result": ("让 AI 对照发布前判断和真实结果", "复盘先区分事实与可能原因，不会把一次结果直接写成长期规律。", ["publication:hypothesis", "performance:latest"], [], 3, None, {"action_type": "run_blind_review", "path": f"/content/{project_id}"}),
             "confirm_learning": ("确认下一轮只做一个实验", "这次复盘只保留继续一项、停止一项、实验一项，确认后才进入长期经验候选。", ["review:latest"], ["next_experiment"], 5, "long_term_learning", {"action_type": "create_observation", "path": f"/content/{project_id}"}),

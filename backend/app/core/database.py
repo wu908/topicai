@@ -189,6 +189,7 @@ class Database:
             DEFAULT_MIGRATIONS_DIR,
             _intent_action_table_sql,
             _list_migration_files,
+            _observation_window_table_sql,
             _scope_learning_table_sql,
             _sha256,
         )
@@ -263,11 +264,13 @@ class Database:
                     )
                 )
             ).scalar_one_or_none()
-            # Migrations 035 and 038 each widen the action_type CHECK. Both are
+            # Migrations 035, 038 and 039 widen the action_type CHECK. They are
             # replayed in one rebuild here; the string transforms compose because
             # each only adds its own value.
             if action_sql and (
-                "'lock_intent'" not in action_sql or "'scope_learning'" not in action_sql
+                "'lock_intent'" not in action_sql
+                or "'scope_learning'" not in action_sql
+                or "'await_observation_window'" not in action_sql
             ):
                 await conn.commit()
                 await conn.execute(text("PRAGMA foreign_keys=OFF"))
@@ -296,8 +299,10 @@ class Database:
                     column_list = ",".join(columns)
                     await conn.execute(
                         text(
-                            _scope_learning_table_sql(
-                                _intent_action_table_sql(action_sql)
+                            _observation_window_table_sql(
+                                _scope_learning_table_sql(
+                                    _intent_action_table_sql(action_sql)
+                                )
                             )
                         )
                     )

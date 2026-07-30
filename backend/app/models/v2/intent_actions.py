@@ -54,6 +54,7 @@ class ActionType(StrEnum):
     REVIEW_RESULT = "review_result"
     CONFIRM_LEARNING = "confirm_learning"
     MANAGE_LEARNING = "manage_learning"
+    AWAIT_OBSERVATION_WINDOW = "await_observation_window"
     # Terminal: historical content with no locked publish record cannot be
     # reviewed against a pre-publication judgment. Its retrospective
     # classification only scopes future comparison and learning.

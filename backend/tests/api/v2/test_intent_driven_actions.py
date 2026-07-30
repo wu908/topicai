@@ -12,6 +12,7 @@ from app.services.candidate_review import CandidateReviewService
 from app.services.content_genome import ContentGenomeService
 from app.services.creator_state import CreatorStateService
 from app.services.intent_actions import HumanGateService
+from app.services.observation_window import ObservationWindowService
 
 
 @pytest.mark.asyncio
@@ -587,7 +588,23 @@ async def test_growth_creator_completes_confirmed_learning_loop(
     publication_action = await client.get(
         f"/api/v2/projects/{project['id']}/next-action"
     )
+    assert (
+        publication_action.json()["data"]["action_type"]
+        == "await_observation_window"
+    )
+    assert (
+        await ObservationWindowService(test_db).mark_due(
+            as_of="2026-07-27T08:00:00Z"
+        )
+        == 1
+    )
+    publication_action = await client.get(
+        f"/api/v2/projects/{project['id']}/next-action"
+    )
     assert publication_action.json()["data"]["action_type"] == "add_performance"
+    current_project = (
+        await client.get(f"/api/v2/projects/{project['id']}")
+    ).json()["data"]
 
     snapshot_response = await client.post(
         f"/api/v2/publish-records/{publication['record']['id']}/snapshots",
@@ -596,7 +613,7 @@ async def test_growth_creator_completes_confirmed_learning_loop(
             "source": "manual",
             "metrics": {"comments": 12, "follows_gained": 4},
             "confirmed_by_user": True,
-            "expected_project_version": publication["project"]["version"],
+            "expected_project_version": current_project["version"],
             "idempotency_key": "intent-performance",
         },
     )

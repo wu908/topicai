@@ -10,6 +10,7 @@ import {
   Paper,
   Stack,
   TextField,
+  Typography,
 } from '@mui/material';
 import { Add, ArrowForward, CheckCircleOutline, ScienceOutlined } from '@mui/icons-material';
 import { extractErrorMessage } from '@/utils/error';
@@ -79,6 +80,7 @@ const nextActionLabels: Record<NextAction, string> = {
   create_version: '先写下真实经历',
   lock_hypothesis: '锁定发布意图',
   record_publication: '记录已经发布',
+  await_observation_window: '等待观察窗口结束',
   add_snapshot: '回填实际表现',
   run_blind_review: '对照发布结果',
   create_observation: '决定下一次怎么验证',
@@ -821,6 +823,21 @@ function StageAction({
       return <HypothesisForm {...common} lockHypothesis={lockPublishHypothesis} />;
     case 'record_publication':
       return <PublicationForm {...common} recordPublication={recordPublication} openHumanGate={openHumanGate} decideHumanGate={decideHumanGate} />;
+    case 'await_observation_window': {
+      const publishedAt = workspace.publish_record?.published_at;
+      const days = workspace.publish_hypothesis?.observation_window_days;
+      const deadline = publishedAt && days
+        ? new Date(new Date(publishedAt).getTime() + days * 86_400_000).toLocaleString()
+        : null;
+      return (
+        <Paper component="section" variant="outlined" sx={{ p: { xs: 2, sm: 3 } }}>
+          <Typography component="h2" variant="h5" mb={2}>观察窗口进行中</Typography>
+          <Alert severity="info">
+            {deadline ? <>预计结束时间：<time>{deadline}</time>。到期后会自动提醒你回填实际表现。</> : '到期后会自动提醒你回填实际表现。'}
+          </Alert>
+        </Paper>
+      );
+    }
     case 'add_snapshot':
       return <SnapshotForm {...common} appendSnapshot={appendSnapshot} />;
     case 'run_blind_review':

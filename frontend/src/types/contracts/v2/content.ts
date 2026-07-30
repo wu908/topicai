@@ -33,6 +33,7 @@ export type IntentActionType =
   | 'review_result'
   | 'confirm_learning'
   | 'manage_learning'
+  | 'await_observation_window'
   | 'scope_learning';
 
 export interface HumanGate {
@@ -105,6 +106,7 @@ export type NextAction =
   | 'create_version'
   | 'lock_hypothesis'
   | 'record_publication'
+  | 'await_observation_window'
   | 'add_snapshot'
   | 'run_blind_review'
   | 'create_observation'

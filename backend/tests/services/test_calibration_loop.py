@@ -42,6 +42,7 @@ from app.models.v2.intent_actions import HumanGateDecision
 from app.models.v2.publish_hypothesis import PublishHypothesisLock
 from app.services.benchmark_sample import BenchmarkSampleService
 from app.services.blind_review import BlindReviewService
+from app.services.calibration_workspace import CalibrationWorkspaceService
 from app.services.content_genome import ContentGenomeService
 from app.services.content_project import ContentProjectService
 from app.services.content_version import ContentVersionService
@@ -51,6 +52,7 @@ from app.services.evidence import EvidenceService
 from app.services.intent_actions import HumanGateService
 from app.services.intent_orchestrator import IntentOrchestratorService
 from app.services.observation import ObservationService
+from app.services.observation_window import ObservationWindowService
 from app.services.performance_snapshot import PerformanceSnapshotService
 from app.services.publication import PublicationService
 from app.services.publish_hypothesis import PublishHypothesisService
@@ -148,6 +150,8 @@ async def _published_with_snapshot(db, *, expected_behaviors=None, suffix="1"):
         ),
     )
     project = publication["project"]
+    await ObservationWindowService(db).mark_due(as_of="2026-07-25T08:00:00Z")
+    project = await ContentProjectService(db).get("u1", project["id"])
     snapshot, _ = await PerformanceSnapshotService(db).append(
         "u1",
         publication["record"]["id"],
@@ -161,6 +165,96 @@ async def _published_with_snapshot(db, *, expected_behaviors=None, suffix="1"):
         ),
     )
     return snapshot["project"], publication["record"], snapshot["snapshot"]
+
+
+@pytest.mark.asyncio
+async def test_observation_window_marks_only_due_projects_and_changes_next_action(
+    seeded_db,
+):
+    due_project, due_version = await _locked_project(seeded_db, suffix="due")
+    due_action = await IntentOrchestratorService(seeded_db).ensure_project_action(
+        "u1", due_project["id"]
+    )
+    due_gate = await HumanGateService(seeded_db).ensure_for_action(
+        "u1", due_action["id"]
+    )
+    await HumanGateService(seeded_db).decide(
+        "u1",
+        due_gate["id"],
+        HumanGateDecision(
+            decision="confirm",
+            decision_payload={"publication_confirmed": True},
+            expected_gate_version=due_gate["version"],
+            idempotency_key="due-gate",
+        ),
+    )
+    await PublicationService(seeded_db).record(
+        "u1",
+        due_project["id"],
+        PublishRecordCreate(
+            content_version_id=due_version["id"],
+            publication_gate_id=due_gate["id"],
+            published_at="2026-07-18T08:00:00Z",
+            expected_project_version=due_project["version"],
+            idempotency_key="due-publication",
+        ),
+    )
+
+    future_project, future_version = await _locked_project(seeded_db, suffix="future")
+    future_action = await IntentOrchestratorService(seeded_db).ensure_project_action(
+        "u1", future_project["id"]
+    )
+    future_gate = await HumanGateService(seeded_db).ensure_for_action(
+        "u1", future_action["id"]
+    )
+    await HumanGateService(seeded_db).decide(
+        "u1",
+        future_gate["id"],
+        HumanGateDecision(
+            decision="confirm",
+            decision_payload={"publication_confirmed": True},
+            expected_gate_version=future_gate["version"],
+            idempotency_key="future-gate",
+        ),
+    )
+    await PublicationService(seeded_db).record(
+        "u1",
+        future_project["id"],
+        PublishRecordCreate(
+            content_version_id=future_version["id"],
+            publication_gate_id=future_gate["id"],
+            published_at="2026-07-29T08:00:00Z",
+            expected_project_version=future_project["version"],
+            idempotency_key="future-publication",
+        ),
+    )
+
+    future_workspace = await CalibrationWorkspaceService(seeded_db).get(
+        "u1", future_project["id"]
+    )
+    assert future_workspace["next_action"] == "await_observation_window"
+    assert (
+        future_workspace["orchestrated_action"]["action_type"]
+        == "await_observation_window"
+    )
+
+    changed = await ObservationWindowService(seeded_db).mark_due(
+        as_of="2026-07-30T08:00:00Z"
+    )
+
+    assert changed == 1
+    assert (await ContentProjectService(seeded_db).get("u1", due_project["id"]))[
+        "status"
+    ] == "awaiting_review"
+    assert (await ContentProjectService(seeded_db).get("u1", future_project["id"]))[
+        "status"
+    ] == "published"
+
+    due_workspace = await CalibrationWorkspaceService(seeded_db).get(
+        "u1", due_project["id"]
+    )
+    assert due_workspace["next_action"] == "add_snapshot"
+    assert due_workspace["orchestrated_action"]["action_type"] == "add_performance"
 
 
 @pytest.mark.asyncio

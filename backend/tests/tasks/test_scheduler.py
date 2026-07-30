@@ -21,6 +21,27 @@ async def test_run_helpers_are_quiet_noops() -> None:
     await scheduler_mod._run_data_refresh()  # noqa: SLF001
 
 
+@pytest.mark.asyncio
+async def test_observation_window_job_marks_due_projects(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[object] = []
+
+    async def mark_due(self) -> int:  # noqa: ANN001 - patched service method
+        calls.append(self.db)
+        return 1
+
+    monkeypatch.setattr(
+        "app.services.observation_window.ObservationWindowService.mark_due",
+        mark_due,
+    )
+    db = object()
+
+    await scheduler_mod._run_observation_window_reminders(db)  # noqa: SLF001
+
+    assert calls == [db]
+
+
 def test_init_scheduler_registers_jobs(monkeypatch: pytest.MonkeyPatch) -> None:
     """init_scheduler wires 4 jobs onto a stub scheduler and starts it."""
     scheduler_mod._scheduler = None  # noqa: SLF001
@@ -57,9 +78,20 @@ def test_init_scheduler_registers_jobs(monkeypatch: pytest.MonkeyPatch) -> None:
     assert hasattr(s, "backup_schedule_hour")
     assert hasattr(s, "backup_schedule_minute")
 
-    result = scheduler_mod.init_scheduler()
+    db = object()
+    result = scheduler_mod.init_scheduler(db)
     assert result is stub
     assert stub.started is True
-    assert len(stub.jobs) == 4
+    assert len(stub.jobs) == 5
     job_ids = {j.kwargs["id"] for j in stub.jobs}
-    assert job_ids == {"daily_backup", "health_check", "content_cleanup", "data_refresh"}
+    assert job_ids == {
+        "daily_backup",
+        "health_check",
+        "content_cleanup",
+        "data_refresh",
+        "observation_window_reminders",
+    }
+    reminder_job = next(
+        job for job in stub.jobs if job.kwargs["id"] == "observation_window_reminders"
+    )
+    assert reminder_job.kwargs["args"] == [db]

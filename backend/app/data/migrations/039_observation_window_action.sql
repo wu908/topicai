@@ -1,0 +1,2 @@
+-- Add the informational action used while a published project waits for review.
+-- SQLite CHECK expansion is handled by runner.py's migration post-step.
