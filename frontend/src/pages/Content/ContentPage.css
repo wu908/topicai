@@ -932,6 +932,7 @@
 .series-candidate input,
 .series-candidate textarea,
 .series-opportunity input,
+.series-opportunity select,
 .series-opportunity textarea {
   width: 100%;
   margin-top: 8px;

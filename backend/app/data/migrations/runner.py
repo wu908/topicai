@@ -777,7 +777,14 @@ def apply(
                 continue
 
             logger.info("Applying migration %s", version)
-            conn.executescript(sql)
+            if version == "037_capability_trust":
+                _ensure_columns(
+                    conn,
+                    "creator_states",
+                    [("capability_trust_json", "TEXT NOT NULL DEFAULT '{}'")],
+                )
+            else:
+                conn.executescript(sql)
             post_step = MIGRATION_POST_STEPS.get(version)
             if post_step is not None:
                 logger.info("Running post-step for %s", version)
