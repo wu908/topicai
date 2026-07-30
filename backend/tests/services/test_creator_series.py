@@ -20,7 +20,10 @@ from app.models.v2.intent_actions import ActionResponse, HumanGateDecision
 from app.models.v2.publish_hypothesis import PublishHypothesisLock
 from app.services.calibration_workspace import CalibrationWorkspaceService
 from app.services.content_genome import ContentGenomeService
-from app.services.content_opportunity import ContentOpportunityService
+from app.services.content_opportunity import (
+    MATERIALS_BY_INTENT,
+    ContentOpportunityService,
+)
 from app.services.content_project import ContentProjectService
 from app.services.content_version import ContentVersionService
 from app.services.creator_series import CreatorSeriesService
@@ -47,13 +50,16 @@ async def series_db(test_db):
     return test_db
 
 
-async def _published_project(db, *, owner="u1", suffix="one", intent="share"):
+async def _published_project(
+    db, *, owner="u1", suffix="one", intent="share", content_format="graphic_note"
+):
     project, _ = await ContentProjectService(db).create(
         owner,
         ContentProjectCreate(
             title=f"连续创作经历 {suffix}",
             target_audience="小红书知识创作者",
             content_intent=intent,
+            content_format=content_format,
             audience_change="读者理解稳定更新如何减少临时决策",
             idempotency_key=f"series-project-{owner}-{suffix}",
         ),
@@ -889,3 +895,115 @@ async def test_confirmed_content_intent_override_updates_opportunity_and_project
     assert accepted["content_intent"] == "solve"
     # The created project also has the overridden intent
     assert accepted["project"]["content_intent"] == "solve"
+
+
+@pytest.mark.asyncio
+async def test_intent_override_without_materials_rederives_requirements(series_db):
+    """An intent override must not keep materials that were derived for the old intent.
+
+    ``_draft`` builds material_requirements from the proposed intent, so carrying
+    the proposal forward after the user picks a different intent describes a
+    different kind of content than the one being created.
+    """
+    first = await _published_project(series_db, suffix="materials-one", intent="share")
+    second = await _published_project(series_db, suffix="materials-two", intent="share")
+    series_service = CreatorSeriesService(series_db)
+    candidate, _ = await series_service.propose(
+        "u1", _candidate_input(first, second, "materials-series-propose")
+    )
+    series, _ = await series_service.decide(
+        "u1",
+        candidate["id"],
+        SeriesDecision(
+            decision="confirm",
+            confirmed_name="素材随意图变化的系列",
+            confirmed_promise="让读者持续看到同一条主线",
+            confirmed_continuation_prompt="下一篇换一种方式呈现同一条主线",
+            expected_series_version=candidate["version"],
+            idempotency_key="materials-confirm",
+        ),
+    )
+
+    opportunity, _ = await ContentOpportunityService(series_db).propose_series_extension(
+        "u1",
+        series["id"],
+        SeriesExtensionCreate(
+            expected_series_version=series["version"],
+            idempotency_key="materials-propose",
+        ),
+    )
+    assert opportunity["content_intent"] == "share"
+    assert opportunity["proposed_material_requirements"] == MATERIALS_BY_INTENT["share"]
+
+    # Accept with a different intent and no explicit materials.
+    accepted, _ = await ContentOpportunityService(series_db).decide(
+        "u1",
+        opportunity["id"],
+        OpportunityDecision(
+            decision="accept",
+            confirmed_content_intent="solve",
+            expected_opportunity_version=opportunity["version"],
+            idempotency_key="materials-accept",
+        ),
+    )
+    assert accepted["content_intent"] == "solve"
+    assert accepted["confirmed_material_requirements"] == MATERIALS_BY_INTENT["solve"]
+
+
+@pytest.mark.asyncio
+async def test_mixed_format_series_is_not_more_applicable_than_uniform(series_db):
+    """A mixed-format series must not outrank a uniform one when the query has no format.
+
+    The series applicability was read off the scalar scope key, which is NULL
+    whenever members disagree. ``_match_status`` then skipped the format check
+    altogether, so the mixed series reported ``applicable`` while a uniform
+    series correctly degraded to ``needs_context``.
+    """
+    graphic = await _published_project(series_db, suffix="mixed-fmt-graphic", intent="share")
+    vlog = await _published_project(
+        series_db, suffix="mixed-fmt-vlog", intent="share", content_format="vlog_plan"
+    )
+    service = CreatorSeriesService(series_db)
+    candidate, _ = await service.propose(
+        "u1", _candidate_input(graphic, vlog, "mixed-fmt-propose")
+    )
+    confirmed, _ = await service.decide(
+        "u1",
+        candidate["id"],
+        SeriesDecision(
+            decision="confirm",
+            confirmed_name="跨格式系列",
+            confirmed_promise="同一条读者承诺，用不同形式呈现",
+            confirmed_continuation_prompt="下一篇继续这条承诺",
+            expected_series_version=candidate["version"],
+            idempotency_key="mixed-fmt-confirm",
+        ),
+    )
+    series_ref = f"creator-series:{confirmed['id']}"
+    scope = json.loads(
+        (
+            await series_db.fetch_one(
+                "SELECT scope_json FROM creator_series WHERE id=:id",
+                {"id": confirmed["id"]},
+            )
+        )["scope_json"]
+    )
+    assert scope["member_formats"] == ["graphic_note", "vlog_plan"]
+    assert scope["format"] is None
+
+    # A query that names no format cannot tell which member context applies.
+    genome = await ContentGenomeService(series_db).search(
+        "u1", content_intent="share", intent_confirmed=True, content_format=None
+    )
+    node = next(item for item in genome["nodes"] if item["id"] == series_ref)
+    assert node["status"] == "needs_context"
+    assert "missing_format_context" in node["reason_codes"]
+    assert series_ref not in [item["source_ref"] for item in genome["series_context"]]
+
+    # Naming one of the member formats still matches.
+    matched = await ContentGenomeService(series_db).search(
+        "u1", content_intent="share", intent_confirmed=True, content_format="vlog_plan"
+    )
+    matched_node = next(item for item in matched["nodes"] if item["id"] == series_ref)
+    assert matched_node["status"] == "applicable"
+    assert series_ref in [item["source_ref"] for item in matched["series_context"]]

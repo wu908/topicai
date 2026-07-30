@@ -405,7 +405,21 @@ class ContentGenomeService:
             ):
                 continue
             applicability = CreatorRuleService._applicability(series["scope"])
-            status, reason_codes = self._match_status(query, applicability)
+            # The scalar scope keys are NULL whenever the members disagree, which
+            # would let _match_status read a mixed series as unscoped — i.e. broader
+            # than a uniform one. Match on the member sets instead; the emitted
+            # applicability keeps describing the row, and the nodes below carry the
+            # authoritative member sets.
+            status, reason_codes = self._match_status(
+                query,
+                {
+                    **applicability,
+                    "intent": self._member_dimension(
+                        member_intents, query["content_intent"]
+                    ),
+                    "format": self._member_dimension(member_formats, query["format"]),
+                },
+            )
             source_ids = series["source_project_ids"]
             source_projects = [
                 projects_by_id[item] for item in source_ids if item in projects_by_id
@@ -657,6 +671,22 @@ class ContentGenomeService:
         ):
             return "not_applicable", ["experiment_scope_mismatch"]
         return ("needs_context", reasons) if reasons else ("applicable", [])
+
+    @classmethod
+    def _member_dimension(cls, members: list[Any], query_value: str) -> str:
+        """Collapse a member set into the single value _match_status compares.
+
+        An empty set means the dimension is genuinely unknown, so it stays broad.
+        A populated set constrains the item: a query naming one of the members
+        compares equal, and a query naming nothing still trips
+        ``missing_<dimension>_context`` the same way a uniform scope would.
+        """
+        values = [
+            value for value in (cls._normalized_text(item) for item in members) if value
+        ]
+        if not values:
+            return ""
+        return query_value if query_value in values else values[0]
 
     @staticmethod
     def _normalized_text(value: Any) -> str:

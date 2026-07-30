@@ -311,12 +311,21 @@ class ContentOpportunityService:
         audience_change = (
             body.confirmed_audience_change or opportunity["proposed_audience_change"]
         ).strip()
-        materials = body.confirmed_material_requirements
-        if materials is None:
-            materials = json.loads(opportunity["proposed_material_requirements_json"] or "[]")
         # Spec-011: user may override the AI-proposed intent/format at accept time.
+        # Resolve the override before the materials, because the proposed materials
+        # were derived from the proposed intent.
         confirmed_intent = body.confirmed_content_intent if status == "accepted" else None
         confirmed_format = body.confirmed_content_format if status == "accepted" else None
+        materials = body.confirmed_material_requirements
+        if materials is None:
+            if confirmed_intent and confirmed_intent != opportunity["content_intent"]:
+                # The proposal's materials describe the intent the AI suggested (see
+                # _draft), so carrying them over would ask for the wrong evidence.
+                materials = list(MATERIALS_BY_INTENT[confirmed_intent])
+            else:
+                materials = json.loads(
+                    opportunity["proposed_material_requirements_json"] or "[]"
+                )
         timestamp = now()
         session = await self.db.get_session()
         async with session:
