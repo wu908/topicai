@@ -136,6 +136,13 @@ function nextStepGuide(workspace: CalibrationWorkspace): NextStepGuide {
         progress: '第 3 步，共 5 步',
         helper: 'TopicAI 不会代替你发布，只记录这一次发布作为后续复盘的起点。',
       };
+    case 'await_observation_window':
+      return {
+        title: '等待观察窗口结束',
+        description: '这篇内容仍在收集发布后的真实表现，到期后会自动进入待复盘。',
+        progress: '观察中',
+        helper: '系统会在窗口结束后提醒你；如果已经有数据，也可以提前开始复盘。',
+      };
     case 'add_snapshot':
     case 'add_comparable_snapshot':
       return {

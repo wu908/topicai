@@ -4,6 +4,8 @@ import json
 
 import pytest
 
+from app.services.observation_window import ObservationWindowService
+
 
 async def _confirmed_project(client, suffix: str, intent: str = "solve"):
     project = (
@@ -309,11 +311,22 @@ async def test_c04_unknown_hotspot_stays_pending_verification(client, test_db):
 
 
 @pytest.mark.asyncio
-async def test_c05_partial_metrics_remain_insufficient_and_do_not_learn(client):
+async def test_c05_partial_metrics_remain_insufficient_and_do_not_learn(
+    client, test_db
+):
     project, version, action = await _ready_project(
         client, "c05", expected_behaviors=["profile_visit"]
     )
     published = await _publish(client, project, version, action, "c05")
+    assert (
+        await ObservationWindowService(test_db).mark_due(
+            as_of="2026-07-30T08:00:00Z"
+        )
+        == 1
+    )
+    due_project = (
+        await client.get(f"/api/v2/projects/{project['id']}")
+    ).json()["data"]
     snapshot = await client.post(
         f"/api/v2/publish-records/{published['record']['id']}/snapshots",
         json={
@@ -321,7 +334,7 @@ async def test_c05_partial_metrics_remain_insufficient_and_do_not_learn(client):
             "source": "manual",
             "metrics": {"views": 120},
             "confirmed_by_user": True,
-            "expected_project_version": published["project"]["version"],
+            "expected_project_version": due_project["version"],
             "idempotency_key": "c05-partial-snapshot",
         },
     )

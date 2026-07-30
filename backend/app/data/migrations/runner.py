@@ -417,6 +417,15 @@ def _scope_learning_table_sql(action_sql: str) -> str:
     )
 
 
+def _observation_window_table_sql(action_sql: str) -> str:
+    """Widen the action_type CHECK for await_observation_window."""
+    return _scope_learning_table_sql(action_sql).replace(
+        "'scope_learning'",
+        "'scope_learning','await_observation_window'",
+        1,
+    )
+
+
 def _expand_intent_action_types(
     conn: sqlite3.Connection,
     sentinel: str,
@@ -476,6 +485,14 @@ def _post_step_035_intent_lock_action(conn: sqlite3.Connection) -> None:
 
 def _post_step_038_scope_learning_action(conn: sqlite3.Connection) -> None:
     _expand_intent_action_types(conn, "'scope_learning'", _scope_learning_table_sql)
+
+
+def _post_step_039_observation_window_action(conn: sqlite3.Connection) -> None:
+    _expand_intent_action_types(
+        conn,
+        "'await_observation_window'",
+        _observation_window_table_sql,
+    )
 
 
 _INTENT_MODEL_CONTENT_PROJECTS_SQL = """
@@ -726,6 +743,7 @@ MIGRATION_POST_STEPS: dict[str, PostStep] = {
     "035_intent_lock_action": _post_step_035_intent_lock_action,
     "036_creator_series_scope": _post_step_036_creator_series_scope,
     "038_scope_learning_action": _post_step_038_scope_learning_action,
+    "039_observation_window_action": _post_step_039_observation_window_action,
 }
 
 

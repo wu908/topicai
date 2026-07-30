@@ -225,6 +225,42 @@ describe('ContentPage', () => {
     });
   });
 
+  it('shows the observation-window deadline and allows an early user-started review', async () => {
+    const publishedAt = '2026-07-18T08:00:00Z';
+    const deadline = new Date(
+      new Date(publishedAt).getTime() + 7 * 24 * 60 * 60 * 1000,
+    ).toLocaleString();
+    api.listProjects.mockResolvedValue({
+      items: [{ ...project, status: 'published', next_action: 'await_observation_window' }],
+      total: 1,
+    });
+    api.getCalibrationWorkspace.mockResolvedValue({
+      ...workspace,
+      project: { ...project, status: 'published', next_action: 'await_observation_window' },
+      publish_hypothesis: {
+        ...workspace.publish_hypothesis!,
+        observation_window_days: 7,
+      },
+      publish_record: { id: 'record-1', published_at: publishedAt },
+      next_action: 'await_observation_window',
+      orchestrated_action: {
+        ...workspace.orchestrated_action!,
+        action_type: 'await_observation_window',
+        title: '等待观察窗口结束',
+        reason: '窗口结束后自动进入待复盘。',
+        unknown_refs: [],
+        human_gate_type: null,
+        fallback_action: { action_type: 'view_project', path: '/content/p1' },
+      },
+    });
+
+    renderPage('/content/p1');
+
+    expect(await screen.findByRole('heading', { name: '观察窗口进行中' })).toBeInTheDocument();
+    expect(screen.getByText(deadline)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '保存数据快照' })).toBeInTheDocument();
+  });
+
   it('labels insufficient calibration without presenting a causal conclusion', async () => {
     api.listProjects.mockResolvedValue({ items: [project], total: 1 });
     api.getCalibrationWorkspace.mockResolvedValue({

@@ -8,13 +8,15 @@ Manages scheduled background tasks:
 """
 
 import logging
+from datetime import UTC, datetime
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 _scheduler: object | None = None
 
 
-def init_scheduler() -> object:
+def init_scheduler(db: Any) -> object:
     """Initialize the APScheduler with default jobs.
 
     Creates a BackgroundScheduler and registers all scheduled tasks.
@@ -82,8 +84,19 @@ def init_scheduler() -> object:
         replace_existing=True,
     )
 
+    _scheduler.add_job(
+        _run_observation_window_reminders,
+        "interval",
+        minutes=15,
+        id="observation_window_reminders",
+        name="Observation Window Reminders",
+        args=[db],
+        next_run_time=datetime.now(UTC),
+        replace_existing=True,
+    )
+
     _scheduler.start()
-    logger.info("APScheduler started with 4 jobs")
+    logger.info("APScheduler started with 5 jobs")
     return _scheduler
 
 
@@ -119,3 +132,12 @@ async def _run_data_refresh() -> None:
     """Execute preloaded data refresh job."""
     # Implementation in app/tasks/data_refresh.py
     pass
+
+
+async def _run_observation_window_reminders(db: Any) -> None:
+    """Move due publications into the persistent review queue."""
+    from app.services.observation_window import ObservationWindowService
+
+    changed = await ObservationWindowService(db).mark_due()
+    if changed:
+        logger.info("Observation window reminders ready", extra={"count": changed})

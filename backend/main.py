@@ -103,7 +103,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         try:
             from app.tasks.scheduler import init_scheduler
 
-            scheduler = init_scheduler()
+            scheduler = init_scheduler(db)
             app.state.scheduler = scheduler
             logger.info("APScheduler initialized")
         except Exception as e:
