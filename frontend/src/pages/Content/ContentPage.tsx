@@ -830,12 +830,15 @@ function StageAction({
         ? new Date(new Date(publishedAt).getTime() + days * 86_400_000).toLocaleString()
         : null;
       return (
-        <Paper component="section" variant="outlined" sx={{ p: { xs: 2, sm: 3 } }}>
-          <Typography component="h2" variant="h5" mb={2}>观察窗口进行中</Typography>
-          <Alert severity="info">
-            {deadline ? <>预计结束时间：<time>{deadline}</time>。到期后会自动提醒你回填实际表现。</> : '到期后会自动提醒你回填实际表现。'}
-          </Alert>
-        </Paper>
+        <Stack spacing={2}>
+          <Paper component="section" variant="outlined" sx={{ p: { xs: 2, sm: 3 } }}>
+            <Typography component="h2" variant="h5" mb={2}>观察窗口进行中</Typography>
+            <Alert severity="info">
+              {deadline ? <>预计结束时间：<time>{deadline}</time>。到期后会自动提醒你回填实际表现；已有数据时也可以提前开始复盘。</> : '到期后会自动提醒你回填实际表现；已有数据时也可以提前开始复盘。'}
+            </Alert>
+          </Paper>
+          <SnapshotForm {...common} appendSnapshot={appendSnapshot} />
+        </Stack>
       );
     }
     case 'add_snapshot':

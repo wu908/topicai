@@ -419,20 +419,7 @@ def _scope_learning_table_sql(action_sql: str) -> str:
 
 def _observation_window_table_sql(action_sql: str) -> str:
     """Widen the action_type CHECK for await_observation_window."""
-    renamed = (
-        action_sql
-        if "next_best_actions_intent_new" in action_sql
-        else action_sql.replace(
-            "CREATE TABLE next_best_actions",
-            "CREATE TABLE next_best_actions_intent_new",
-            1,
-        ).replace(
-            'CREATE TABLE "next_best_actions"',
-            "CREATE TABLE next_best_actions_intent_new",
-            1,
-        )
-    )
-    return renamed.replace(
+    return _scope_learning_table_sql(action_sql).replace(
         "'scope_learning'",
         "'scope_learning','await_observation_window'",
         1,

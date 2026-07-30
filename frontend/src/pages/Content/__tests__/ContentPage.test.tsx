@@ -225,7 +225,7 @@ describe('ContentPage', () => {
     });
   });
 
-  it('shows the observation-window deadline without exposing snapshot entry early', async () => {
+  it('shows the observation-window deadline and allows an early user-started review', async () => {
     const publishedAt = '2026-07-18T08:00:00Z';
     const deadline = new Date(
       new Date(publishedAt).getTime() + 7 * 24 * 60 * 60 * 1000,
@@ -258,7 +258,7 @@ describe('ContentPage', () => {
 
     expect(await screen.findByRole('heading', { name: '观察窗口进行中' })).toBeInTheDocument();
     expect(screen.getByText(deadline)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '保存数据快照' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '保存数据快照' })).toBeInTheDocument();
   });
 
   it('labels insufficient calibration without presenting a causal conclusion', async () => {

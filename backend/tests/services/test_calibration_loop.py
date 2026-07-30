@@ -217,7 +217,7 @@ async def test_observation_window_marks_only_due_projects_and_changes_next_actio
             idempotency_key="future-gate",
         ),
     )
-    await PublicationService(seeded_db).record(
+    future_publication, _ = await PublicationService(seeded_db).record(
         "u1",
         future_project["id"],
         PublishRecordCreate(
@@ -238,6 +238,19 @@ async def test_observation_window_marks_only_due_projects_and_changes_next_actio
         == "await_observation_window"
     )
 
+    await PerformanceSnapshotService(seeded_db).append(
+        "u1",
+        future_publication["record"]["id"],
+        PerformanceSnapshotCreate(
+            captured_at="2026-07-29T12:00:00Z",
+            source="manual",
+            metrics={"views": 20},
+            confirmed_by_user=True,
+            expected_project_version=future_workspace["project"]["version"],
+            idempotency_key="future-early-review",
+        ),
+    )
+
     changed = await ObservationWindowService(seeded_db).mark_due(
         as_of="2026-07-30T08:00:00Z"
     )
@@ -248,7 +261,7 @@ async def test_observation_window_marks_only_due_projects_and_changes_next_actio
     ] == "awaiting_review"
     assert (await ContentProjectService(seeded_db).get("u1", future_project["id"]))[
         "status"
-    ] == "published"
+    ] == "awaiting_review"
 
     due_workspace = await CalibrationWorkspaceService(seeded_db).get(
         "u1", due_project["id"]

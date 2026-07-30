@@ -63,7 +63,7 @@ class PerformanceSnapshotService:
                     raise VersionConflictException(
                         project["version"], body.expected_project_version
                     )
-                if project["status"] != "awaiting_review":
+                if project["status"] not in {"published", "awaiting_review"}:
                     raise ValueError("project is not ready for performance data")
                 if not body.confirmed_by_user:
                     raise ValueError("performance snapshot requires user confirmation")

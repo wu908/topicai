@@ -141,7 +141,7 @@ function nextStepGuide(workspace: CalibrationWorkspace): NextStepGuide {
         title: '等待观察窗口结束',
         description: '这篇内容仍在收集发布后的真实表现，到期后会自动进入待复盘。',
         progress: '观察中',
-        helper: '观察窗口结束前不需要提前回填，系统会在到期后提醒你。',
+        helper: '系统会在窗口结束后提醒你；如果已经有数据，也可以提前开始复盘。',
       };
     case 'add_snapshot':
     case 'add_comparable_snapshot':
