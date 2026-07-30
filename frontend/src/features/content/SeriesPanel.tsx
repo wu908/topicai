@@ -15,6 +15,14 @@ import type {
   ContentOpportunity,
 } from '@/types/contracts/v2/content';
 
+export interface SeriesOpportunityDecisionValues {
+  title: string;
+  audienceChange: string;
+  materialRequirements: string[];
+  contentIntent: ContentIntent;
+  contentFormat: ContentFormat;
+}
+
 interface SeriesPanelProps {
   currentProject: ContentProject;
   projects: ContentProject[];
@@ -32,7 +40,7 @@ interface SeriesPanelProps {
   onDecideOpportunity?: (
     opportunity: ContentOpportunity,
     decision: 'accept' | 'reject',
-    values?: { title: string; audienceChange: string; materialRequirements: string[] },
+    values?: SeriesOpportunityDecisionValues,
   ) => void;
   onOpenProject?: (projectId: string) => void;
 }
@@ -101,7 +109,13 @@ export default function SeriesPanel({
     Record<string, { name: string; promise: string; continuationPrompt: string }>
   >({});
   const [opportunityDrafts, setOpportunityDrafts] = useState<
-    Record<string, { title: string; audienceChange: string; materials: string }>
+    Record<string, {
+      title: string;
+      audienceChange: string;
+      materials: string;
+      contentIntent: ContentIntent;
+      contentFormat: ContentFormat;
+    }>
   >({});
   // Spec-011: a series is relevant when ANY of its members shares this
   // project's intent and any member shares its format. Matching on the scalar
@@ -243,18 +257,20 @@ export default function SeriesPanel({
             title: related.proposed_title,
             audienceChange: related.proposed_audience_change,
             materials: related.proposed_material_requirements.join('\n'),
+            contentIntent: related.content_intent,
+            contentFormat: related.content_format,
           })
           : null;
-        const updateOpportunity = (
-          field: 'title' | 'audienceChange' | 'materials',
-          value: string,
-        ) => {
+        function updateOpportunity<K extends keyof NonNullable<typeof values>>(
+          field: K,
+          value: NonNullable<typeof values>[K],
+        ) {
           if (!related || !values) return;
           setOpportunityDrafts((items) => ({
             ...items,
             [related.id]: { ...values, [field]: value },
           }));
-        };
+        }
         const materialRequirements = values?.materials
           .split('\n').map((value) => value.trim()).filter(Boolean) ?? [];
         const validOpportunity = Boolean(
@@ -275,6 +291,29 @@ export default function SeriesPanel({
             {related?.status === 'proposed' && values && onDecideOpportunity ? (
               <div className="series-opportunity">
                 <span className="series-status">下一篇候选 · 尚未创建项目</span>
+                <select
+                  aria-label="下一篇内容意图"
+                  value={values.contentIntent}
+                  disabled={busy}
+                  onChange={(event) => updateOpportunity(
+                    'contentIntent', event.target.value as ContentIntent,
+                  )}
+                >
+                  <option value="solve">解决问题</option>
+                  <option value="share">分享观点</option>
+                  <option value="record">记录过程</option>
+                </select>
+                <select
+                  aria-label="下一篇内容格式"
+                  value={values.contentFormat}
+                  disabled={busy}
+                  onChange={(event) => updateOpportunity(
+                    'contentFormat', event.target.value as ContentFormat,
+                  )}
+                >
+                  <option value="graphic_note">图文笔记</option>
+                  <option value="vlog_plan">视频脚本</option>
+                </select>
                 <input
                   aria-label="下一篇标题"
                   value={values.title}
@@ -304,6 +343,8 @@ export default function SeriesPanel({
                       title: values.title.trim(),
                       audienceChange: values.audienceChange.trim(),
                       materialRequirements,
+                      contentIntent: values.contentIntent,
+                      contentFormat: values.contentFormat,
                     })}
                   >
                     <Check fontSize="small" />

@@ -87,6 +87,31 @@ def test_content_project_calibration_schema_applies_and_replays(tmp_path):
         } <= project_columns
 
 
+def test_capability_trust_migration_recovers_after_ddl_before_version_record(tmp_path):
+    db_path = tmp_path / "capability-trust-recovery.db"
+    through_036 = tmp_path / "through-036"
+    through_036.mkdir()
+    for path in DEFAULT_MIGRATIONS_DIR.glob("[0-9][0-9][0-9]_*.sql"):
+        if int(path.name[:3]) <= 36:
+            shutil.copy2(path, through_036 / path.name)
+
+    apply(db_path, through_036)
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            "ALTER TABLE creator_states ADD COLUMN "
+            "capability_trust_json TEXT NOT NULL DEFAULT '{}'"
+        )
+
+    upgraded = apply(db_path, DEFAULT_MIGRATIONS_DIR)
+    replay = apply(db_path, DEFAULT_MIGRATIONS_DIR)
+
+    assert [item.version for item in upgraded] == [
+        "037_capability_trust",
+        "038_scope_learning_action",
+    ]
+    assert replay == []
+
+
 def test_intent_action_migration_upgrades_from_019_and_replays(tmp_path):
     db_path = tmp_path / "upgrade.db"
     legacy_dir = tmp_path / "through-019"

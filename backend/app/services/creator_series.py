@@ -68,9 +68,11 @@ class CreatorSeriesService:
         scope = {
             "member_intents": member_intents,
             "member_formats": member_formats,
-            "content_intent": intent,
-            "format": content_format,
         }
+        if intent is not None:
+            scope["content_intent"] = intent
+        if content_format is not None:
+            scope["format"] = content_format
 
         draft, proposal_source = await self._draft(projects)
         series_id = str(uuid.uuid4())
@@ -327,6 +329,7 @@ class CreatorSeriesService:
                     "source_ref": source_ref,
                     "source_type": "user_confirmed_series",
                     "content_intent": series["content_intent"],
+                    "member_intents": series["scope"]["member_intents"],
                     "source_project_ids": series["source_project_ids"],
                 },
             )

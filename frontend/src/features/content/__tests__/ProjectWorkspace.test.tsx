@@ -580,6 +580,14 @@ describe('ProjectWorkspace', () => {
       />,
     );
     expect(screen.queryByRole('button', { name: '准备下一篇' })).not.toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: '下一篇内容意图' })).toHaveValue('share');
+    expect(screen.getByRole('combobox', { name: '下一篇内容格式' })).toHaveValue('graphic_note');
+    fireEvent.change(screen.getByRole('combobox', { name: '下一篇内容意图' }), {
+      target: { value: 'solve' },
+    });
+    fireEvent.change(screen.getByRole('combobox', { name: '下一篇内容格式' }), {
+      target: { value: 'vlog_plan' },
+    });
     fireEvent.change(screen.getByRole('textbox', { name: '下一篇标题' }), {
       target: { value: '我如何修正第一次失效的选题流程' },
     });
@@ -594,6 +602,8 @@ describe('ProjectWorkspace', () => {
       title: '我如何修正第一次失效的选题流程',
       audienceChange: '读者看到机制如何根据失败继续迭代',
       materialRequirements: ['失效现场', '调整动作', '调整结果'],
+      contentIntent: 'solve',
+      contentFormat: 'vlog_plan',
     });
   });
 });

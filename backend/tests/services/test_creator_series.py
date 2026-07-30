@@ -663,8 +663,9 @@ async def test_mixed_intent_series_is_proposed_and_stores_member_scope(series_db
     # Spec-011: member lists present in scope
     assert set(scope["member_intents"]) == {"share", "solve"}
     assert len(scope["member_intents"]) == 2
-    # Scalar is null when members disagree
+    # Scalar keys exist only when members agree.
     assert candidate["content_intent"] is None
+    assert "content_intent" not in scope
 
 
 @pytest.mark.asyncio
@@ -708,6 +709,13 @@ async def test_assert_sources_available_validates_member_intent_sets(series_db):
         ),
     )
     assert confirmed["status"] == "confirmed"
+    state = await CreatorStateService(series_db).get("u1")
+    insight = next(
+        item
+        for item in state["validated_insights"]
+        if item["source_ref"] == f"creator-series:{confirmed['id']}"
+    )
+    assert insight["member_intents"] == ["share", "solve"]
 
     # If a project's intent changed the member set no longer matches
     await series_db.execute(
@@ -990,7 +998,7 @@ async def test_mixed_format_series_is_not_more_applicable_than_uniform(series_db
         )["scope_json"]
     )
     assert scope["member_formats"] == ["graphic_note", "vlog_plan"]
-    assert scope["format"] is None
+    assert "format" not in scope
 
     # A query that names no format cannot tell which member context applies.
     genome = await ContentGenomeService(series_db).search(

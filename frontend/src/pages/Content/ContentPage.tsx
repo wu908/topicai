@@ -395,6 +395,8 @@ export default function ContentPage() {
             confirmed_title: values?.title,
             confirmed_audience_change: values?.audienceChange,
             confirmed_material_requirements: values?.materialRequirements,
+            confirmed_content_intent: values?.contentIntent,
+            confirmed_content_format: values?.contentFormat,
             reason: decision === 'reject' ? '用户确认这篇延展内容现在不合适' : undefined,
             expected_opportunity_version: opportunity.version,
             idempotency_key: makeKey(`opportunity-${decision}-${opportunity.id}`),

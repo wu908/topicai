@@ -27,7 +27,7 @@ import type {
 import ReviewSummary from './ReviewSummary';
 import ObservationList from './ObservationList';
 import ViewpointPanel from './ViewpointPanel';
-import SeriesPanel from './SeriesPanel';
+import SeriesPanel, { type SeriesOpportunityDecisionValues } from './SeriesPanel';
 import {
   readProjectDraft,
   removeProjectDraft,
@@ -71,7 +71,7 @@ interface ProjectWorkspaceProps {
   onDecideOpportunity?: (
     opportunity: ContentOpportunity,
     decision: 'accept' | 'reject',
-    values?: { title: string; audienceChange: string; materialRequirements: string[] },
+    values?: SeriesOpportunityDecisionValues,
   ) => void;
   onOpenOpportunityProject?: (projectId: string) => void;
 }
