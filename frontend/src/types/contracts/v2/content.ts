@@ -230,6 +230,8 @@ export interface PerformanceMetrics {
 export interface PerformanceSnapshot {
   id: string;
   captured_at: string;
+  result_availability: 'observed' | 'unavailable';
+  unavailable_reason?: string | null;
   metrics: PerformanceMetrics;
   supersedes_id?: string | null;
 }
@@ -270,6 +272,14 @@ export interface IntentReviewPlan {
   experiment_item: string;
   confirmation_required: boolean;
   long_term_write_allowed: boolean;
+  intent_outcome?: 'supported' | 'contradicted' | 'unknown';
+  result_availability?: 'observed' | 'unavailable';
+  follow_up_options?: Array<{
+    action: 'collect_more_evidence' | 'repeat_observation' | 'run_bounded_experiment';
+    label: string;
+    statement: string;
+    next_test: string;
+  }>;
 }
 
 export interface CreatorRuleVersion {
@@ -817,6 +827,8 @@ export interface PublicationInput {
 export interface SnapshotInput {
   captured_at: string;
   source: 'manual' | 'screenshot';
+  result_availability?: 'observed' | 'unavailable';
+  unavailable_reason?: string;
   metrics: PerformanceMetrics;
   confirmed_by_user: true;
   supersedes_id?: string;

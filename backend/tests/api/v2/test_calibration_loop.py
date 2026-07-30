@@ -233,6 +233,89 @@ async def test_manual_publish_snapshot_blind_review_and_observation(client, test
 
 
 @pytest.mark.asyncio
+async def test_explicitly_unavailable_result_can_enter_blind_review(client, test_db):
+    project, version = await _lock_project(client, suffix="unavailable-result")
+    publication_gate_id = await _confirm_publication_gate(
+        client, project["id"], "unavailable-result"
+    )
+    publication = (
+        await client.post(
+            f"/api/v2/projects/{project['id']}/publish-records",
+            json={
+                "content_version_id": version["id"],
+                "publication_gate_id": publication_gate_id,
+                "published_at": "2026-07-18T08:00:00Z",
+                "expected_project_version": project["version"],
+                "idempotency_key": "unavailable-result-publication",
+            },
+        )
+    ).json()["data"]
+    await ObservationWindowService(test_db).mark_due(as_of="2026-07-25T08:00:00Z")
+    workspace = (
+        await client.get(f"/api/v2/projects/{project['id']}/calibration")
+    ).json()["data"]
+
+    zero_is_not_unavailable = await client.post(
+        f"/api/v2/publish-records/{publication['record']['id']}/snapshots",
+        json={
+            "captured_at": "2026-07-25T08:00:00Z",
+            "source": "manual",
+            "result_availability": "unavailable",
+            "unavailable_reason": "The platform reported a visible zero.",
+            "metrics": {"views": 0},
+            "confirmed_by_user": True,
+            "expected_project_version": workspace["project"]["version"],
+            "idempotency_key": "zero-is-not-unavailable",
+        },
+    )
+    assert zero_is_not_unavailable.status_code == 422
+
+    missing_reason = await client.post(
+        f"/api/v2/publish-records/{publication['record']['id']}/snapshots",
+        json={
+            "captured_at": "2026-07-25T08:00:00Z",
+            "source": "manual",
+            "result_availability": "unavailable",
+            "metrics": {},
+            "confirmed_by_user": True,
+            "expected_project_version": workspace["project"]["version"],
+            "idempotency_key": "unavailable-result-missing-reason",
+        },
+    )
+    assert missing_reason.status_code == 422
+
+    response = await client.post(
+        f"/api/v2/publish-records/{publication['record']['id']}/snapshots",
+        json={
+            "captured_at": "2026-07-25T08:00:00Z",
+            "source": "manual",
+            "result_availability": "unavailable",
+            "unavailable_reason": "The platform no longer exposes this note's metrics.",
+            "metrics": {},
+            "confirmed_by_user": True,
+            "expected_project_version": workspace["project"]["version"],
+            "idempotency_key": "unavailable-result-snapshot",
+        },
+    )
+
+    assert response.status_code == 201
+    snapshot = response.json()["data"]["snapshot"]
+    assert snapshot["result_availability"] == "unavailable"
+    assert snapshot["metrics"] == {}
+    assert snapshot["unavailable_reason"] == (
+        "The platform no longer exposes this note's metrics."
+    )
+
+    workspace = (
+        await client.get(f"/api/v2/projects/{project['id']}/calibration")
+    ).json()["data"]
+    assert workspace["next_action"] == "run_blind_review"
+    assert workspace["orchestrated_action"]["action_type"] == "review_result"
+    today = (await client.get("/api/v2/today")).json()["data"]
+    assert today["action"]["action_type"] == "review_result"
+
+
+@pytest.mark.asyncio
 async def test_blind_review_rejects_post_hoc_explanation_at_contract_boundary(client):
     project, _ = await _lock_project(client, suffix="post-hoc")
     response = await client.post(

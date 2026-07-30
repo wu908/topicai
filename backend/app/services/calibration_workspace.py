@@ -289,6 +289,8 @@ class CalibrationWorkspaceService:
         if review["calibration_state"] == "calibration_invalid":
             return "review_calibration_issue"
         if review["calibration_state"] == "insufficient":
+            if review.get("comparison", {}).get("result_availability") == "unavailable":
+                return "create_observation"
             return "add_comparable_snapshot"
         if not observations:
             return "create_observation"

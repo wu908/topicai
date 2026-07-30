@@ -69,11 +69,17 @@ class ObservationService:
                 ).mappings().first()
                 if review is None:
                     raise ValueError(f"blind review not found: {blind_review_id}")
-                if (
+                comparison = json.loads(review["comparison_json"] or "{}")
+                unavailable_result = (
+                    comparison.get("result_availability") == "unavailable"
+                )
+                if not unavailable_result and (
                     review["calibration_state"] != "valid"
                     or review["contamination_status"] != "clean"
                     or not review["eligible_for_rule_upgrade"]
                 ):
+                    raise ValueError("blind review is not eligible for an observation")
+                if unavailable_result and review["contamination_status"] != "clean":
                     raise ValueError("blind review is not eligible for an observation")
                 project = await self._project(
                     session, owner_user_id, review["project_id"]

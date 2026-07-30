@@ -871,6 +871,7 @@ class HumanGateService:
                 gate,
                 action,
                 "confirmed" if gate["status"] == "confirmed" else "rejected",
+                gate.get("decision_payload") or {},
             )
             result = {"gate": gate, "next_action": None}
             if candidate:
@@ -895,6 +896,10 @@ class HumanGateService:
             expires_at = datetime.fromisoformat(action["expires_at"].replace("Z", "+00:00"))
             if expires_at <= datetime.now(UTC):
                 raise ValueError("action has expired")
+        if body.decision == "confirm" and gate["gate_type"] == "long_term_learning":
+            self._selected_follow_up(
+                gate["payload"].get("intent_review"), body.decision_payload
+            )
 
         status = "confirmed" if body.decision == "confirm" else "rejected"
         action_status = (
@@ -940,7 +945,7 @@ class HumanGateService:
                     {"id": str(uuid.uuid4()), "owner": owner, "action": action["id"], "project": action["project_id"], "event": event_type, "from_status": action["status"], "to_status": action_status, "payload": json.dumps(body.decision_payload, ensure_ascii=False), "version": action["version"] + 1, "key": body.idempotency_key, "hash": digest, "now": timestamp},
                 )
         candidate, evidence, learning = await self._apply_gate_side_effects(
-            owner, gate, action, status
+            owner, gate, action, status, body.decision_payload
         )
         next_action = None
         if status == "confirmed" and action["project_id"]:
@@ -960,6 +965,7 @@ class HumanGateService:
         gate: dict[str, Any],
         action: dict[str, Any],
         status: str,
+        decision_payload: dict[str, Any],
     ) -> tuple[dict[str, Any] | None, dict[str, Any] | None, dict[str, Any] | None]:
         candidate = None
         evidence = None
@@ -996,7 +1002,9 @@ class HumanGateService:
             elif gate["gate_type"] == "content_version":
                 await self._lock_candidate(owner, gate)
             elif gate["gate_type"] == "long_term_learning":
-                learning = await self._confirm_learning(owner, gate)
+                learning = await self._confirm_learning(
+                    owner, gate, decision_payload
+                )
         elif gate["gate_type"] == "user_fact":
             evidence_id = gate["payload"].get("evidence_id")
             if evidence_id:
@@ -1067,11 +1075,40 @@ class HumanGateService:
             raise VersionConflictException(current["version"], gate["version"])
         return {"gate": await self._gate(owner, gate["id"])}, False
 
-    async def _confirm_learning(self, owner: str, gate: dict[str, Any]) -> dict[str, Any]:
+    @staticmethod
+    def _selected_follow_up(
+        plan: dict[str, Any] | None, decision_payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        if not plan:
+            raise ValueError("learning gate is missing an intent-specific review plan")
+        options = plan.get("follow_up_options")
+        if not options:
+            return {
+                "action": "run_bounded_experiment",
+                "statement": plan["experiment_item"],
+                "next_test": plan["experiment_item"],
+            }
+        if decision_payload.get("intent_outcome") != "unknown":
+            raise ValueError("an unavailable result requires an unknown Intent Outcome")
+        selected_action = decision_payload.get("review_follow_up")
+        selected = next(
+            (item for item in options if item["action"] == selected_action), None
+        )
+        if selected is None:
+            raise ValueError("select one available review follow-up")
+        return selected
+
+    async def _confirm_learning(
+        self,
+        owner: str,
+        gate: dict[str, Any],
+        decision_payload: dict[str, Any],
+    ) -> dict[str, Any]:
         plan = gate["payload"].get("intent_review")
         review_id = gate["payload"].get("blind_review_id")
         if not plan or not review_id:
             raise ValueError("learning gate is missing an intent-specific review plan")
+        selected_follow_up = self._selected_follow_up(plan, decision_payload)
         project = await self.db.fetch_one(
             "SELECT * FROM content_projects WHERE id=:id AND owner_user_id=:owner "
             "AND deleted_at IS NULL",
@@ -1091,7 +1128,7 @@ class HumanGateService:
             owner,
             review_id,
             ObservationCreate(
-                statement=plan["experiment_item"],
+                statement=selected_follow_up["statement"],
                 scope={
                     "content_intent": plan["intent"],
                     "observed_facts": plan["observed_facts"],
@@ -1099,13 +1136,42 @@ class HumanGateService:
                     "continue_item": plan["continue_item"],
                     "stop_item": plan["stop_item"],
                     "source": "user_confirmed_intent_review",
+                    **(
+                        {
+                            "intent_outcome": "unknown",
+                            "result_availability": "unavailable",
+                            "review_follow_up": selected_follow_up["action"],
+                        }
+                        if plan.get("intent_outcome") == "unknown"
+                        else {}
+                    ),
                 },
-                next_test=plan["experiment_item"],
+                next_test=selected_follow_up["next_test"],
                 expected_project_version=expected_project_version,
                 idempotency_key=f"gate:{gate['id']}:learning-observation",
             ),
         )
         observation = result["observation"]
+        if plan.get("intent_outcome") == "unknown":
+            if result["project"]["status"] != "settled":
+                updated = await self.db.execute(
+                    "UPDATE content_projects SET status='settled',"
+                    "last_action='unknown_outcome_confirmed',last_action_at=:now,"
+                    "updated_at=:now,version=version+1 WHERE id=:project "
+                    "AND owner_user_id=:owner AND version=:expected",
+                    {
+                        "now": now(),
+                        "project": result["project"]["id"],
+                        "owner": owner,
+                        "expected": result["project"]["version"],
+                    },
+                )
+                if updated is None or updated.rowcount != 1:
+                    raise VersionConflictException(
+                        result["project"]["version"] + 1,
+                        result["project"]["version"],
+                    )
+            return observation
         await CreatorStateService(self.db).append_validated_insight(
             owner,
             {

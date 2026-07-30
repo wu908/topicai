@@ -109,8 +109,39 @@ def test_capability_trust_migration_recovers_after_ddl_before_version_record(tmp
         "037_capability_trust",
         "038_scope_learning_action",
         "039_observation_window_action",
+        "040_unavailable_performance_result",
     ]
     assert replay == []
+
+
+def test_unavailable_result_migration_recovers_after_partial_ddl(tmp_path):
+    db_path = tmp_path / "unavailable-result-recovery.db"
+    through_039 = tmp_path / "through-039"
+    through_039.mkdir()
+    for path in DEFAULT_MIGRATIONS_DIR.glob("[0-9][0-9][0-9]_*.sql"):
+        if int(path.name[:3]) <= 39:
+            shutil.copy2(path, through_039 / path.name)
+
+    apply(db_path, through_039)
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            "ALTER TABLE performance_snapshots_v2 ADD COLUMN "
+            "result_availability TEXT NOT NULL DEFAULT 'observed' "
+            "CHECK (result_availability IN ('observed','unavailable'))"
+        )
+
+    upgraded = apply(db_path, DEFAULT_MIGRATIONS_DIR)
+    replay = apply(db_path, DEFAULT_MIGRATIONS_DIR)
+
+    assert [item.version for item in upgraded] == [
+        "040_unavailable_performance_result"
+    ]
+    assert replay == []
+    with sqlite3.connect(db_path) as conn:
+        columns = {
+            row[1] for row in conn.execute("PRAGMA table_info(performance_snapshots_v2)")
+        }
+    assert {"result_availability", "unavailable_reason"} <= columns
 
 
 def test_intent_action_migration_upgrades_from_019_and_replays(tmp_path):
@@ -146,6 +177,7 @@ def test_intent_action_migration_upgrades_from_019_and_replays(tmp_path):
         "037_capability_trust",
         "038_scope_learning_action",
         "039_observation_window_action",
+        "040_unavailable_performance_result",
     ]
     assert replay == []
     with sqlite3.connect(db_path) as conn:
@@ -211,6 +243,7 @@ def test_action_lifecycle_migration_rebuilds_phase_15_constraints(tmp_path):
         "037_capability_trust",
         "038_scope_learning_action",
         "039_observation_window_action",
+        "040_unavailable_performance_result",
     ]
     with sqlite3.connect(db_path) as conn:
         action_sql = conn.execute(
@@ -276,6 +309,7 @@ def test_source_verification_migration_preserves_series_opportunities(tmp_path):
         "037_capability_trust",
         "038_scope_learning_action",
         "039_observation_window_action",
+        "040_unavailable_performance_result",
     ]
     with sqlite3.connect(db_path) as conn:
         opportunity = conn.execute(
@@ -624,6 +658,7 @@ def test_intent_lock_action_migration_upgrades_database_with_034_recorded(tmp_pa
         "037_capability_trust",
         "038_scope_learning_action",
         "039_observation_window_action",
+        "040_unavailable_performance_result",
     ]
     with sqlite3.connect(db_path) as conn:
         action_sql = conn.execute(

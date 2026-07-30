@@ -562,6 +562,8 @@ interface SnapshotFormProps extends WorkspaceFormProps {
   appendSnapshot: (recordId: string, input: {
     captured_at: string;
     source: 'manual';
+    result_availability?: 'observed' | 'unavailable';
+    unavailable_reason?: string;
     metrics: PerformanceMetrics;
     confirmed_by_user: true;
     expected_project_version: number;
@@ -587,6 +589,8 @@ export function SnapshotForm({
 }: SnapshotFormProps) {
   const [capturedAt, setCapturedAt] = useState(() => toLocalDateTimeValue(new Date()));
   const [values, setValues] = useState<Record<string, string>>({});
+  const [unavailable, setUnavailable] = useState(false);
+  const [unavailableReason, setUnavailableReason] = useState('');
   const record = workspace.publish_record;
   const hasMetric = Object.values(values).some((value) => value !== '');
 
@@ -608,25 +612,53 @@ export function SnapshotForm({
           InputLabelProps={{ shrink: true }}
           required
         />
-        <Box className="content-metric-grid">
-          {metricFields.map(([key, label]) => (
-            <TextField
-              key={key}
-              label={label}
-              value={values[key] ?? ''}
-              onChange={(e) =>
-                setValues((current) => ({ ...current, [key]: e.target.value }))
-              }
-              type="number"
-              inputProps={{ min: 0, 'aria-label': label }}
+        <FormControlLabel
+          label="最终无法取得这次结果"
+          control={
+            <Checkbox
+              checked={unavailable}
+              onChange={(_, checked) => {
+                setUnavailable(checked);
+                if (checked) setValues({});
+              }}
             />
-          ))}
-        </Box>
+          }
+        />
+        {unavailable ? (
+          <TextField
+            label="无法取得的原因"
+            inputProps={{ 'aria-label': '无法取得的原因' }}
+            value={unavailableReason}
+            onChange={(event) => setUnavailableReason(event.target.value)}
+            multiline
+            minRows={2}
+            required
+            helperText="例如平台已不再展示、内容已删除或账号权限不足。暂时拿不到时请稍后再试。"
+          />
+        ) : (
+          <Box className="content-metric-grid">
+            {metricFields.map(([key, label]) => (
+              <TextField
+                key={key}
+                label={label}
+                value={values[key] ?? ''}
+                onChange={(e) =>
+                  setValues((current) => ({ ...current, [key]: e.target.value }))
+                }
+                type="number"
+                inputProps={{ min: 0, 'aria-label': label }}
+              />
+            ))}
+          </Box>
+        )}
         <Box>
           <Button
             variant="contained"
             startIcon={<AssessmentOutlined />}
-            disabled={busy || !record || !capturedAt || !hasMetric}
+            disabled={
+              busy || !record || !capturedAt
+              || (unavailable ? !unavailableReason.trim() : !hasMetric)
+            }
             onClick={() => {
               if (!record) return;
               const metrics = Object.fromEntries(
@@ -638,7 +670,11 @@ export function SnapshotForm({
                 appendSnapshot(record.id, {
                   captured_at: new Date(capturedAt).toISOString(),
                   source: 'manual',
-                  metrics,
+                  result_availability: unavailable ? 'unavailable' : 'observed',
+                  ...(unavailable
+                    ? { unavailable_reason: unavailableReason.trim() }
+                    : {}),
+                  metrics: unavailable ? {} : metrics,
                   confirmed_by_user: true,
                   expected_project_version: workspace.project.version,
                   idempotency_key: makeKey('snapshot'),
@@ -646,7 +682,7 @@ export function SnapshotForm({
               );
             }}
           >
-            保存数据快照
+            {unavailable ? '确认结果不可用' : '保存数据快照'}
           </Button>
         </Box>
       </Stack>

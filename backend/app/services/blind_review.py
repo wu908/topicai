@@ -143,6 +143,17 @@ class BlindReviewService:
                         raise ValueError(f"result snapshot was superseded: {snapshot_id}")
                     snapshots.append(decode_json_fields(snapshot, "metrics_json"))
 
+                availability_states = {
+                    item.get("result_availability", "observed") for item in snapshots
+                }
+                result_unavailable = availability_states == {"unavailable"}
+                if "unavailable" in availability_states and (
+                    not result_unavailable or len(snapshots) != 1
+                ):
+                    raise ValueError(
+                        "an unavailable result cannot be combined with other snapshots"
+                    )
+
                 benchmark_samples = await self._benchmark_samples(
                     session, owner_user_id, body.benchmark_sample_ids
                 )
@@ -157,6 +168,9 @@ class BlindReviewService:
                 contamination_status = "contaminated" if unexpected else "clean"
                 comparison, has_comparable_metric = self._compare(
                     hypothesis, snapshots, included_benchmarks
+                )
+                comparison["result_availability"] = (
+                    "unavailable" if result_unavailable else "observed"
                 )
                 comparison["benchmark_context"] = {
                     "included_sample_ids": [item["id"] for item in included_benchmarks],
@@ -174,6 +188,7 @@ class BlindReviewService:
                     project,
                     comparison["expected_behavior_comparisons"],
                     len(snapshots),
+                    result_availability=comparison["result_availability"],
                 )
                 revoked_evidence_ids = await self._revoked_evidence_ids(
                     session, owner_user_id, hypothesis["content_version_id"]
@@ -196,6 +211,9 @@ class BlindReviewService:
                 elif is_legacy:
                     calibration_state = "insufficient"
                     eligibility_reason_code = "legacy_hypothesis"
+                elif result_unavailable:
+                    calibration_state = "insufficient"
+                    eligibility_reason_code = "insufficient_metrics"
                 elif (
                     missing
                     or not hypothesis_usable
@@ -240,6 +258,10 @@ class BlindReviewService:
                     "Observed metrics do not establish causal attribution.",
                     "Missing metrics remain unknown and are never treated as zero.",
                 ]
+                if result_unavailable:
+                    limitations.append(
+                        "An unavailable result can only produce an unknown Intent Outcome."
+                    )
                 await AITraceService.create(
                     session,
                     owner_user_id,
@@ -341,6 +363,10 @@ class BlindReviewService:
         behaviors = json.loads(hypothesis["expected_behaviors_json"])
         comparisons = []
         has_comparable_metric = False
+        result_unavailable = any(
+            snapshot.get("result_availability") == "unavailable"
+            for snapshot in snapshots
+        )
         for behavior in behaviors:
             metric = cls.BEHAVIOR_METRICS.get(behavior)
             values = [
@@ -373,7 +399,9 @@ class BlindReviewService:
                     "relative_position": relative_position,
                     "assessment": "unknown",
                     "reason": (
-                        "Observed without a pre-registered threshold."
+                        "Result was explicitly marked unavailable."
+                        if result_unavailable
+                        else "Observed without a pre-registered threshold."
                         if values
                         else "No comparable observed metric is available."
                     ),
@@ -435,7 +463,13 @@ class BlindReviewService:
         return revoked
 
     @staticmethod
-    def _intent_review_plan(project, comparisons, sample_count: int) -> dict[str, Any]:
+    def _intent_review_plan(
+        project,
+        comparisons,
+        sample_count: int,
+        *,
+        result_availability: str = "observed",
+    ) -> dict[str, Any]:
         """Turn observed metrics into bounded, intent-specific next actions.
 
         This deliberately does not infer causes from one result. The plan is
@@ -489,7 +523,7 @@ class BlindReviewService:
                 "experiment_item": "下一篇保持系列主题相近，只增加一个阶段性更新和明确的后续节点，再比较持续关注信号。",
             },
         }[intent]
-        return {
+        plan = {
             "intent": intent,
             "intent_label": labels[intent],
             "sample_count": sample_count,
@@ -499,6 +533,37 @@ class BlindReviewService:
             "confirmation_required": True,
             "long_term_write_allowed": False,
         }
+        if result_availability == "unavailable":
+            plan.update(
+                {
+                    "intent_outcome": "unknown",
+                    "result_availability": "unavailable",
+                    "possible_causes": [
+                        "结果数据不可用，无法判断发布意图获得了支持还是遇到矛盾。"
+                    ],
+                    "follow_up_options": [
+                        {
+                            "action": "collect_more_evidence",
+                            "label": "收集其他证据",
+                            "statement": "本次平台结果不可用，改为收集可追溯的读者反馈。",
+                            "next_test": "收集与本次发布意图相关的读者反馈，再决定是否继续测试。",
+                        },
+                        {
+                            "action": "repeat_observation",
+                            "label": "重试观察",
+                            "statement": "本次平台结果不可用，稍后重新尝试取得同一观察窗口的数据。",
+                            "next_test": "在数据可能恢复后重新检查同一篇内容，不把缺失值记为零。",
+                        },
+                        {
+                            "action": "run_bounded_experiment",
+                            "label": "做一个有界实验",
+                            "statement": "本次结果未知，下一篇只改变一个变量继续验证。",
+                            "next_test": actions["experiment_item"],
+                        },
+                    ],
+                }
+            )
+        return plan
 
     @staticmethod
     async def _project(session, owner_user_id: str, project_id: str):
