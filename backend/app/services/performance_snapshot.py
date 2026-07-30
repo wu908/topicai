@@ -91,10 +91,11 @@ class PerformanceSnapshotService:
                     text(
                         "INSERT INTO performance_snapshots_v2 ("
                         "id,owner_user_id,publish_record_id,project_id,captured_at,source,"
-                        "metrics_json,screenshot_material_id,confirmed_by_user,supersedes_id,"
-                        "idempotency_key,request_hash,created_at) VALUES ("
-                        ":id,:owner,:record,:project,:captured,:source,:metrics,:material,1,"
-                        ":supersedes,:key,:hash,:now)"
+                        "result_availability,unavailable_reason,metrics_json,"
+                        "screenshot_material_id,confirmed_by_user,supersedes_id,idempotency_key,"
+                        "request_hash,created_at) VALUES ("
+                        ":id,:owner,:record,:project,:captured,:source,:availability,:reason,"
+                        ":metrics,:material,1,:supersedes,:key,:hash,:now)"
                     ),
                     {
                         "id": snapshot_id,
@@ -103,8 +104,11 @@ class PerformanceSnapshotService:
                         "project": record["project_id"],
                         "captured": body.captured_at,
                         "source": body.source,
+                        "availability": body.result_availability,
+                        "reason": body.unavailable_reason,
                         "metrics": json.dumps(
-                            body.metrics.model_dump(), ensure_ascii=False
+                            body.metrics.model_dump(exclude_none=True),
+                            ensure_ascii=False,
                         ),
                         "material": body.screenshot_material_id,
                         "supersedes": body.supersedes_id,

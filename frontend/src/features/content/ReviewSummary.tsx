@@ -14,6 +14,8 @@ const comparisonReasonLabels: Record<string, string> = {
     '已记录实际结果，但发布前没有预设判断阈值，因此暂不判定命中或未命中。',
   'No comparable observed metric is available.':
     '当前快照缺少可对照指标，暂时无法比较。',
+  'Result was explicitly marked unavailable.':
+    '你已确认无法取得这次结果；缺失值没有被当作零，意图结果保持未知。',
 };
 
 export default function ReviewSummary({ workspace }: { workspace: CalibrationWorkspace }) {

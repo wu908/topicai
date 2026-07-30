@@ -801,6 +801,19 @@ def apply(
                     "creator_states",
                     [("capability_trust_json", "TEXT NOT NULL DEFAULT '{}'")],
                 )
+            elif version == "040_unavailable_performance_result":
+                _ensure_columns(
+                    conn,
+                    "performance_snapshots_v2",
+                    [
+                        (
+                            "result_availability",
+                            "TEXT NOT NULL DEFAULT 'observed' "
+                            "CHECK (result_availability IN ('observed','unavailable'))",
+                        ),
+                        ("unavailable_reason", "TEXT"),
+                    ],
+                )
             else:
                 conn.executescript(sql)
             post_step = MIGRATION_POST_STEPS.get(version)

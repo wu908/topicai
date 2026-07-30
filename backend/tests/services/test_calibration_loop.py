@@ -167,6 +167,52 @@ async def _published_with_snapshot(db, *, expected_behaviors=None, suffix="1"):
     return snapshot["project"], publication["record"], snapshot["snapshot"]
 
 
+async def _published_with_unavailable_result(db, *, suffix="unavailable"):
+    project, version = await _locked_project(db, suffix=suffix)
+    action = await IntentOrchestratorService(db).ensure_project_action(
+        "u1", project["id"]
+    )
+    gate = await HumanGateService(db).ensure_for_action("u1", action["id"])
+    await HumanGateService(db).decide(
+        "u1",
+        gate["id"],
+        HumanGateDecision(
+            decision="confirm",
+            decision_payload={"publication_confirmed": True},
+            expected_gate_version=gate["version"],
+            idempotency_key=f"publication-gate-{suffix}",
+        ),
+    )
+    publication, _ = await PublicationService(db).record(
+        "u1",
+        project["id"],
+        PublishRecordCreate(
+            content_version_id=version["id"],
+            publication_gate_id=gate["id"],
+            published_at="2026-07-18T08:00:00Z",
+            expected_project_version=project["version"],
+            idempotency_key=f"publication-{suffix}",
+        ),
+    )
+    await ObservationWindowService(db).mark_due(as_of="2026-07-25T08:00:00Z")
+    project = await ContentProjectService(db).get("u1", project["id"])
+    snapshot, _ = await PerformanceSnapshotService(db).append(
+        "u1",
+        publication["record"]["id"],
+        PerformanceSnapshotCreate(
+            captured_at="2026-07-25T08:00:00Z",
+            source="manual",
+            result_availability="unavailable",
+            unavailable_reason="The platform no longer exposes this note's metrics.",
+            metrics={},
+            confirmed_by_user=True,
+            expected_project_version=project["version"],
+            idempotency_key=f"snapshot-{suffix}",
+        ),
+    )
+    return snapshot["project"], publication["record"], snapshot["snapshot"]
+
+
 @pytest.mark.asyncio
 async def test_observation_window_marks_only_due_projects_and_changes_next_action(
     seeded_db,
@@ -512,6 +558,95 @@ async def test_clean_blind_review_creates_trace_and_provisional_observation(seed
     assert observation["observation"]["lifecycle_status"] == "observing"
     assert observation["observation"]["sample_count"] == 1
     assert "creator_rule_id" not in observation["observation"]
+
+
+@pytest.mark.asyncio
+async def test_unavailable_result_produces_unknown_review_and_follow_up(seeded_db):
+    project, _, snapshot = await _published_with_unavailable_result(seeded_db)
+
+    review, replayed = await BlindReviewService(seeded_db).create(
+        "u1",
+        project["id"],
+        BlindReviewCreate(
+            result_snapshot_ids=[snapshot["id"]],
+            expected_project_version=project["version"],
+            idempotency_key="blind-review-unavailable",
+        ),
+    )
+
+    assert replayed is False
+    assert review["review"]["calibration_state"] == "insufficient"
+    assert review["review"]["eligibility_reason_code"] == "insufficient_metrics"
+    assert review["review"]["comparison"]["result_availability"] == "unavailable"
+    plan = review["review"]["comparison"]["intent_review"]
+    assert plan["intent_outcome"] == "unknown"
+    assert plan["result_availability"] == "unavailable"
+    assert [item["action"] for item in plan["follow_up_options"]] == [
+        "collect_more_evidence",
+        "repeat_observation",
+        "run_bounded_experiment",
+    ]
+    assert all(
+        item["assessment"] == "unknown"
+        for item in review["review"]["comparison"]["expected_behavior_comparisons"]
+    )
+
+    workspace = await CalibrationWorkspaceService(seeded_db).get(
+        "u1", project["id"]
+    )
+    assert workspace["next_action"] == "create_observation"
+    assert workspace["orchestrated_action"]["action_type"] == "confirm_learning"
+    today = await IntentOrchestratorService(seeded_db).today("u1")
+    assert today["action"]["action_type"] == "confirm_learning"
+
+
+@pytest.mark.asyncio
+async def test_unknown_outcome_closes_loop_with_selected_follow_up(seeded_db):
+    project, _, snapshot = await _published_with_unavailable_result(
+        seeded_db, suffix="unknown-close"
+    )
+    review, _ = await BlindReviewService(seeded_db).create(
+        "u1",
+        project["id"],
+        BlindReviewCreate(
+            result_snapshot_ids=[snapshot["id"]],
+            expected_project_version=project["version"],
+            idempotency_key="unknown-close-review",
+        ),
+    )
+    action = await IntentOrchestratorService(seeded_db).ensure_project_action(
+        "u1", review["project"]
+    )
+    gate = await HumanGateService(seeded_db).ensure_for_action("u1", action["id"])
+
+    confirmed, replayed = await HumanGateService(seeded_db).decide(
+        "u1",
+        gate["id"],
+        HumanGateDecision(
+            decision="confirm",
+            decision_payload={
+                "intent_outcome": "unknown",
+                "review_follow_up": "repeat_observation",
+            },
+            expected_gate_version=gate["version"],
+            idempotency_key="unknown-close-decision",
+        ),
+    )
+
+    assert replayed is False
+    observation = confirmed["observation"]
+    assert observation["scope"]["intent_outcome"] == "unknown"
+    assert observation["scope"]["review_follow_up"] == "repeat_observation"
+    assert "重新尝试" in observation["statement"]
+    closed_project = await ContentProjectService(seeded_db).get("u1", project["id"])
+    assert closed_project["status"] == "settled"
+    state = await CreatorStateService(seeded_db).get("u1")
+    assert all(
+        item.get("source_ref") != f"observation:{observation['id']}"
+        for item in state["validated_insights"]
+    )
+    today = await IntentOrchestratorService(seeded_db).today("u1")
+    assert today["action"]["action_type"] == "create_project"
 
 
 @pytest.mark.parametrize("intent", ["solve", "share", "record"])

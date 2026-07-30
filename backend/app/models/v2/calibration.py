@@ -26,22 +26,34 @@ class PerformanceMetrics(StrictModel):
     shares: int | None = Field(default=None, ge=0)
     follows_gained: int | None = Field(default=None, ge=0)
 
-    @model_validator(mode="after")
-    def require_observed_metric(self):
-        if not any(value is not None for value in self.model_dump().values()):
-            raise ValueError("at least one observed metric is required")
-        return self
-
 
 class PerformanceSnapshotCreate(StrictModel):
     captured_at: str = Field(min_length=1)
     source: Literal["manual", "screenshot"]
-    metrics: PerformanceMetrics
+    result_availability: Literal["observed", "unavailable"] = "observed"
+    unavailable_reason: str | None = Field(default=None, max_length=500)
+    metrics: PerformanceMetrics = Field(default_factory=PerformanceMetrics)
     screenshot_material_id: str | None = None
     confirmed_by_user: bool
     supersedes_id: str | None = None
     expected_project_version: int = Field(ge=1)
     idempotency_key: str = Field(min_length=1, max_length=200)
+
+    @model_validator(mode="after")
+    def validate_result_availability(self):
+        has_metric = any(value is not None for value in self.metrics.model_dump().values())
+        if self.result_availability == "observed":
+            if not has_metric:
+                raise ValueError("at least one observed metric is required")
+            if self.unavailable_reason is not None:
+                raise ValueError("observed results cannot have an unavailable reason")
+        else:
+            if has_metric:
+                raise ValueError("unavailable results cannot contain metrics")
+            if not self.unavailable_reason or not self.unavailable_reason.strip():
+                raise ValueError("unavailable results require a reason")
+            self.unavailable_reason = self.unavailable_reason.strip()
+        return self
 
 
 class BlindReviewCreate(StrictModel):

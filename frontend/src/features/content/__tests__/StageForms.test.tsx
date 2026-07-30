@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { CalibrationWorkspace, ContentIntent } from '@/types/contracts/v2/content';
-import { HypothesisForm } from '../StageForms';
+import { HypothesisForm, SnapshotForm } from '../StageForms';
 
 const workspace: CalibrationWorkspace = {
   project: {
@@ -167,5 +167,44 @@ describe('HypothesisForm', () => {
     expect(screen.getByText(/不会补填当时的发布意图/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '锁定发布意图' })).not.toBeInTheDocument();
     expect(screen.queryByLabelText('预期受众变化')).not.toBeInTheDocument();
+  });
+});
+
+describe('SnapshotForm', () => {
+  it('submits an explicitly unavailable result without zero-filled metrics', async () => {
+    const appendSnapshot = vi.fn().mockResolvedValue({});
+    const onCommand = vi.fn(async (command: () => Promise<unknown>) => {
+      await command();
+    });
+    render(
+      <SnapshotForm
+        workspace={{
+          ...workspace,
+          project: { ...workspace.project, status: 'awaiting_review', version: 4 },
+          publish_record: { id: 'record-1', published_at: '2026-07-20T08:00:00Z' },
+          next_action: 'add_snapshot',
+        }}
+        busy={false}
+        onCommand={onCommand}
+        appendSnapshot={appendSnapshot}
+        makeKey={() => 'unavailable-key'}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('checkbox', { name: '最终无法取得这次结果' }));
+    fireEvent.change(screen.getByLabelText('无法取得的原因'), {
+      target: { value: '平台已不再展示这篇内容的数据' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '确认结果不可用' }));
+
+    expect(appendSnapshot).toHaveBeenCalledWith(
+      'record-1',
+      expect.objectContaining({
+        result_availability: 'unavailable',
+        unavailable_reason: '平台已不再展示这篇内容的数据',
+        metrics: {},
+        expected_project_version: 4,
+      }),
+    );
   });
 });

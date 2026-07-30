@@ -281,6 +281,87 @@ describe('ContentPage', () => {
     expect(screen.queryByText(/因为标题更好/)).not.toBeInTheDocument();
   });
 
+  it('confirms an unknown outcome with one selected follow-up', async () => {
+    api.listProjects.mockResolvedValue({ items: [project], total: 1 });
+    api.openHumanGate.mockResolvedValue({
+      id: 'learning-gate',
+      gate_type: 'long_term_learning',
+      prompt: 'Confirm unknown outcome',
+      payload: {},
+      status: 'pending',
+      version: 1,
+    });
+    api.getCalibrationWorkspace.mockResolvedValue({
+      ...workspace,
+      project: { ...project, status: 'awaiting_review', calibration_state: 'insufficient' },
+      latest_blind_review: {
+        id: 'br-unavailable',
+        calibration_state: 'insufficient',
+        contamination_status: 'clean',
+        eligible_for_rule_upgrade: false,
+        comparison: {
+          expected_behavior_comparisons: [],
+          intent_review: {
+            intent: 'solve',
+            intent_label: '解决',
+            sample_count: 1,
+            observed_facts: [],
+            possible_causes: ['结果数据不可用，无法判断发布意图。'],
+            continue_item: '不据此继续。',
+            stop_item: '不据此停止。',
+            experiment_item: '下一篇只改变一个变量。',
+            confirmation_required: true,
+            long_term_write_allowed: false,
+            intent_outcome: 'unknown',
+            result_availability: 'unavailable',
+            follow_up_options: [
+              {
+                action: 'collect_more_evidence',
+                label: '收集其他证据',
+                statement: '收集读者反馈。',
+                next_test: '收集读者反馈。',
+              },
+              {
+                action: 'repeat_observation',
+                label: '重试观察',
+                statement: '稍后重试。',
+                next_test: '稍后重试。',
+              },
+            ],
+          },
+        },
+      },
+      next_action: 'create_observation',
+      orchestrated_action: {
+        ...workspace.orchestrated_action!,
+        id: 'confirm-learning-action',
+        action_type: 'confirm_learning',
+        human_gate_type: 'long_term_learning',
+        human_gate: null,
+      },
+    });
+
+    renderPage('/content/p1');
+
+    const followUp = await screen.findByRole('combobox', { name: '下一步' });
+    fireEvent.mouseDown(followUp);
+    fireEvent.click(await screen.findByRole('option', { name: '重试观察' }));
+    fireEvent.click(screen.getByRole('button', { name: '确认未知结果和下一步' }));
+
+    await waitFor(() => {
+      expect(api.decideHumanGate).toHaveBeenCalledWith(
+        'learning-gate',
+        expect.objectContaining({
+          decision: 'confirm',
+          decision_payload: {
+            intent_outcome: 'unknown',
+            review_follow_up: 'repeat_observation',
+          },
+        }),
+      );
+    });
+  });
+
   it('offers audited actions for an active observation', async () => {
     api.listProjects.mockResolvedValue({ items: [project], total: 1 });
     api.getCalibrationWorkspace.mockResolvedValue({

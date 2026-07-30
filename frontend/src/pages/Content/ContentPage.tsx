@@ -605,8 +605,52 @@ function LearningConfirmationPanel({
   busy: boolean;
   runCommand: (command: () => Promise<unknown>) => Promise<void>;
 }) {
+  const [selectedFollowUp, setSelectedFollowUp] = useState(
+    plan?.follow_up_options?.[0]?.action ?? '',
+  );
   if (!plan) {
     return <Alert severity="warning">这次复盘还没有生成可确认的意图计划，请先刷新数据。</Alert>;
+  }
+  if (plan.intent_outcome === 'unknown' && plan.follow_up_options?.length) {
+    return (
+      <Paper component="section" variant="outlined" sx={{ p: { xs: 2, sm: 3 }, borderColor: 'var(--v3-border)', boxShadow: 'none' }}>
+        <Stack spacing={2}>
+          <div>
+            <Chip size="small" label="结果未知" />
+            <h2>确认结果仍为未知，并选择下一步</h2>
+            <p>平台结果不可用不等于指标为零，也不能说明发布意图成功或失败。</p>
+          </div>
+          <Alert severity="warning">这次复盘只记录“未知”和你选择的下一步，不会写入长期已验证经验。</Alert>
+          <TextField
+            select
+            label="下一步"
+            value={selectedFollowUp}
+            onChange={(event) => setSelectedFollowUp(event.target.value)}
+          >
+            {plan.follow_up_options.map((option) => (
+              <MenuItem key={option.action} value={option.action}>{option.label}</MenuItem>
+            ))}
+          </TextField>
+          {gate ? (
+            <Button
+              variant="contained"
+              disabled={busy || gate.status !== 'pending' || !selectedFollowUp}
+              onClick={() => void runCommand(() => decideHumanGate(gate.id, {
+                decision: 'confirm',
+                decision_payload: {
+                  intent_outcome: 'unknown',
+                  review_follow_up: selectedFollowUp,
+                },
+                expected_gate_version: gate.version,
+                idempotency_key: `unknown-outcome-${gate.id}-${gate.version}`,
+              }))}
+            >
+              确认未知结果和下一步
+            </Button>
+          ) : <CircularProgress size={22} aria-label="准备复盘确认" />}
+        </Stack>
+      </Paper>
+    );
   }
   return (
     <Paper component="section" variant="outlined" sx={{ p: { xs: 2, sm: 3 }, borderColor: 'var(--v3-border)', boxShadow: 'none' }}>
