@@ -948,6 +948,7 @@ async def test_intent_override_without_materials_rederives_requirements(series_d
     )
     assert accepted["content_intent"] == "solve"
     assert accepted["confirmed_material_requirements"] == MATERIALS_BY_INTENT["solve"]
+    assert accepted["project"]["material_requirements"] == MATERIALS_BY_INTENT["solve"]
 
 
 @pytest.mark.asyncio
