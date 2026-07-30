@@ -19,10 +19,12 @@ from app.models.v2.content_opportunity import (
     UserSourceOpportunityCreate,
 )
 from app.models.v2.content_project import ContentProjectCreate
+from app.models.v2.intent_actions import IntentConfirmation
 from app.services.ai_trace import AITraceService
 from app.services.content_genome import ContentGenomeService
 from app.services.content_project import ContentProjectService
 from app.services.creator_series import CreatorSeriesService
+from app.services.intent_actions import IntentConfirmationService
 from app.services.v2_utils import effective_intent_status, now, request_hash
 
 PUBLISHED_STATUSES = {"published", "awaiting_review", "settled"}
@@ -394,13 +396,18 @@ class ContentOpportunityService:
             ),
         )
         if effective_intent_status(project) not in {"working_confirmed", "locked"}:
-            await self.db.execute(
-                "UPDATE content_projects SET intent_status='working_confirmed',last_action="
-                "'opportunity_accepted',last_action_at=:now,updated_at=:now,version=version+1 "
-                "WHERE id=:id AND owner_user_id=:owner AND intent_status='candidate'",
-                {"now": now(), "id": project["id"], "owner": owner},
+            confirmation, _ = await IntentConfirmationService(self.db).confirm(
+                owner,
+                project["id"],
+                IntentConfirmation(
+                    content_intent=opportunity["content_intent"],
+                    audience_change=opportunity["confirmed_audience_change"],
+                    material_requirements=opportunity["confirmed_material_requirements"],
+                    expected_project_version=project["version"],
+                    idempotency_key=f"opportunity-intent:{opportunity['id']}",
+                ),
             )
-            project = await ContentProjectService(self.db).get(owner, project["id"])
+            project = confirmation["project"]
         await self.db.execute(
             "UPDATE content_opportunities SET created_project_id=:project,updated_at=:now "
             "WHERE id=:id AND owner_user_id=:owner AND created_project_id IS NULL",
