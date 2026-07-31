@@ -11,10 +11,6 @@ python-multipart==0.0.18
 # Database
 sqlalchemy==2.0.36
 aiosqlite==0.20.0
-chromadb==0.5.23
-
-# Embedding
-sentence-transformers==3.3.1
 
 # LLM / AI
 openai==1.58.1
@@ -42,11 +38,3 @@ posthog==3.7.4
 # Utilities
 python-dotenv==1.0.1
 aiofiles==24.1.0
-
-# Testing (dev)
-pytest==8.3.4
-pytest-asyncio==0.24.0
-pytest-cov==6.0.0
-pytest-mock==3.14.0
-ruff==0.8.6
-mypy==1.13.0
