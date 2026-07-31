@@ -32,6 +32,13 @@ class ContentProjectCreate(BaseModel):
     idempotency_key: str = Field(min_length=1, max_length=200)
 
 
+class ProjectTransition(BaseModel):
+    to_status: ProjectStatus
+    reason: str = Field(min_length=1, max_length=200)
+    expected_version: int = Field(ge=1)
+    idempotency_key: str = Field(min_length=1, max_length=200)
+
+
 class ContentVersionCreate(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     body_text: str = Field(min_length=1)

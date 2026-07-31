@@ -8,6 +8,7 @@ from sqlalchemy import text
 
 from app.core.exceptions import IdempotencyConflictException, VersionConflictException
 from app.models.v2.calibration import PublishRecordCreate
+from app.services.project_state import ProjectStateService
 from app.services.v2_utils import now, request_hash
 
 
@@ -125,24 +126,18 @@ class PublicationService:
                         "hash": digest,
                     },
                 )
-                updated = await session.execute(
-                    text(
-                        "UPDATE content_projects SET status='published',"
-                        "last_action='publication_recorded',last_action_at=:now,"
-                        "updated_at=:now,version=version+1 WHERE id=:project "
-                        "AND owner_user_id=:owner AND version=:expected"
-                    ),
-                    {
-                        "now": timestamp,
-                        "project": project_id,
-                        "owner": owner_user_id,
-                        "expected": body.expected_project_version,
-                    },
+                await ProjectStateService.apply(
+                    session,
+                    owner_user_id,
+                    project,
+                    to_status="published",
+                    reason="publication_recorded",
+                    actor_type="user",
+                    expected_version=body.expected_project_version,
+                    idempotency_key=f"state:publication:{body.idempotency_key}",
+                    digest=digest,
+                    timestamp=timestamp,
                 )
-                if updated.rowcount != 1:
-                    raise VersionConflictException(
-                        project["version"], body.expected_project_version
-                    )
                 record = (
                     await session.execute(
                         text("SELECT * FROM publish_records_v2 WHERE id=:id"),

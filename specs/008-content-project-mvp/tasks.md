@@ -48,7 +48,7 @@
 - [ ] T026 [P] Add AI trace and generic feedback compatibility migration in `backend/app/data/migrations/016_ai_traces_feedback_v2.sql`
 - [ ] T027 [P] Add history-import/imported-note tables plus creator-profile reconciliation in `backend/app/data/migrations/017_creator_profile_v2.sql`
 - [ ] T028 [P] Create v2 Pydantic models in `backend/app/models/v2/common.py`, `starter.py`, `opportunity.py`, `content_project.py`, `material.py`, `publish_review.py`, and `ai_trace.py`
-- [ ] T029 Implement canonical transition validation and append-only state events in `backend/app/services/project_state.py`
+- [x] T029 Implement canonical transition validation and append-only state events in `backend/app/services/project_state.py`
 - [ ] T030 [P] Implement owner-scoped idempotency reservation/replay and generic immutable feedback targets in `backend/app/services/idempotency.py` and `backend/app/services/feedback_v2.py`
 - [ ] T031 [P] Implement optimistic concurrency helpers and typed `VERSION_CONFLICT` errors in `backend/app/services/concurrency.py` and `backend/app/core/exceptions.py`
 - [ ] T032 [P] Implement AITrace persistence plus shared v2 API envelope/error adapters in `backend/app/services/ai_trace.py`, `backend/app/api/v2/deps.py`, and `backend/app/api/v2/errors.py`

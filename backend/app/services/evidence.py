@@ -15,6 +15,7 @@ from app.models.v2.evidence import (
     EvidenceDecision,
     EvidenceRevocation,
 )
+from app.services.project_state import ProjectStateService
 from app.services.v2_utils import now, request_hash
 
 
@@ -163,6 +164,8 @@ class EvidenceService:
                     evidence["project_id"],
                     impact["content_version_ids"],
                     timestamp,
+                    f"state:evidence-revocation:{evidence_id}:{body.idempotency_key}",
+                    digest,
                 )
         revoked = await self.get(owner_user_id, evidence_id)
         return {**revoked, "invalidation": impact}, False
@@ -229,12 +232,24 @@ class EvidenceService:
         project_id: str,
         version_ids: list[str],
         timestamp: str,
+        idempotency_key: str,
+        digest: str,
     ) -> None:
         if not version_ids:
             return
         placeholders = ",".join(f":version_{i}" for i in range(len(version_ids)))
         params = {f"version_{i}": value for i, value in enumerate(version_ids)}
         params.update({"owner": owner_user_id, "project": project_id, "now": timestamp})
+        project = (
+            await session.execute(
+                text(
+                    "SELECT * FROM content_projects WHERE id=:project "
+                    "AND owner_user_id=:owner AND deleted_at IS NULL "
+                    "AND locked_publish_version_id IN (" + placeholders + ")"
+                ),
+                params,
+            )
+        ).mappings().first()
         await session.execute(
             text(
                 "UPDATE publish_hypotheses SET status='superseded' "
@@ -253,17 +268,43 @@ class EvidenceService:
             ),
             params,
         )
-        await session.execute(
-            text(
-                "UPDATE content_projects SET locked_publish_version_id=NULL,"
-                "publish_hypothesis_id=NULL,calibration_state='insufficient',"
-                "status=CASE WHEN status='ready_to_publish' THEN 'creating' ELSE status END,"
-                "last_action='evidence_revoked',last_action_at=:now,updated_at=:now,"
-                "version=version+1 WHERE id=:project AND owner_user_id=:owner "
-                "AND locked_publish_version_id IN (" + placeholders + ")"
-            ),
-            params,
-        )
+        if project is None:
+            return
+        if project["status"] == "ready_to_publish":
+            updated = await session.execute(
+                text(
+                    "UPDATE content_projects SET locked_publish_version_id=NULL,"
+                    "publish_hypothesis_id=NULL,calibration_state='insufficient' "
+                    "WHERE id=:project AND owner_user_id=:owner AND version=:expected "
+                    "AND locked_publish_version_id IN (" + placeholders + ")"
+                ),
+                {**params, "expected": project["version"]},
+            )
+            if updated.rowcount != 1:
+                raise VersionConflictException(project["version"] + 1, project["version"])
+            await ProjectStateService.apply(
+                session,
+                owner_user_id,
+                project,
+                to_status="creating",
+                reason="evidence_revoked",
+                actor_type="user",
+                expected_version=project["version"],
+                idempotency_key=idempotency_key,
+                digest=digest,
+                timestamp=timestamp,
+            )
+        else:
+            await session.execute(
+                text(
+                    "UPDATE content_projects SET locked_publish_version_id=NULL,"
+                    "publish_hypothesis_id=NULL,calibration_state='insufficient',"
+                    "last_action='evidence_revoked',last_action_at=:now,updated_at=:now,"
+                    "version=version+1 WHERE id=:project AND owner_user_id=:owner "
+                    "AND locked_publish_version_id IN (" + placeholders + ")"
+                ),
+                params,
+            )
 
     async def _invalidation_impact(
         self, owner_user_id: str, project_id: str, evidence_id: str

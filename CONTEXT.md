@@ -12,6 +12,11 @@ content. Draft versions belong to the same project; later publications on the
 same theme are separate projects connected as a series.
 _Avoid_: Topic collection, multi-publication campaign
 
+**Project State Event**:
+An immutable audit fact that a Content Project moved between canonical states;
+the project's current state remains authoritative and is not rebuilt from events.
+_Avoid_: Event-sourced project, current project state
+
 **Content Opportunity**:
 An explainable, user-decidable candidate derived before a Content Project. It
 becomes a project only after the user accepts its direction and provisional

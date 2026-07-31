@@ -11,6 +11,7 @@ from app.models.v2.publish_hypothesis import (
     PublishHypothesisAmendmentCreate,
     PublishHypothesisLock,
 )
+from app.services.project_state import ProjectStateService
 from app.services.v2_utils import (
     effective_intent_status,
     normalize_project_intent,
@@ -248,12 +249,11 @@ class PublishHypothesisService:
                 )
                 updated = await session.execute(
                     text(
-                        "UPDATE content_projects SET status='ready_to_publish',"
-                        "locked_publish_version_id=:version,publish_hypothesis_id=:hypothesis,"
+                        "UPDATE content_projects SET locked_publish_version_id=:version,"
+                        "publish_hypothesis_id=:hypothesis,"
                         "content_intent=:intent,audience_change=:change,"
                         "intent_status='locked',intent_locked_at=:now,"
-                        "calibration_state='not_ready',last_action='publish_hypothesis_locked',"
-                        "last_action_at=:now,updated_at=:now,version=version+1 "
+                        "calibration_state='not_ready' "
                         "WHERE id=:project AND owner_user_id=:owner AND version=:expected"
                     ),
                     {
@@ -271,6 +271,18 @@ class PublishHypothesisService:
                     raise VersionConflictException(
                         project["version"], body.expected_project_version
                     )
+                await ProjectStateService.apply(
+                    session,
+                    owner_user_id,
+                    project,
+                    to_status="ready_to_publish",
+                    reason="publish_hypothesis_locked",
+                    actor_type="user",
+                    expected_version=body.expected_project_version,
+                    idempotency_key=f"state:publish-hypothesis:{body.idempotency_key}",
+                    digest=digest,
+                    timestamp=timestamp,
+                )
                 locked = (
                     await session.execute(
                         text("SELECT * FROM publish_hypotheses WHERE id=:id"),
