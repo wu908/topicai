@@ -126,6 +126,7 @@ def test_project_state_event_migration_recovers_after_ddl_before_version_record(
     assert [item.version for item in upgraded] == [
         "041_project_state_events",
         "042_growth_onboarding",
+        "043_first_party_opportunities",
     ]
     assert replay == []
 
@@ -155,6 +156,7 @@ def test_capability_trust_migration_recovers_after_ddl_before_version_record(tmp
         "040_unavailable_performance_result",
         "041_project_state_events",
         "042_growth_onboarding",
+        "043_first_party_opportunities",
     ]
     assert replay == []
 
@@ -182,6 +184,7 @@ def test_unavailable_result_migration_recovers_after_partial_ddl(tmp_path):
         "040_unavailable_performance_result",
         "041_project_state_events",
         "042_growth_onboarding",
+        "043_first_party_opportunities",
     ]
     assert replay == []
     with sqlite3.connect(db_path) as conn:
@@ -227,6 +230,7 @@ def test_intent_action_migration_upgrades_from_019_and_replays(tmp_path):
         "040_unavailable_performance_result",
         "041_project_state_events",
         "042_growth_onboarding",
+        "043_first_party_opportunities",
     ]
     assert replay == []
     with sqlite3.connect(db_path) as conn:
@@ -295,6 +299,7 @@ def test_action_lifecycle_migration_rebuilds_phase_15_constraints(tmp_path):
         "040_unavailable_performance_result",
         "041_project_state_events",
         "042_growth_onboarding",
+        "043_first_party_opportunities",
     ]
     with sqlite3.connect(db_path) as conn:
         action_sql = conn.execute(
@@ -363,6 +368,7 @@ def test_source_verification_migration_preserves_series_opportunities(tmp_path):
         "040_unavailable_performance_result",
         "041_project_state_events",
         "042_growth_onboarding",
+        "043_first_party_opportunities",
     ]
     with sqlite3.connect(db_path) as conn:
         opportunity = conn.execute(
@@ -379,6 +385,32 @@ def test_source_verification_migration_preserves_series_opportunities(tmp_path):
         assert event_count == 1
         assert "'user_source'" in table_sql
         assert "'pending_verification'" in table_sql
+        assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
+
+        conn.execute(
+            "UPDATE content_opportunities SET dimensions_json="
+            "'{\"audience_fit\":\"strong\"}',source_trigger='official_inspiration',"
+            "expires_at='2026-08-07T00:00:00Z',source_refs_json="
+            "'[{\"ref_type\":\"creator_series\"}]' WHERE id='op-1'"
+        )
+        conn.execute(
+            "DELETE FROM schema_migrations WHERE version='043_first_party_opportunities'"
+        )
+        conn.commit()
+
+    repaired = apply(db_path, DEFAULT_MIGRATIONS_DIR)
+    assert [item.version for item in repaired] == ["043_first_party_opportunities"]
+    with sqlite3.connect(db_path) as conn:
+        preserved = conn.execute(
+            "SELECT dimensions_json,source_trigger,expires_at,source_refs_json "
+            "FROM content_opportunities WHERE id='op-1'"
+        ).fetchone()
+        assert preserved == (
+            '{"audience_fit":"strong"}',
+            "official_inspiration",
+            "2026-08-07T00:00:00Z",
+            '[{"ref_type":"creator_series"}]',
+        )
         assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
 
 
@@ -714,6 +746,7 @@ def test_intent_lock_action_migration_upgrades_database_with_034_recorded(tmp_pa
         "040_unavailable_performance_result",
         "041_project_state_events",
         "042_growth_onboarding",
+        "043_first_party_opportunities",
     ]
     with sqlite3.connect(db_path) as conn:
         action_sql = conn.execute(

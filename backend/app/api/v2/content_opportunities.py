@@ -1,13 +1,19 @@
 """HTTP adapters for explainable content opportunities."""
 
-from fastapi import APIRouter, Depends, Response
+from typing import Literal
+
+from fastapi import APIRouter, Depends, Query, Response
 
 from app.api.v1.deps import get_current_user, get_db
 from app.core.database import Database
 from app.core.llm import LLMClient
 from app.models.common import ApiResponse
 from app.models.v2.content_opportunity import (
+    ContentOpportunityView,
     OpportunityDecision,
+    OpportunityGenerateRequest,
+    OpportunityListResult,
+    OpportunitySourceVerification,
     SeriesExtensionCreate,
     UserSourceOpportunityCreate,
 )
@@ -28,25 +34,71 @@ def _proposal_service(db: Database) -> ContentOpportunityService:
     return ContentOpportunityService(db, llm=llm)
 
 
-def _response(response: Response, result, replayed: bool):
+def _response(
+    response: Response, result, replayed: bool
+) -> ApiResponse[ContentOpportunityView]:
     response.status_code = 200 if replayed else 201
-    return ApiResponse(
+    return ApiResponse[ContentOpportunityView](
         code=response.status_code,
         data=result,
         meta={"idempotency_replayed": replayed},
     )
 
 
-@router.get("/content-opportunities")
+@router.get(
+    "/content-opportunities",
+    response_model=ApiResponse[OpportunityListResult],
+)
 async def list_content_opportunities(
+    opportunity_type: Literal[
+        "series_extension",
+        "user_source",
+        "history_derivative",
+        "user_question",
+        "material_derivative",
+        "insight_derivative",
+        "evergreen",
+    ]
+    | None = Query(default=None, alias="type"),
+    decision: Literal["adopt", "save", "reject"] | None = None,
+    timeliness: Literal[
+        "evergreen", "current", "expiring", "expired", "unknown"
+    ]
+    | None = None,
     user=Depends(get_current_user), db: Database = Depends(get_db)
 ):
-    return ApiResponse(
-        data={"items": await ContentOpportunityService(db).list(user["id"])}
+    return ApiResponse[OpportunityListResult](
+        data=OpportunityListResult(
+            items=await ContentOpportunityService(db).list(
+                user["id"], opportunity_type, decision, timeliness
+            )
+        )
     )
 
 
-@router.post("/creator-series/{series_id}/extension-opportunities", status_code=201)
+@router.post(
+    "/content-opportunities:generate",
+    response_model=ApiResponse[OpportunityListResult],
+)
+async def generate_content_opportunities(
+    body: OpportunityGenerateRequest,
+    user=Depends(get_current_user),
+    db: Database = Depends(get_db),
+):
+    return ApiResponse[OpportunityListResult](
+        data=OpportunityListResult(
+            items=await ContentOpportunityService(db).generate(
+                user["id"], body.desired_count
+            )
+        )
+    )
+
+
+@router.post(
+    "/creator-series/{series_id}/extension-opportunities",
+    status_code=201,
+    response_model=ApiResponse[ContentOpportunityView],
+)
 async def propose_series_extension(
     series_id: str,
     body: SeriesExtensionCreate,
@@ -60,7 +112,11 @@ async def propose_series_extension(
     return _response(response, result, replayed)
 
 
-@router.post("/content-opportunities/source-verification", status_code=201)
+@router.post(
+    "/content-opportunities/source-verification",
+    status_code=201,
+    response_model=ApiResponse[ContentOpportunityView],
+)
 async def create_source_verification_opportunity(
     body: UserSourceOpportunityCreate,
     response: Response,
@@ -73,7 +129,11 @@ async def create_source_verification_opportunity(
     return _response(response, result, replayed)
 
 
-@router.post("/content-opportunities/{opportunity_id}:decide", status_code=201)
+@router.post(
+    "/content-opportunities/{opportunity_id}:decide",
+    status_code=201,
+    response_model=ApiResponse[ContentOpportunityView],
+)
 async def decide_content_opportunity(
     opportunity_id: str,
     body: OpportunityDecision,
@@ -82,6 +142,24 @@ async def decide_content_opportunity(
     db: Database = Depends(get_db),
 ):
     result, replayed = await ContentOpportunityService(db).decide(
+        user["id"], opportunity_id, body
+    )
+    return _response(response, result, replayed)
+
+
+@router.post(
+    "/content-opportunities/{opportunity_id}:verify-source",
+    status_code=201,
+    response_model=ApiResponse[ContentOpportunityView],
+)
+async def verify_content_opportunity_source(
+    opportunity_id: str,
+    body: OpportunitySourceVerification,
+    response: Response,
+    user=Depends(get_current_user),
+    db: Database = Depends(get_db),
+):
+    result, replayed = await ContentOpportunityService(db).verify_source(
         user["id"], opportunity_id, body
     )
     return _response(response, result, replayed)

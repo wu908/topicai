@@ -14,8 +14,11 @@ from app.core.llm import LLMClient, wrap_user_input
 from app.models.v2.action_domain import AITraceCreate
 from app.models.v2.content_opportunity import (
     OpportunityDecision,
+    OpportunityProjectView,
+    OpportunitySourceVerification,
     SeriesExtensionCreate,
     SeriesExtensionDraft,
+    SourceReference,
     UserSourceOpportunityCreate,
 )
 from app.models.v2.content_project import ContentProjectCreate
@@ -23,6 +26,7 @@ from app.models.v2.intent_actions import IntentConfirmation
 from app.services.ai_trace import AITraceService
 from app.services.content_genome import ContentGenomeService
 from app.services.content_project import ContentProjectService
+from app.services.creator_profile_v2 import CreatorProfileV2Service
 from app.services.creator_series import CreatorSeriesService
 from app.services.intent_actions import IntentConfirmationService
 from app.services.v2_utils import effective_intent_status, now, request_hash
@@ -33,6 +37,11 @@ MATERIALS_BY_INTENT = {
     "share": ["具体事件", "当时的感受或观点", "这段经历带来的理解"],
     "record": ["起点", "过程片段", "关键转折", "当前结果"],
 }
+GROWTH_ROLE_BY_GOAL = {
+    "stable_publish": "trust",
+    "follower_growth": "discovery",
+    "both": "experiment",
+}
 
 
 class ContentOpportunityService:
@@ -40,13 +49,435 @@ class ContentOpportunityService:
         self.db = db
         self.llm = llm
 
-    async def list(self, owner: str) -> list[dict[str, Any]]:
+    async def list(
+        self,
+        owner: str,
+        opportunity_type: str | None = None,
+        decision: str | None = None,
+        timeliness: str | None = None,
+    ) -> list[dict[str, Any]]:
+        conditions = ["owner_user_id=:owner"]
+        params = {"owner": owner}
+        if opportunity_type:
+            conditions.append("opportunity_type=:opportunity_type")
+            params["opportunity_type"] = opportunity_type
+        if decision:
+            conditions.append("status=:status")
+            params["status"] = {
+                "adopt": "accepted",
+                "save": "saved",
+                "reject": "rejected",
+            }[decision]
+        if timeliness:
+            conditions.append("json_extract(dimensions_json,'$.timeliness')=:timeliness")
+            params["timeliness"] = timeliness
         rows = await self.db.fetch_all(
-            "SELECT * FROM content_opportunities WHERE owner_user_id=:owner "
-            "ORDER BY updated_at DESC",
-            {"owner": owner},
+            "SELECT * FROM content_opportunities WHERE "
+            + " AND ".join(conditions)
+            + " ORDER BY updated_at DESC",
+            params,
         )
         return [self._normalize(row) for row in rows]
+
+    async def generate(self, owner: str, desired_count: int = 6) -> list[dict[str, Any]]:
+        """Generate deterministic opportunities from imported history and active profile fields."""
+        profile = await CreatorProfileV2Service(self.db).get_or_build(owner)
+        rejected = {
+            (item.get("field"), item.get("value"))
+            for item in profile["rejected_attributes"]
+        }
+        pillars = [
+            item
+            for item in profile["attributes"]["content_pillars"]
+            if item.get("value")
+            and ("content_pillar", item["value"]) not in rejected
+        ]
+        niche = profile["attributes"]["niche"]
+        audience = profile["attributes"]["target_audience"]
+        if not pillars or not niche.get("value") or not audience.get("value"):
+            return []
+
+        pillar = pillars[0]
+        notes = await self.db.fetch_all(
+            "SELECT * FROM imported_notes WHERE owner_user_id=:owner "
+            "AND retention_expires_at>:now "
+            "ORDER BY published_at DESC,created_at DESC,id",
+            {"owner": owner, "now": now()},
+        )
+        # ponytail: one candidate per source class; rank multiple matching notes when needed.
+        note = next(
+            (
+                item
+                for item in notes
+                if pillar["value"] in json.loads(item.get("tags_json") or "[]")
+            ),
+            None,
+        )
+        question_note = next(
+            (
+                (item, questions[0])
+                for item in notes
+                if (questions := json.loads(item.get("audience_questions_json") or "[]"))
+            ),
+            None,
+        )
+        material = await self.db.fetch_one(
+            "SELECT * FROM assets WHERE owner_id=:owner ORDER BY updated_at DESC,id LIMIT 1",
+            {"owner": owner},
+        )
+        state = await self.db.fetch_one(
+            "SELECT validated_insights_json FROM creator_states "
+            "WHERE owner_user_id=:owner",
+            {"owner": owner},
+        )
+        insight = next(
+            (
+                item
+                for item in json.loads(
+                    (state or {}).get("validated_insights_json") or "[]"
+                )
+                if item.get("statement")
+                and item.get("source_ref")
+                and not str(item["source_ref"]).startswith("creator-series:")
+            ),
+            None,
+        )
+        common_dimensions = {
+            "growth_role": GROWTH_ROLE_BY_GOAL.get(
+                profile["attributes"]["growth_goal"]["value"], "experiment"
+            ),
+            "series_potential": "unknown",
+            "similarity_risk": "unknown",
+            "safety_risk": "unknown",
+        }
+        candidates: list[dict[str, Any]] = []
+        if note:
+            questions = json.loads(note.get("audience_questions_json") or "[]")
+            title = questions[0] if questions else f"从一次真实经历讲清楚 {pillar['value']}"
+            candidates.append(
+                {
+                    "opportunity_type": "history_derivative",
+                    "source_ref": f"imported-note:{note['id']}",
+                    "source_excerpt": note["body_excerpt"],
+                    "source_url": note["note_url"],
+                    "source_published_at": note["published_at"],
+                    "source_refs": [
+                        SourceReference(
+                            ref_type="imported_note",
+                            entity_id=note["id"],
+                            url=note["note_url"],
+                            publisher=None,
+                            published_at=note["published_at"],
+                            collected_at=note["created_at"],
+                            title=note["title"],
+                            excerpt=note["body_excerpt"],
+                            verification_state="verified",
+                            rights_note="用户导入的历史内容",
+                        ).model_dump()
+                    ],
+                    "title": title,
+                    "audience_change": f"帮助 {audience['value']} 理解一个可复用的真实做法",
+                    "rationale": f"这条机会来自已导入的真实内容，并与当前有效内容支柱 {pillar['value']} 一致。",
+                    "evidence_refs": [
+                        f"imported-note:{note['id']}",
+                        *pillar.get("evidence_refs", []),
+                    ],
+                    "dimensions": {
+                        **common_dimensions,
+                        "audience_fit": "strong" if questions else "medium",
+                        "creator_fit": "strong",
+                        "material_readiness": "ready",
+                        "timeliness": "unknown",
+                    },
+                }
+            )
+        if question_note:
+            question_source, question = question_note
+            question_tags = json.loads(question_source.get("tags_json") or "[]")
+            candidates.append(
+                {
+                    "opportunity_type": "user_question",
+                    "source_ref": f"imported-note:{question_source['id']}",
+                    "source_excerpt": question,
+                    "source_url": question_source["note_url"],
+                    "source_published_at": question_source["published_at"],
+                    "source_refs": [
+                        SourceReference(
+                            ref_type="imported_note",
+                            entity_id=question_source["id"],
+                            url=question_source["note_url"],
+                            publisher=None,
+                            published_at=question_source["published_at"],
+                            collected_at=question_source["created_at"],
+                            title=question_source["title"],
+                            excerpt=question,
+                            verification_state="verified",
+                            rights_note="用户导入历史中记录的受众问题",
+                        ).model_dump()
+                    ],
+                    "title": question,
+                    "audience_change": f"直接回应 {audience['value']} 已经提出的真实问题",
+                    "rationale": "这条机会来自用户导入历史中记录的受众问题，不依赖标签匹配。",
+                    "evidence_refs": [f"imported-note:{question_source['id']}"],
+                    "dimensions": {
+                        **common_dimensions,
+                        "audience_fit": "strong",
+                        "creator_fit": (
+                            "strong" if pillar["value"] in question_tags else "unknown"
+                        ),
+                        "material_readiness": "missing",
+                        "timeliness": "unknown",
+                    },
+                }
+            )
+        if material:
+            candidates.append(
+                {
+                    "opportunity_type": "material_derivative",
+                    "source_ref": f"asset:{material['id']}",
+                    "source_excerpt": material["filename"],
+                    "source_url": material["url"],
+                    "source_published_at": None,
+                    "source_refs": [
+                        SourceReference(
+                            ref_type="material",
+                            entity_id=material["id"],
+                            url=material["url"],
+                            publisher=None,
+                            published_at=None,
+                            collected_at=material["created_at"],
+                            title=material["filename"],
+                            excerpt=material["filename"],
+                            verification_state="verified",
+                            rights_note="用户保存的个人素材",
+                        ).model_dump()
+                    ],
+                    "title": f"用素材「{material['filename']}」讲清楚 {pillar['value']}",
+                    "audience_change": f"让 {audience['value']} 从真实素材中获得一个可执行做法",
+                    "rationale": "这条机会来自你已保存的个人素材；采用前仍需确认素材中的具体事实。",
+                    "evidence_refs": [f"asset:{material['id']}"],
+                    "dimensions": {
+                        **common_dimensions,
+                        "audience_fit": "unknown",
+                        "creator_fit": "unknown",
+                        "material_readiness": "partial",
+                        "timeliness": "unknown",
+                    },
+                }
+            )
+        if insight:
+            statement = str(insight["statement"])
+            candidates.append(
+                {
+                    "opportunity_type": "insight_derivative",
+                    "source_ref": insight["source_ref"],
+                    "source_excerpt": statement,
+                    "source_url": None,
+                    "source_published_at": None,
+                    "source_refs": [
+                        SourceReference(
+                            ref_type="validated_insight",
+                            entity_id=insight["source_ref"],
+                            url=None,
+                            publisher=None,
+                            published_at=None,
+                            collected_at=insight.get("confirmed_at"),
+                            title=statement,
+                            excerpt=statement,
+                            verification_state="verified",
+                            rights_note="用户已确认的长期洞察",
+                        ).model_dump()
+                    ],
+                    "title": f"围绕「{statement[:60]}」做一次 {pillar['value']} 实践拆解",
+                    "audience_change": f"帮助 {audience['value']} 理解一条经过确认的创作经验",
+                    "rationale": "这条机会来自已由用户确认、可进入长期上下文的洞察。",
+                    "evidence_refs": [insight["source_ref"]],
+                    "dimensions": {
+                        **common_dimensions,
+                        "audience_fit": "unknown",
+                        "creator_fit": "strong",
+                        "material_readiness": "partial",
+                        "timeliness": "evergreen",
+                    },
+                }
+            )
+        candidates.append(
+            {
+                "opportunity_type": "evergreen",
+                "source_ref": f"creator-profile:{profile['id']}:v{profile['version']}",
+                "source_excerpt": None,
+                "source_url": None,
+                "source_published_at": None,
+                "source_refs": [
+                    SourceReference(
+                        ref_type="creator_profile",
+                        entity_id=profile["id"],
+                        url=None,
+                        publisher=None,
+                        published_at=None,
+                        collected_at=profile["updated_at"],
+                        title=niche["value"],
+                        excerpt=pillar["value"],
+                        verification_state="verified",
+                        rights_note="用户当前确认的创作者画像",
+                    ).model_dump()
+                ],
+                "title": f"{audience['value']}开始做 {pillar['value']} 时先解决什么",
+                "audience_change": f"让 {audience['value']} 获得一个清晰的起点",
+                "rationale": f"这是围绕当前有效方向 {niche['value']} 和内容支柱 {pillar['value']} 的常青需求。",
+                "evidence_refs": list(
+                    dict.fromkeys(
+                        [
+                            *niche.get("evidence_refs", []),
+                            *audience.get("evidence_refs", []),
+                            *pillar.get("evidence_refs", []),
+                        ]
+                    )
+                ),
+                "dimensions": {
+                    **common_dimensions,
+                    "audience_fit": "strong",
+                    "creator_fit": "strong",
+                    "material_readiness": "partial",
+                    "timeliness": "evergreen",
+                },
+            }
+        )
+
+        results = []
+        limitations = [
+            "仅使用用户历史、个人素材、已确认洞察和当前有效画像，不代表实时趋势或效果预测"
+        ]
+        for candidate in candidates[:desired_count]:
+            key = (
+                f"first-party:{profile['version']}:"
+                f"{candidate['opportunity_type']}:{candidate['source_ref']}"
+            )
+            digest = request_hash(candidate)
+            existing = await self.db.fetch_one(
+                "SELECT * FROM content_opportunities WHERE owner_user_id=:owner "
+                "AND idempotency_key=:key",
+                {"owner": owner, "key": key},
+            )
+            if existing:
+                results.append(self._normalize(existing))
+                continue
+            opportunity_id = str(uuid.uuid4())
+            trace_id = str(uuid.uuid4())
+            timestamp = now()
+            session = await self.db.get_session()
+            async with session:
+                async with session.begin():
+                    await AITraceService.create(
+                        session,
+                        owner,
+                        AITraceCreate(
+                            id=trace_id,
+                            task_type="first_party_opportunity",
+                            input_refs=candidate["evidence_refs"],
+                            evidence_refs=candidate["evidence_refs"],
+                            policy_version="first-party-opportunity-v1",
+                            model_identifier=None,
+                            capability="deterministic_proposal",
+                            visibility_boundary={
+                                "allowed": [
+                                    "imported_history",
+                                    "personal_materials",
+                                    "validated_insights",
+                                    "active_creator_profile",
+                                ],
+                                "forbidden": ["rejected_profile_attributes", "legacy_hotspots"],
+                                "actual": [
+                                    "active_creator_profile",
+                                    *(
+                                        ["imported_history"]
+                                        if candidate["opportunity_type"] == "history_derivative"
+                                        else []
+                                    ),
+                                    *(
+                                        ["personal_materials"]
+                                        if candidate["opportunity_type"] == "material_derivative"
+                                        else []
+                                    ),
+                                    *(
+                                        ["validated_insights"]
+                                        if candidate["opportunity_type"] == "insight_derivative"
+                                        else []
+                                    ),
+                                ],
+                            },
+                            contamination_check={
+                                "status": "clean",
+                                "unexpected_classes": [],
+                                "missing_classes": [],
+                            },
+                            calibration_state="insufficient",
+                            limitations=limitations,
+                            output_ref=f"content-opportunity:{opportunity_id}",
+                            generated_at=timestamp,
+                        ),
+                    )
+                    await session.execute(
+                        text(
+                            "INSERT INTO content_opportunities (id,owner_user_id,opportunity_type,"
+                            "source_ref,source_excerpt,source_url,source_published_at,source_refs_json,"
+                            "verification_status,"
+                            "content_intent,content_format,proposed_title,proposed_audience_change,"
+                            "proposed_rationale,proposed_material_requirements_json,evidence_refs_json,"
+                            "unknown_refs_json,dimensions_json,status,proposal_source,ai_trace_id,"
+                            "limitations_json,version,idempotency_key,request_hash,created_at,updated_at) "
+                            "VALUES (:id,:owner,:type,:source,:excerpt,:url,:published,:source_refs,"
+                            "'verified','solve',"
+                            "'graphic_note',:title,:change,:rationale,:materials,:evidence,'[]',:dimensions,"
+                            "'proposed','deterministic_fallback',:trace,:limitations,1,:key,:hash,:now,:now)"
+                        ),
+                        {
+                            "id": opportunity_id,
+                            "owner": owner,
+                            "type": candidate["opportunity_type"],
+                            "source": candidate["source_ref"],
+                            "excerpt": candidate["source_excerpt"],
+                            "url": candidate["source_url"],
+                            "published": candidate["source_published_at"],
+                            "source_refs": json.dumps(
+                                candidate["source_refs"], ensure_ascii=False
+                            ),
+                            "title": candidate["title"],
+                            "change": candidate["audience_change"],
+                            "rationale": candidate["rationale"],
+                            "materials": json.dumps(["相关真实经历", "具体做法与限制"], ensure_ascii=False),
+                            "evidence": json.dumps(
+                                list(dict.fromkeys(candidate["evidence_refs"])),
+                                ensure_ascii=False,
+                            ),
+                            "dimensions": json.dumps(
+                                candidate["dimensions"], ensure_ascii=False
+                            ),
+                            "trace": trace_id,
+                            "limitations": json.dumps(limitations, ensure_ascii=False),
+                            "key": key,
+                            "hash": digest,
+                            "now": timestamp,
+                        },
+                    )
+                    await self._event(
+                        session,
+                        owner,
+                        opportunity_id,
+                        "proposed",
+                        None,
+                        "proposed",
+                        1,
+                        f"{key}:proposed",
+                        digest,
+                        {
+                            "source_ref": candidate["source_ref"],
+                            "dimensions": candidate["dimensions"],
+                        },
+                        timestamp,
+                    )
+            results.append(await self.get(owner, opportunity_id))
+        return results
 
     async def create_user_source(
         self, owner: str, body: UserSourceOpportunityCreate
@@ -78,6 +509,24 @@ class ContentOpportunityService:
         limitations = [
             "来源尚未核验，不能标记为实时热点",
             "不生成热度分、流量预测或涨粉概率",
+        ]
+        source_refs = [
+            SourceReference(
+                ref_type=body.trigger,
+                entity_id=opportunity_id,
+                url=str(body.original_url) if body.original_url else None,
+                publisher=body.authoritative_source,
+                published_at=(
+                    body.published_at.isoformat().replace("+00:00", "Z")
+                    if body.published_at
+                    else None
+                ),
+                collected_at=timestamp,
+                title=body.pasted_text.strip()[:200],
+                excerpt=body.pasted_text.strip(),
+                verification_state="pending",
+                rights_note="用户手动提交，尚未完成事实核验",
+            ).model_dump()
         ]
         session = await self.db.get_session()
         async with session:
@@ -116,13 +565,16 @@ class ContentOpportunityService:
                 await session.execute(
                     text(
                         "INSERT INTO content_opportunities (id,owner_user_id,opportunity_type,"
-                        "source_ref,source_excerpt,source_url,source_published_at,source_authority,"
+                        "source_trigger,source_ref,source_excerpt,source_url,source_published_at,"
+                        "source_authority,source_refs_json,expires_at,"
                         "verification_status,content_intent,content_format,proposed_title,"
                         "proposed_audience_change,proposed_rationale,"
                         "proposed_material_requirements_json,evidence_refs_json,unknown_refs_json,"
                         "status,proposal_source,ai_trace_id,limitations_json,version,idempotency_key,"
                         "request_hash,created_at,updated_at) VALUES (:id,:owner,'user_source',"
-                        ":source_ref,:excerpt,:url,:published_at,:authority,'pending_verification',"
+                        ":trigger,:source_ref,:excerpt,:url,:published_at,:authority,:source_refs,"
+                        ":expires_at,"
+                        "'pending_verification',"
                         ":intent,'graphic_note',:title,:change,:rationale,:materials,'[]',:unknowns,"
                         "'proposed','deterministic_fallback',:trace,:limitations,1,:key,:hash,"
                         ":now,:now)"
@@ -130,11 +582,22 @@ class ContentOpportunityService:
                     {
                         "id": opportunity_id,
                         "owner": owner,
+                        "trigger": body.trigger,
                         "source_ref": f"user-source:{opportunity_id}",
                         "excerpt": body.pasted_text.strip(),
-                        "url": body.original_url,
-                        "published_at": body.published_at,
+                        "url": str(body.original_url) if body.original_url else None,
+                        "published_at": (
+                            body.published_at.isoformat().replace("+00:00", "Z")
+                            if body.published_at
+                            else None
+                        ),
                         "authority": body.authoritative_source,
+                        "source_refs": json.dumps(source_refs, ensure_ascii=False),
+                        "expires_at": (
+                            body.expires_at.isoformat().replace("+00:00", "Z")
+                            if body.expires_at
+                            else None
+                        ),
                         "intent": body.content_intent,
                         "title": "先核验来源，再判断是否值得做",
                         "change": "来源核验后再确认这条内容能给读者带来什么",
@@ -196,10 +659,34 @@ class ContentOpportunityService:
         draft, proposal_source = await self._draft(
             owner, series, evidence_context, viewpoint_context
         )
+        dimensions = {
+            "audience_fit": "strong",
+            "creator_fit": "strong",
+            "material_readiness": "partial",
+            "growth_role": "series",
+            "series_potential": "high",
+            "timeliness": "evergreen",
+            "similarity_risk": "unknown",
+            "safety_risk": "unknown",
+        }
 
         opportunity_id = str(uuid.uuid4())
         trace_id = str(uuid.uuid4())
         timestamp = now()
+        source_refs = [
+            SourceReference(
+                ref_type="creator_series",
+                entity_id=series_id,
+                url=None,
+                publisher=None,
+                published_at=None,
+                collected_at=series["updated_at"],
+                title=series["confirmed_name"],
+                excerpt=series["confirmed_promise"],
+                verification_state="verified",
+                rights_note="用户已确认的创作者系列",
+            ).model_dump()
+        ]
         session = await self.db.get_session()
         async with session:
             async with session.begin():
@@ -247,19 +734,22 @@ class ContentOpportunityService:
                 await session.execute(
                     text(
                         "INSERT INTO content_opportunities (id,owner_user_id,opportunity_type,"
-                        "source_ref,content_intent,content_format,proposed_title,"
+                        "source_ref,source_refs_json,content_intent,content_format,proposed_title,"
                         "proposed_audience_change,proposed_rationale,"
                         "proposed_material_requirements_json,evidence_refs_json,unknown_refs_json,"
-                        "status,proposal_source,ai_trace_id,limitations_json,version,idempotency_key,"
+                        "dimensions_json,status,proposal_source,ai_trace_id,limitations_json,"
+                        "version,idempotency_key,"
                         "request_hash,created_at,updated_at) VALUES (:id,:owner,'series_extension',"
-                        ":source,:intent,:format,:title,:change,:rationale,:materials,:evidence,"
-                        ":unknowns,'proposed',:proposal_source,:trace,:limitations,1,:key,:hash,"
+                        ":source,:source_refs,:intent,:format,:title,:change,:rationale,:materials,:evidence,"
+                        ":unknowns,:dimensions,'proposed',:proposal_source,:trace,:limitations,"
+                        "1,:key,:hash,"
                         ":now,:now)"
                     ),
                     {
                         "id": opportunity_id,
                         "owner": owner,
                         "source": f"creator-series:{series_id}",
+                        "source_refs": json.dumps(source_refs, ensure_ascii=False),
                         "intent": draft.content_intent,
                         "format": draft.content_format,
                         "title": draft.title.strip(),
@@ -268,6 +758,7 @@ class ContentOpportunityService:
                         "materials": json.dumps(draft.material_requirements, ensure_ascii=False),
                         "evidence": json.dumps(evidence_refs, ensure_ascii=False),
                         "unknowns": json.dumps(draft.unknown_refs, ensure_ascii=False),
+                        "dimensions": json.dumps(dimensions, ensure_ascii=False),
                         "proposal_source": proposal_source,
                         "trace": trace_id,
                         "limitations": json.dumps(draft.limitations, ensure_ascii=False),
@@ -279,7 +770,142 @@ class ContentOpportunityService:
                 await self._event(
                     session, owner, opportunity_id, "proposed", None, "proposed", 1,
                     f"{body.idempotency_key}:proposed", digest,
-                    {"series_id": series_id, "evidence_refs": evidence_refs}, timestamp,
+                    {
+                        "series_id": series_id,
+                        "evidence_refs": evidence_refs,
+                        "dimensions": dimensions,
+                    },
+                    timestamp,
+                )
+        return await self.get(owner, opportunity_id), False
+
+    async def verify_source(
+        self, owner: str, opportunity_id: str, body: OpportunitySourceVerification
+    ) -> tuple[dict[str, Any], bool]:
+        digest = request_hash(body)
+        replay = await self._event_by_key(owner, body.idempotency_key)
+        if replay:
+            if replay["opportunity_id"] != opportunity_id or replay["request_hash"] != digest:
+                raise IdempotencyConflictException()
+            return await self.get(owner, opportunity_id), True
+
+        opportunity = await self._opportunity(owner, opportunity_id)
+        if opportunity["opportunity_type"] != "user_source":
+            raise ValueError("only user-submitted sources can be verified here")
+        if opportunity["status"] not in {"proposed", "saved"}:
+            raise ValueError("content opportunity can no longer be verified")
+        if opportunity["version"] != body.expected_opportunity_version:
+            raise VersionConflictException(
+                opportunity["version"], body.expected_opportunity_version
+            )
+
+        verified = body.verification_status == "verified"
+        metadata = {
+            "original_url": (
+                str(body.original_url)
+                if body.original_url
+                else opportunity.get("source_url")
+            ),
+            "published_at": (
+                body.published_at.isoformat().replace("+00:00", "Z")
+                if body.published_at
+                else opportunity.get("source_published_at")
+            ),
+            "authoritative_source": body.authoritative_source
+            or opportunity.get("source_authority"),
+        }
+        missing = [name for name, value in metadata.items() if not value]
+        unknowns = [] if verified else [*missing, "source_verification_insufficient"]
+        dimensions = (
+            {
+                "audience_fit": "unknown",
+                "creator_fit": "unknown",
+                "material_readiness": "partial",
+                "growth_role": "experiment",
+                "series_potential": "unknown",
+                "timeliness": body.timeliness,
+                "similarity_risk": "unknown",
+                "safety_risk": "unknown",
+            }
+            if verified
+            else {}
+        )
+        timestamp = now()
+        source_refs = [
+            SourceReference(
+                ref_type=opportunity["source_trigger"],
+                entity_id=opportunity_id,
+                url=metadata["original_url"],
+                publisher=metadata["authoritative_source"],
+                published_at=metadata["published_at"],
+                collected_at=opportunity["created_at"],
+                title=opportunity["source_excerpt"][:200],
+                excerpt=opportunity["source_excerpt"],
+                verification_state=("verified" if verified else "insufficient"),
+                rights_note=(
+                    "来源元数据由用户手动确认"
+                    if verified
+                    else "用户标记为来源不足"
+                ),
+            ).model_dump()
+        ]
+        session = await self.db.get_session()
+        async with session:
+            async with session.begin():
+                updated = await session.execute(
+                    text(
+                        "UPDATE content_opportunities SET verification_status=:verification,"
+                        "source_url=:url,source_published_at=:published,source_authority=:authority,"
+                        "source_refs_json=:source_refs,evidence_refs_json=:evidence,"
+                        "unknown_refs_json=:unknowns,"
+                        "dimensions_json=:dimensions,"
+                        "proposed_title=CASE WHEN :verified THEN substr(source_excerpt,1,200) "
+                        "ELSE proposed_title END,"
+                        "proposed_rationale=CASE WHEN :verified THEN "
+                        "'来源元数据已由用户手动确认；仍需自行判断事实、时效与创作风险。' "
+                        "ELSE proposed_rationale END,updated_at=:now,version=version+1 "
+                        "WHERE id=:id AND owner_user_id=:owner AND version=:expected"
+                    ),
+                    {
+                        "verification": body.verification_status,
+                        "url": metadata["original_url"],
+                        "published": metadata["published_at"],
+                        "authority": metadata["authoritative_source"],
+                        "source_refs": json.dumps(source_refs, ensure_ascii=False),
+                        "evidence": json.dumps(
+                            [metadata["original_url"]] if verified else [],
+                            ensure_ascii=False,
+                        ),
+                        "unknowns": json.dumps(unknowns, ensure_ascii=False),
+                        "dimensions": json.dumps(dimensions, ensure_ascii=False),
+                        "verified": verified,
+                        "now": timestamp,
+                        "id": opportunity_id,
+                        "owner": owner,
+                        "expected": body.expected_opportunity_version,
+                    },
+                )
+                if updated.rowcount != 1:
+                    raise VersionConflictException(
+                        opportunity["version"] + 1, body.expected_opportunity_version
+                    )
+                await self._event(
+                    session,
+                    owner,
+                    opportunity_id,
+                    "source_verified" if verified else "source_insufficient",
+                    opportunity["status"],
+                    opportunity["status"],
+                    opportunity["version"] + 1,
+                    body.idempotency_key,
+                    digest,
+                    {
+                        "verification_status": body.verification_status,
+                        "reason": body.reason,
+                        "confirmed_by_user": True,
+                        "timeliness": body.timeliness,
+                    },
+                    timestamp,
                 )
         return await self.get(owner, opportunity_id), False
 
@@ -297,8 +923,11 @@ class ContentOpportunityService:
             return result, True
 
         opportunity = await self._opportunity(owner, opportunity_id)
-        if opportunity["status"] != "proposed":
+        if opportunity["status"] not in {"proposed", "saved"} or (
+            opportunity["status"] == "saved" and body.decision == "save"
+        ):
             raise ValueError("content opportunity is no longer pending")
+        from_status = opportunity["status"]
         if (
             body.decision == "accept"
             and opportunity.get("verification_status") != "verified"
@@ -308,7 +937,11 @@ class ContentOpportunityService:
             raise VersionConflictException(
                 opportunity["version"], body.expected_opportunity_version
             )
-        status = "accepted" if body.decision == "accept" else "rejected"
+        status = {
+            "accept": "accepted",
+            "save": "saved",
+            "reject": "rejected",
+        }[body.decision]
         title = (body.confirmed_title or opportunity["proposed_title"]).strip()
         audience_change = (
             body.confirmed_audience_change or opportunity["proposed_audience_change"]
@@ -340,7 +973,7 @@ class ContentOpportunityService:
                         "content_intent=COALESCE(:confirmed_intent,content_intent),"
                         "content_format=COALESCE(:confirmed_format,content_format),"
                         "decided_at=:now,updated_at=:now,version=version+1 "
-                        "WHERE id=:id AND owner_user_id=:owner AND status='proposed' "
+                        "WHERE id=:id AND owner_user_id=:owner AND status=:from_status "
                         "AND version=:expected"
                     ),
                     {
@@ -353,6 +986,7 @@ class ContentOpportunityService:
                         "now": timestamp,
                         "id": opportunity_id,
                         "owner": owner,
+                        "from_status": from_status,
                         "expected": body.expected_opportunity_version,
                     },
                 )
@@ -361,10 +995,29 @@ class ContentOpportunityService:
                         opportunity["version"] + 1, body.expected_opportunity_version
                     )
                 await self._event(
-                    session, owner, opportunity_id, status, "proposed", status,
+                    session, owner, opportunity_id, status, from_status, status,
                     opportunity["version"] + 1, body.idempotency_key, digest,
                     {"reason": body.reason, "confirmed_title": title if status == "accepted" else None},
                     timestamp,
+                )
+                await session.execute(
+                    text(
+                        "INSERT INTO user_feedback (id,user_id,source_type,source_id,"
+                        "feedback_type,feedback_value,reason,created_at) VALUES "
+                        "(:id,:owner,'opportunity',:opportunity,:feedback,NULL,:reason,:now)"
+                    ),
+                    {
+                        "id": str(uuid.uuid4()),
+                        "owner": owner,
+                        "opportunity": opportunity_id,
+                        "feedback": {
+                            "accept": "adopt",
+                            "save": "save",
+                            "reject": "reject",
+                        }[body.decision],
+                        "reason": body.reason.strip() if body.reason else None,
+                        "now": timestamp,
+                    },
                 )
         result = await self.get(owner, opportunity_id)
         if status == "accepted":
@@ -376,18 +1029,30 @@ class ContentOpportunityService:
 
     async def _ensure_project(self, owner: str, opportunity: dict[str, Any]) -> dict[str, Any]:
         if opportunity.get("created_project_id"):
-            opportunity["project"] = await ContentProjectService(self.db).get(
+            project = await ContentProjectService(self.db).get(
                 owner, opportunity["created_project_id"]
             )
+            opportunity["project"] = self._project_view(project)
             return opportunity
-        source_project_id = await self._source_project_id(owner, opportunity["source_ref"])
-        source_project = await ContentProjectService(self.db).get(owner, source_project_id)
+        if opportunity["source_ref"].startswith("creator-series:"):
+            source_project_id = await self._source_project_id(
+                owner, opportunity["source_ref"]
+            )
+            source_project = await ContentProjectService(self.db).get(
+                owner, source_project_id
+            )
+            target_audience = source_project["target_audience"]
+        else:
+            profile = await CreatorProfileV2Service(self.db).get_or_build(owner)
+            target_audience = profile["attributes"]["target_audience"]["value"]
+            if not target_audience:
+                raise ValueError("target audience is required before adopting this opportunity")
         project, _ = await ContentProjectService(self.db).create(
             owner,
             ContentProjectCreate(
                 title=opportunity["confirmed_title"],
                 primary_goal="stable_publish",
-                target_audience=source_project["target_audience"],
+                target_audience=target_audience,
                 content_intent=opportunity["content_intent"],
                 content_format=opportunity["content_format"],
                 audience_change=opportunity["confirmed_audience_change"],
@@ -414,8 +1079,15 @@ class ContentOpportunityService:
             {"project": project["id"], "now": now(), "id": opportunity["id"], "owner": owner},
         )
         result = await self.get(owner, opportunity["id"])
-        result["project"] = project
+        result["project"] = self._project_view(project)
         return result
+
+    @staticmethod
+    def _project_view(project: dict[str, Any]) -> dict[str, Any]:
+        fields = OpportunityProjectView.model_fields
+        return OpportunityProjectView.model_validate(
+            {name: project[name] for name in fields}
+        ).model_dump()
 
     async def _latest_member_intent_format(
         self, owner: str, series: dict[str, Any]
@@ -549,15 +1221,34 @@ class ContentOpportunityService:
     @staticmethod
     def _normalize(row):
         result = dict(row)
+        for field in ("owner_user_id", "idempotency_key", "request_hash"):
+            result.pop(field, None)
         for field in ("proposed_material_requirements_json", "confirmed_material_requirements_json",
-                      "evidence_refs_json", "unknown_refs_json", "limitations_json"):
+                      "source_refs_json", "evidence_refs_json", "unknown_refs_json", "limitations_json",
+                      "dimensions_json"):
             value = result.pop(field, None)
-            result[field.removesuffix("_json")] = json.loads(value or "[]")
-        if result.get("verification_status") == "pending_verification":
+            result[field.removesuffix("_json")] = json.loads(
+                value or ("{}" if field == "dimensions_json" else "[]")
+            )
+        if not result["dimensions"]:
+            result["dimensions"] = None
+        if result.get("verification_status") in {
+            "pending_verification",
+            "insufficient",
+        }:
             result["required_action"] = {
                 "action_type": "verify_source",
-                "reason": "来源、发布时间或权威性尚未核验",
-                "accepted_inputs": ["original_url", "published_at", "authoritative_source"],
+                "reason": (
+                    "来源不足，可补充信息后重新核验"
+                    if result["verification_status"] == "insufficient"
+                    else "来源、发布时间或权威性尚未核验"
+                ),
+                "accepted_inputs": [
+                    "original_url",
+                    "published_at",
+                    "authoritative_source",
+                    "timeliness",
+                ],
                 "fallback": "manual_verification",
             }
         else:

@@ -24,8 +24,9 @@ SOURCE_TYPES: tuple[str, ...] = (
     "track",
     "publish",
     "effect_review",
+    "opportunity",
 )
-SOURCE_TYPE_PATTERN = r"^(topic|title|idea|viral|track|publish|effect_review)$"
+SOURCE_TYPE_PATTERN = r"^(topic|title|idea|viral|track|publish|effect_review|opportunity)$"
 
 # Subset accepted by the legacy POST /api/v1/feedback submit endpoint.
 # Persisted rows may use the wider enum; new submissions go through T056's
@@ -65,7 +66,7 @@ class FeedbackRecord(BaseModel):
     source_id: str = Field(..., description="ID of the AI output")
     feedback_type: str = Field(
         ...,
-        pattern=r"^(thumb_up|thumb_down|adopted|modified|ignored)$",
+        pattern=r"^(thumb_up|thumb_down|adopted|modified|ignored|adopt|save|reject)$",
         description="Feedback type",
     )
     feedback_value: str | None = Field(

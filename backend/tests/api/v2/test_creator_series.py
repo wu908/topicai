@@ -146,6 +146,16 @@ async def test_series_candidate_confirm_list_workspace_and_revoke(
     opportunity_data = opportunity.json()["data"]
     assert opportunity_data["status"] == "proposed"
     assert opportunity_data["created_project_id"] is None
+    assert opportunity_data["dimensions"] == {
+        "audience_fit": "strong",
+        "creator_fit": "strong",
+        "material_readiness": "partial",
+        "growth_role": "series",
+        "series_potential": "high",
+        "timeliness": "evergreen",
+        "similarity_risk": "unknown",
+        "safety_risk": "unknown",
+    }
 
     await test_db.execute(
         "UPDATE content_projects SET status='settled' WHERE id IN (:first,:second)",

@@ -263,6 +263,7 @@ async def test_c03_ai_revision_never_overwrites_locked_version(client, test_db):
 @pytest.mark.asyncio
 async def test_c04_unknown_hotspot_stays_pending_verification(client, test_db):
     body = {
+        "trigger": "user_keyword",
         "pasted_text": "A screenshot claims a new platform trend without a link or date.",
         "idempotency_key": "c04-source",
     }
@@ -306,8 +307,63 @@ async def test_c04_unknown_hotspot_stays_pending_verification(client, test_db):
         },
     )
     assert blocked.status_code == 400
+    pending_today = (await client.get("/api/v2/today")).json()["data"]["action"]
+    assert (
+        pending_today["expected_state_change"].get("opportunity_id")
+        != opportunity["id"]
+    )
+
+    insufficient = await client.post(
+        f"/api/v2/content-opportunities/{opportunity['id']}:verify-source",
+        json={
+            "verification_status": "insufficient",
+            "reason": "暂时找不到原始发布页面",
+            "confirmed_by_user": True,
+            "expected_opportunity_version": opportunity["version"],
+            "idempotency_key": "c04-insufficient",
+        },
+    )
+    assert insufficient.status_code == 201
+    insufficient_data = insufficient.json()["data"]
+    assert insufficient_data["verification_status"] == "insufficient"
+    assert insufficient_data["required_action"]["action_type"] == "verify_source"
+
+    verified = await client.post(
+        f"/api/v2/content-opportunities/{opportunity['id']}:verify-source",
+        json={
+            "verification_status": "verified",
+            "original_url": "https://example.com/official-inspiration",
+            "published_at": "2026-07-31T00:00:00Z",
+            "authoritative_source": "小红书官方创作灵感",
+            "timeliness": "current",
+            "confirmed_by_user": True,
+            "expected_opportunity_version": insufficient_data["version"],
+            "idempotency_key": "c04-verified",
+        },
+    )
+    assert verified.status_code == 201
+    verified_data = verified.json()["data"]
+    assert verified_data["verification_status"] == "verified"
+    assert verified_data["required_action"] is None
+    assert verified_data["dimensions"]["timeliness"] == "current"
+    assert verified_data["evidence_refs"] == [
+        "https://example.com/official-inspiration"
+    ]
+    assert verified_data["source_refs"][0] == {
+        "ref_type": "user_keyword",
+        "entity_id": opportunity["id"],
+        "url": "https://example.com/official-inspiration",
+        "publisher": "小红书官方创作灵感",
+        "published_at": "2026-07-31T00:00:00Z",
+        "collected_at": opportunity["created_at"],
+        "title": opportunity["source_excerpt"],
+        "excerpt": opportunity["source_excerpt"],
+        "verification_state": "verified",
+        "rights_note": "来源元数据由用户手动确认",
+    }
+
     today = (await client.get("/api/v2/today")).json()["data"]["action"]
-    assert today["expected_state_change"].get("opportunity_id") != opportunity["id"]
+    assert today["expected_state_change"]["opportunity_id"] == opportunity["id"]
 
 
 @pytest.mark.asyncio

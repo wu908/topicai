@@ -875,6 +875,33 @@ def apply(
                 conn.executescript(
                     sql[sql.index("CREATE TABLE IF NOT EXISTS history_imports") :]
                 )
+            elif version == "043_first_party_opportunities":
+                columns = _existing_columns(conn, "content_opportunities")
+                if "dimensions_json" in columns:
+                    # ponytail: 043 has one conditional copy expression; use a
+                    # post-step if more schema-dependent DDL is added.
+                    sql = sql.replace(
+                        "    '{}',status,proposal_source,ai_trace_id,created_project_id,",
+                        "    dimensions_json,status,proposal_source,ai_trace_id,created_project_id,",
+                        1,
+                    )
+                if "source_trigger" in columns:
+                    sql = sql.replace(
+                        "    id,owner_user_id,opportunity_type,'system',source_ref,",
+                        "    id,owner_user_id,opportunity_type,source_trigger,source_ref,",
+                        1,
+                    ).replace(
+                        "source_authority,'[]',verification_status,NULL,content_intent,",
+                        "source_authority,'[]',verification_status,expires_at,content_intent,",
+                        1,
+                    )
+                if "source_refs_json" in columns:
+                    sql = sql.replace(
+                        "source_published_at,source_authority,'[]',verification_status,",
+                        "source_published_at,source_authority,source_refs_json,verification_status,",
+                        1,
+                    )
+                conn.executescript(sql)
             else:
                 conn.executescript(sql)
             post_step = MIGRATION_POST_STEPS.get(version)

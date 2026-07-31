@@ -216,7 +216,8 @@ class FeedbackService:
         recent_rows = await db.fetch_all(
             "SELECT id, user_id, source_type, source_id, feedback_type, "
             "feedback_value, reason, created_at FROM user_feedback "
-            "WHERE user_id = :uid AND created_at >= :cutoff "
+            "WHERE user_id = :uid AND source_type != 'opportunity' "
+            "AND created_at >= :cutoff "
             "ORDER BY created_at DESC",
             {"uid": user_id, "cutoff": cutoff},
         )
