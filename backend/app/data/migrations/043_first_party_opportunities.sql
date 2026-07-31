@@ -65,12 +65,60 @@ INSERT INTO content_opportunities (
     limitations_json,version,idempotency_key,request_hash,created_at,updated_at,decided_at
 )
 SELECT
-    id,owner_user_id,opportunity_type,'system',source_ref,source_excerpt,source_url,
-    source_published_at,source_authority,'[]',verification_status,NULL,content_intent,
+    id,owner_user_id,opportunity_type,
+    /* runner:source_trigger:start */
+    CASE
+        WHEN opportunity_type='user_source' AND NULLIF(TRIM(source_url),'') IS NOT NULL
+            THEN 'user_url'
+        WHEN opportunity_type='user_source' AND NULLIF(TRIM(source_authority),'') IS NOT NULL
+            THEN 'official_inspiration'
+        WHEN opportunity_type='user_source' THEN 'user_keyword'
+        ELSE 'system'
+    END
+    /* runner:source_trigger:end */,
+    source_ref,source_excerpt,source_url,
+    source_published_at,source_authority,
+    /* runner:source_refs_json:start */
+    json_array(json_object(
+        'ref_type',CASE
+            WHEN opportunity_type='series_extension' THEN 'creator_series'
+            WHEN NULLIF(TRIM(source_url),'') IS NOT NULL THEN 'user_url'
+            WHEN NULLIF(TRIM(source_authority),'') IS NOT NULL THEN 'official_inspiration'
+            ELSE 'user_keyword'
+        END,
+        'entity_id',CASE
+            WHEN opportunity_type='series_extension' AND INSTR(source_ref,':')>0
+                THEN SUBSTR(source_ref,INSTR(source_ref,':')+1)
+            ELSE id
+        END,
+        'url',source_url,
+        'publisher',source_authority,
+        'published_at',source_published_at,
+        'collected_at',created_at,
+        'title',proposed_title,
+        'excerpt',source_excerpt,
+        'verification_state',CASE
+            WHEN verification_status='pending_verification' THEN 'pending'
+            ELSE verification_status
+        END,
+        'rights_note','迁移自既有内容机会来源'
+    ))
+    /* runner:source_refs_json:end */,verification_status,NULL,content_intent,
     content_format,proposed_title,proposed_audience_change,proposed_rationale,
     proposed_material_requirements_json,confirmed_title,confirmed_audience_change,
     confirmed_material_requirements_json,evidence_refs_json,unknown_refs_json,
-    '{}',status,proposal_source,ai_trace_id,created_project_id,
+    /* runner:dimensions_json:start */
+    json_object(
+        'audience_fit','unknown',
+        'creator_fit','unknown',
+        'material_readiness','partial',
+        'growth_role','experiment',
+        'series_potential','unknown',
+        'timeliness','unknown',
+        'similarity_risk','unknown',
+        'safety_risk','unknown'
+    )
+    /* runner:dimensions_json:end */,status,proposal_source,ai_trace_id,created_project_id,
     limitations_json,version,idempotency_key,request_hash,created_at,updated_at,decided_at
 FROM content_opportunities_before_first_party;
 

@@ -111,7 +111,8 @@ class FeedbackService:
         query = (
             "SELECT id, user_id, source_type, source_id, feedback_type, "
             "feedback_value, reason, created_at "
-            "FROM user_feedback WHERE user_id = :uid"
+            "FROM user_feedback WHERE user_id = :uid "
+            "AND source_type != 'opportunity'"
         )
         params: dict[str, Any] = {"uid": user_id}
         if source_type:
@@ -182,7 +183,8 @@ class FeedbackService:
 
         # 2. Event count
         count_row = await db.fetch_one(
-            "SELECT COUNT(*) AS cnt FROM user_feedback WHERE user_id = :uid",
+            "SELECT COUNT(*) AS cnt FROM user_feedback "
+            "WHERE user_id = :uid AND source_type != 'opportunity'",
             {"uid": user_id},
         )
         total_events = int((count_row or {}).get("cnt", 0) or 0)

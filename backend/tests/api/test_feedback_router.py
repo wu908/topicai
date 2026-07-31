@@ -77,6 +77,21 @@ async def test_feedback_history_filters_by_source_type(client, test_db):
 
 
 @pytest.mark.asyncio
+async def test_feedback_history_keeps_v2_opportunity_events_out_of_v1_contract(
+    client, test_db
+):
+    """Immutable v2 opportunity decisions must not widen the legacy response."""
+    now = datetime.now(UTC)
+    legacy_id = await _seed_feedback(test_db, "u1", "topic", "thumb_up", now)
+    await _seed_feedback(test_db, "u1", "opportunity", "adopt", now)
+
+    response = await client.get("/api/v1/feedback/history")
+
+    assert response.status_code == 200
+    assert [item["id"] for item in response.json()["data"]["items"]] == [legacy_id]
+
+
+@pytest.mark.asyncio
 async def test_feedback_history_empty(client):
     """Empty user returns an empty list, still 200."""
     r = await client.get("/api/v1/feedback/history")

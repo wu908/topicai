@@ -112,6 +112,16 @@ def _existing_columns(conn: sqlite3.Connection, table: str) -> set[str]:
     return {row[1] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
 
 
+def _replace_marked_expression(sql: str, marker: str, replacement: str) -> str:
+    start = f"/* runner:{marker}:start */"
+    end = f"/* runner:{marker}:end */"
+    before, found_start, remainder = sql.partition(start)
+    expression, found_end, after = remainder.partition(end)
+    if not found_start or not found_end or not expression.strip():
+        raise ValueError(f"migration expression marker is incomplete: {marker}")
+    return before + replacement + after
+
+
 def _ensure_columns(
     conn: sqlite3.Connection,
     table: str,
@@ -878,28 +888,20 @@ def apply(
             elif version == "043_first_party_opportunities":
                 columns = _existing_columns(conn, "content_opportunities")
                 if "dimensions_json" in columns:
-                    # ponytail: 043 has one conditional copy expression; use a
-                    # post-step if more schema-dependent DDL is added.
-                    sql = sql.replace(
-                        "    '{}',status,proposal_source,ai_trace_id,created_project_id,",
-                        "    dimensions_json,status,proposal_source,ai_trace_id,created_project_id,",
-                        1,
+                    sql = _replace_marked_expression(
+                        sql, "dimensions_json", "dimensions_json"
                     )
                 if "source_trigger" in columns:
-                    sql = sql.replace(
-                        "    id,owner_user_id,opportunity_type,'system',source_ref,",
-                        "    id,owner_user_id,opportunity_type,source_trigger,source_ref,",
-                        1,
+                    sql = _replace_marked_expression(
+                        sql, "source_trigger", "source_trigger"
                     ).replace(
-                        "source_authority,'[]',verification_status,NULL,content_intent,",
-                        "source_authority,'[]',verification_status,expires_at,content_intent,",
+                        "verification_status,NULL,content_intent,",
+                        "verification_status,expires_at,content_intent,",
                         1,
                     )
                 if "source_refs_json" in columns:
-                    sql = sql.replace(
-                        "source_published_at,source_authority,'[]',verification_status,",
-                        "source_published_at,source_authority,source_refs_json,verification_status,",
-                        1,
+                    sql = _replace_marked_expression(
+                        sql, "source_refs_json", "source_refs_json"
                     )
                 conn.executescript(sql)
             else:

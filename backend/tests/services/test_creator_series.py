@@ -491,7 +491,30 @@ async def test_confirmed_series_opportunity_requires_acceptance_and_replays_proj
         ),
     )
 
-    service = ContentOpportunityService(series_db)
+    class FakeLLM:
+        active_provider = "compatible"
+        providers = {"compatible": {"model": "test-model-v1"}}
+
+        @staticmethod
+        def is_available(capability):
+            return capability == "text"
+
+        @staticmethod
+        def generate_structured(prompt, output_model, system_prompt):
+            assert series["confirmed_name"] in prompt
+            assert "必须等待用户确认" in system_prompt
+            return output_model(
+                title=series["confirmed_continuation_prompt"],
+                audience_change=series["confirmed_promise"],
+                rationale="延展已确认系列的下一步。",
+                material_requirements=["失效现场", "调整动作", "调整结果"],
+                unknown_refs=[],
+                limitations=["目前仅基于已确认系列信息"],
+                content_intent="solve",
+                content_format="graphic_note",
+            )
+
+    service = ContentOpportunityService(series_db, llm=FakeLLM())
     opportunity, replayed = await service.propose_series_extension(
         "u1",
         series["id"],
@@ -514,6 +537,11 @@ async def test_confirmed_series_opportunity_requires_acceptance_and_replays_proj
     assert opportunity["status"] == "proposed"
     assert opportunity["created_project_id"] is None
     assert opportunity["proposed_title"] == series["confirmed_continuation_prompt"]
+    trace = await series_db.fetch_one(
+        "SELECT model_identifier FROM ai_traces_v2 WHERE id=:id",
+        {"id": opportunity["ai_trace_id"]},
+    )
+    assert trace["model_identifier"] == "test-model-v1"
     assert await series_db.fetch_one(
         "SELECT id FROM content_projects WHERE opportunity_id=:id",
         {"id": opportunity["id"]},

@@ -72,6 +72,22 @@ const manualOpportunity = {
   },
 } as const;
 
+const expiredOpportunity = {
+  ...manualOpportunity,
+  source_url: 'https://example.com/old-source',
+  source_published_at: '2020-01-01T00:00:00Z',
+  source_authority: 'Example',
+  expires_at: '2020-01-02T00:00:00Z',
+  verification_status: 'verified',
+  required_action: null,
+  version: 2,
+  dimensions: {
+    audience_fit: 'unknown', creator_fit: 'unknown', material_readiness: 'partial',
+    growth_role: 'experiment', series_potential: 'unknown', timeliness: 'current',
+    similarity_risk: 'unknown', safety_risk: 'unknown',
+  },
+} as const;
+
 describe('OpportunitiesPage', () => {
   beforeEach(() => {
     api.listContentOpportunities.mockReset().mockResolvedValue({ items: [opportunity] });
@@ -144,6 +160,25 @@ describe('OpportunitiesPage', () => {
     })));
   });
 
+  it('requires the user to reconfirm an expired source before adoption', async () => {
+    api.listContentOpportunities.mockResolvedValue({ items: [expiredOpportunity] });
+    render(<MemoryRouter><OpportunitiesPage /></MemoryRouter>);
+
+    expect(await screen.findByText(/来源已过期/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '采用并创建内容' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '确认来源信息' }));
+
+    await waitFor(() => expect(api.verifyContentOpportunitySource).toHaveBeenCalledWith(
+      'o3',
+      expect.objectContaining({
+        verification_status: 'verified',
+        timeliness: 'expired',
+        confirmed_by_user: true,
+        expected_opportunity_version: 2,
+      }),
+    ));
+  });
+
   it('lets the user submit an official inspiration manually', async () => {
     render(<MemoryRouter><OpportunitiesPage /></MemoryRouter>);
 
@@ -166,7 +201,7 @@ describe('OpportunitiesPage', () => {
         trigger: 'official_inspiration',
         pasted_text: '官方发布的新主题方向',
         authoritative_source: '小红书官方',
-        expires_at: '2026-08-07T00:00:00.000Z',
+        expires_at: new Date('2026-08-07T00:00').toISOString(),
       }),
     ));
   });

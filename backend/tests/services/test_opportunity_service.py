@@ -1,5 +1,7 @@
 """Behavior tests for first-party explainable opportunity generation."""
 
+import json
+
 import pytest
 
 from app.models.v2.onboarding import CreatorProfileUpdate, HistoryImportCreate
@@ -62,6 +64,13 @@ async def test_generate_keeps_audience_questions_without_matching_note_tags(test
     )
     assert question["proposed_title"] == "预算有限时应该先整理哪里？"
     assert question["source_ref"].startswith("imported-note:")
+    trace = await test_db.fetch_one(
+        "SELECT visibility_boundary_json FROM ai_traces_v2 WHERE id=:id",
+        {"id": question["ai_trace_id"]},
+    )
+    assert "imported_history" in json.loads(trace["visibility_boundary_json"])[
+        "actual"
+    ]
 
 
 @pytest.mark.asyncio

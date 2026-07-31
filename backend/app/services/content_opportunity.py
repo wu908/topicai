@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import uuid
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import text
@@ -391,7 +392,8 @@ class ContentOpportunityService:
                                     "active_creator_profile",
                                     *(
                                         ["imported_history"]
-                                        if candidate["opportunity_type"] == "history_derivative"
+                                        if candidate["opportunity_type"]
+                                        in {"history_derivative", "user_question"}
                                         else []
                                     ),
                                     *(
@@ -700,7 +702,9 @@ class ContentOpportunityService:
                         evidence_refs=evidence_refs,
                         policy_version="series-extension-v1",
                         model_identifier=(
-                            "configured-text-model" if proposal_source == "ai" else None
+                            self.llm.providers[self.llm.active_provider]["model"]
+                            if proposal_source == "ai" and self.llm
+                            else None
                         ),
                         capability="structured_proposal",
                         visibility_boundary={
@@ -933,6 +937,18 @@ class ContentOpportunityService:
             and opportunity.get("verification_status") != "verified"
         ):
             raise ValueError("source verification is required before accepting this opportunity")
+        expires_at = opportunity.get("expires_at")
+        if (
+            body.decision == "accept"
+            and expires_at
+            and datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
+            <= datetime.now(UTC)
+            and json.loads(opportunity.get("dimensions_json") or "{}").get("timeliness")
+            != "expired"
+        ):
+            raise ValueError(
+                "expired source requires explicit confirmation before accepting this opportunity"
+            )
         if opportunity["version"] != body.expected_opportunity_version:
             raise VersionConflictException(
                 opportunity["version"], body.expected_opportunity_version

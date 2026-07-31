@@ -77,6 +77,89 @@ async def test_manual_opportunity_records_trigger_and_expiry(client, trigger, me
 
 
 @pytest.mark.asyncio
+async def test_expired_manual_source_requires_explicit_reverification_before_adoption(
+    client, test_db
+):
+    profile = (await client.get("/api/v2/creator-profile")).json()["data"]
+    await client.put(
+        "/api/v2/creator-profile",
+        json={
+            "niche": "small-space living",
+            "target_audience": "first-time renters",
+            "growth_goal": "stable_publish",
+            "content_pillars": ["storage"],
+            "confirm": True,
+            "expected_version": profile["version"],
+        },
+    )
+    created = await client.post(
+        "/api/v2/content-opportunities/source-verification",
+        json={
+            "trigger": "user_url",
+            "pasted_text": "An old official update",
+            "original_url": "https://example.com/old-update",
+            "expires_at": "2020-01-02T00:00:00Z",
+            "idempotency_key": "expired-source",
+        },
+    )
+    opportunity = created.json()["data"]
+    verified = await client.post(
+        f"/api/v2/content-opportunities/{opportunity['id']}:verify-source",
+        json={
+            "verification_status": "verified",
+            "original_url": "https://example.com/old-update",
+            "published_at": "2020-01-01T00:00:00Z",
+            "authoritative_source": "Example",
+            "timeliness": "current",
+            "confirmed_by_user": True,
+            "expected_opportunity_version": opportunity["version"],
+            "idempotency_key": "verify-expired-as-current",
+        },
+    )
+    verified_data = verified.json()["data"]
+
+    blocked = await client.post(
+        f"/api/v2/content-opportunities/{opportunity['id']}:decide",
+        json={
+            "decision": "accept",
+            "expected_opportunity_version": verified_data["version"],
+            "idempotency_key": "adopt-stale-source",
+        },
+    )
+
+    assert blocked.status_code == 400
+    assert await test_db.fetch_one(
+        "SELECT COUNT(*) AS count FROM content_projects WHERE opportunity_id=:id",
+        {"id": opportunity["id"]},
+    ) == {"count": 0}
+
+    reconfirmed = await client.post(
+        f"/api/v2/content-opportunities/{opportunity['id']}:verify-source",
+        json={
+            "verification_status": "verified",
+            "original_url": "https://example.com/old-update",
+            "published_at": "2020-01-01T00:00:00Z",
+            "authoritative_source": "Example",
+            "timeliness": "expired",
+            "confirmed_by_user": True,
+            "expected_opportunity_version": verified_data["version"],
+            "idempotency_key": "confirm-expired-source",
+        },
+    )
+    reconfirmed_data = reconfirmed.json()["data"]
+    adopted = await client.post(
+        f"/api/v2/content-opportunities/{opportunity['id']}:decide",
+        json={
+            "decision": "accept",
+            "expected_opportunity_version": reconfirmed_data["version"],
+            "idempotency_key": "adopt-confirmed-expired-source",
+        },
+    )
+    assert adopted.status_code == 201
+    assert adopted.json()["data"]["created_project_id"] is not None
+
+
+@pytest.mark.asyncio
 async def test_generate_and_list_first_party_opportunities(client, test_db):
     await client.post(
         "/api/v2/history-imports",

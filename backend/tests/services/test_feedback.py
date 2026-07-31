@@ -122,6 +122,47 @@ async def test_cold_start_keeps_default_weights(test_db):
     assert weights == default_weights
 
 
+@pytest.mark.asyncio
+async def test_opportunity_decisions_do_not_unlock_legacy_weight_updates(test_db):
+    """Opportunity decisions are audit events, not legacy adaptation signals."""
+    from app.services.feedback import FeedbackService
+
+    user_id = "u-opportunity-feedback"
+    default_weights = {
+        "track_match": 0.30,
+        "format_match": 0.20,
+        "hotspot_relevance": 0.20,
+        "timeliness": 0.20,
+        "data_quality": 0.10,
+    }
+    await _seed_user(test_db, user_id, days_old=30)
+    await _seed_profile(test_db, user_id, default_weights)
+    for index in range(4):
+        await test_db.insert(
+            "user_feedback",
+            {
+                "id": f"opportunity-{index}",
+                "user_id": user_id,
+                "source_type": "opportunity",
+                "source_id": f"opportunity-{index}",
+                "feedback_type": "adopt",
+                "feedback_value": None,
+                "reason": None,
+                "created_at": _now_iso(),
+            },
+        )
+
+    await FeedbackService().submit(
+        test_db,
+        user_id,
+        "topic",
+        "topic-1",
+        "thumb_down",
+    )
+
+    assert await _read_weights(test_db, user_id) == default_weights
+
+
 # ========== T050: bounded shift per dimension ==========
 
 @pytest.mark.asyncio
