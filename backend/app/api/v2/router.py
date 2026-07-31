@@ -12,6 +12,7 @@ from app.api.v2.creator_series import router as creator_series_router
 from app.api.v2.creator_viewpoints import router as creator_viewpoints_router
 from app.api.v2.experiment_metrics import router as experiment_metrics_router
 from app.api.v2.intent_actions import router as intent_actions_router
+from app.api.v2.onboarding import router as onboarding_router
 from app.api.v2.projects import router as projects_router
 from app.api.v2.starter import router as starter_router
 from app.models.common import ApiResponse
@@ -29,6 +30,7 @@ api_v2_router.include_router(content_opportunities_router)
 api_v2_router.include_router(experiment_metrics_router)
 api_v2_router.include_router(starter_router)
 api_v2_router.include_router(account_data_router)
+api_v2_router.include_router(onboarding_router)
 
 
 @api_v2_router.get("/health", response_model=ApiResponse[dict])

@@ -15,6 +15,7 @@ const OpportunitiesPage = React.lazy(() => import('@/pages/Opportunities/Opportu
 const MaterialsPage = React.lazy(() => import('@/pages/Materials/MaterialsPage'));
 const MePage = React.lazy(() => import('@/pages/Me/MePage'));
 const StarterPage = React.lazy(() => import('@/pages/Starter/StarterPage'));
+const GrowthOnboardingPage = React.lazy(() => import('@/pages/GrowthOnboarding/GrowthOnboardingPage'));
 const NotFoundPage = React.lazy(() => import('@/pages/NotFound/NotFoundPage'));
 
 const LazyRoute = ({ children }: { children: React.ReactNode }) => (
@@ -57,6 +58,7 @@ export default function App() {
             <Route path="/onboarding/assessment" element={protectedPage(<StarterPage />)} />
             <Route path="/onboarding/directions" element={protectedPage(<StarterPage />)} />
             <Route path="/onboarding/sprint" element={protectedPage(<StarterPage />)} />
+            <Route path="/onboarding/growth" element={protectedPage(<GrowthOnboardingPage />)} />
 
             <Route path="/topics" element={legacyRedirect('/opportunities')} />
             <Route path="/assets" element={legacyRedirect('/materials')} />
