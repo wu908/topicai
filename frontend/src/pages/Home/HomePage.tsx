@@ -78,6 +78,18 @@ const readableRef = (value: string) => {
   return refLabels[value] || value;
 };
 
+const safeInternalPath = (path: string | undefined, fallback = '/content') => {
+  if (!path?.startsWith('/')) return fallback;
+  try {
+    const url = new URL(path, window.location.origin);
+    return url.origin === window.location.origin
+      ? `${url.pathname}${url.search}${url.hash}`
+      : fallback;
+  } catch {
+    return fallback;
+  }
+};
+
 export default function HomePage() {
   const navigate = useNavigate();
   const { user, fetchCurrentUser } = useAuth();
@@ -116,21 +128,21 @@ export default function HomePage() {
       return;
     }
     if (action.action_type === 'create_project') {
-      navigate(action.fallback_action.path || '/content');
+      navigate(safeInternalPath(action.fallback_action.path));
       return;
     }
     if (action.project_id) {
       navigate(`/content/${action.project_id}`);
       return;
     }
-    navigate(action.fallback_action.path || '/content');
+    navigate(safeInternalPath(action.fallback_action.path));
   };
 
   const actionPath = data?.action?.expected_state_change.source === 'series_opportunity'
     ? '/opportunities'
     : data?.action?.project_id
       ? `/content/${data.action.project_id}`
-      : data?.action?.fallback_action.path || '/content';
+      : safeInternalPath(data?.action?.fallback_action.path);
 
   const deferAction = async () => {
     if (!data?.action) return;
