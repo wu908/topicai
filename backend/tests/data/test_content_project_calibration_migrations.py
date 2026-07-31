@@ -37,6 +37,7 @@ def test_content_project_calibration_schema_applies_and_replays(tmp_path):
     assert any(item.version == "032_source_verification_opportunities" for item in first)
     assert any(item.version == "033_calibration_completeness" for item in first)
     assert any(item.version == "035_intent_lock_action" for item in first)
+    assert any(item.version == "041_project_state_events" for item in first)
 
     with sqlite3.connect(db_path) as conn:
         tables = _tables(conn)
@@ -71,6 +72,7 @@ def test_content_project_calibration_schema_applies_and_replays(tmp_path):
             "experiments",
             "experiment_assignments",
             "experiment_assignment_events",
+            "project_state_events",
         } <= tables
         project_columns = {
             row[1] for row in conn.execute("PRAGMA table_info(content_projects)")
@@ -85,6 +87,44 @@ def test_content_project_calibration_schema_applies_and_replays(tmp_path):
             "intent_status",
             "automation_level",
         } <= project_columns
+
+        event_columns = {
+            row[1] for row in conn.execute("PRAGMA table_info(project_state_events)")
+        }
+        assert {
+            "owner_user_id",
+            "project_id",
+            "from_status",
+            "to_status",
+            "reason",
+            "actor_type",
+            "project_version",
+            "idempotency_key",
+            "request_hash",
+            "created_at",
+        } <= event_columns
+
+
+def test_project_state_event_migration_recovers_after_ddl_before_version_record(
+    tmp_path,
+):
+    db_path = tmp_path / "project-state-event-recovery.db"
+    through_040 = tmp_path / "through-040"
+    through_040.mkdir()
+    for path in DEFAULT_MIGRATIONS_DIR.glob("[0-9][0-9][0-9]_*.sql"):
+        if int(path.name[:3]) <= 40:
+            shutil.copy2(path, through_040 / path.name)
+
+    apply(db_path, through_040)
+    migration = DEFAULT_MIGRATIONS_DIR / "041_project_state_events.sql"
+    with sqlite3.connect(db_path) as conn:
+        conn.executescript(migration.read_text(encoding="utf-8"))
+
+    upgraded = apply(db_path, DEFAULT_MIGRATIONS_DIR)
+    replay = apply(db_path, DEFAULT_MIGRATIONS_DIR)
+
+    assert [item.version for item in upgraded] == ["041_project_state_events"]
+    assert replay == []
 
 
 def test_capability_trust_migration_recovers_after_ddl_before_version_record(tmp_path):
@@ -110,6 +150,7 @@ def test_capability_trust_migration_recovers_after_ddl_before_version_record(tmp
         "038_scope_learning_action",
         "039_observation_window_action",
         "040_unavailable_performance_result",
+        "041_project_state_events",
     ]
     assert replay == []
 
@@ -134,7 +175,8 @@ def test_unavailable_result_migration_recovers_after_partial_ddl(tmp_path):
     replay = apply(db_path, DEFAULT_MIGRATIONS_DIR)
 
     assert [item.version for item in upgraded] == [
-        "040_unavailable_performance_result"
+        "040_unavailable_performance_result",
+        "041_project_state_events",
     ]
     assert replay == []
     with sqlite3.connect(db_path) as conn:
@@ -178,6 +220,7 @@ def test_intent_action_migration_upgrades_from_019_and_replays(tmp_path):
         "038_scope_learning_action",
         "039_observation_window_action",
         "040_unavailable_performance_result",
+        "041_project_state_events",
     ]
     assert replay == []
     with sqlite3.connect(db_path) as conn:
@@ -244,6 +287,7 @@ def test_action_lifecycle_migration_rebuilds_phase_15_constraints(tmp_path):
         "038_scope_learning_action",
         "039_observation_window_action",
         "040_unavailable_performance_result",
+        "041_project_state_events",
     ]
     with sqlite3.connect(db_path) as conn:
         action_sql = conn.execute(
@@ -310,6 +354,7 @@ def test_source_verification_migration_preserves_series_opportunities(tmp_path):
         "038_scope_learning_action",
         "039_observation_window_action",
         "040_unavailable_performance_result",
+        "041_project_state_events",
     ]
     with sqlite3.connect(db_path) as conn:
         opportunity = conn.execute(
@@ -659,6 +704,7 @@ def test_intent_lock_action_migration_upgrades_database_with_034_recorded(tmp_pa
         "038_scope_learning_action",
         "039_observation_window_action",
         "040_unavailable_performance_result",
+        "041_project_state_events",
     ]
     with sqlite3.connect(db_path) as conn:
         action_sql = conn.execute(

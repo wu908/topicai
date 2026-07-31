@@ -308,6 +308,42 @@ async def test_observation_window_marks_only_due_projects_and_changes_next_actio
     assert (await ContentProjectService(seeded_db).get("u1", future_project["id"]))[
         "status"
     ] == "awaiting_review"
+    due_events = await seeded_db.fetch_all(
+        "SELECT from_status,to_status,reason,actor_type FROM project_state_events "
+        "WHERE project_id=:project ORDER BY project_version",
+        {"project": due_project["id"]},
+    )
+    assert due_events == [
+        {
+            "from_status": "preparing",
+            "to_status": "ready_to_publish",
+            "reason": "publish_hypothesis_locked",
+            "actor_type": "user",
+        },
+        {
+            "from_status": "ready_to_publish",
+            "to_status": "published",
+            "reason": "publication_recorded",
+            "actor_type": "user",
+        },
+        {
+            "from_status": "published",
+            "to_status": "awaiting_review",
+            "reason": "observation_window_elapsed",
+            "actor_type": "system",
+        },
+    ]
+    future_events = await seeded_db.fetch_all(
+        "SELECT from_status,to_status,reason,actor_type FROM project_state_events "
+        "WHERE project_id=:project ORDER BY project_version",
+        {"project": future_project["id"]},
+    )
+    assert future_events[-1] == {
+        "from_status": "published",
+        "to_status": "awaiting_review",
+        "reason": "performance_snapshot_added",
+        "actor_type": "user",
+    }
 
     due_workspace = await CalibrationWorkspaceService(seeded_db).get(
         "u1", due_project["id"]
@@ -640,6 +676,17 @@ async def test_unknown_outcome_closes_loop_with_selected_follow_up(seeded_db):
     assert "重新尝试" in observation["statement"]
     closed_project = await ContentProjectService(seeded_db).get("u1", project["id"])
     assert closed_project["status"] == "settled"
+    settled_event = await seeded_db.fetch_one(
+        "SELECT from_status,to_status,reason,actor_type FROM project_state_events "
+        "WHERE project_id=:project ORDER BY project_version DESC LIMIT 1",
+        {"project": project["id"]},
+    )
+    assert settled_event == {
+        "from_status": "awaiting_review",
+        "to_status": "settled",
+        "reason": "unknown_outcome_confirmed",
+        "actor_type": "user",
+    }
     state = await CreatorStateService(seeded_db).get("u1")
     assert all(
         item.get("source_ref") != f"observation:{observation['id']}"
@@ -647,6 +694,93 @@ async def test_unknown_outcome_closes_loop_with_selected_follow_up(seeded_db):
     )
     today = await IntentOrchestratorService(seeded_db).today("u1")
     assert today["action"]["action_type"] == "create_project"
+
+
+@pytest.mark.asyncio
+async def test_revoked_locked_evidence_audits_project_rollback(seeded_db):
+    project, _ = await ContentProjectService(seeded_db).create(
+        "u1",
+        ContentProjectCreate(
+            title="Rollback revoked evidence",
+            target_audience="Creators",
+            idempotency_key="revoke-state-project",
+        ),
+    )
+    evidence, _ = await EvidenceService(seeded_db).create_proposed(
+        "u1",
+        EvidenceCreate(
+            project_id=project["id"],
+            statement="I tested this process myself.",
+            source_ref="interview:revoke-state",
+            idempotency_key="revoke-state-evidence",
+        ),
+    )
+    evidence, _ = await EvidenceService(seeded_db).confirm(
+        "u1",
+        evidence["id"],
+        EvidenceDecision(
+            decision="confirm",
+            expected_evidence_version=evidence["version"],
+            idempotency_key="revoke-state-confirm",
+        ),
+    )
+    version, _ = await ContentVersionService(seeded_db).create(
+        "u1",
+        project["id"],
+        ContentVersionCreate(
+            title="Evidence-bound version",
+            body_text="A claim supported by the creator's confirmed experience.",
+            evidence_snapshot=[{"evidence_id": evidence["id"]}],
+            expected_project_version=project["version"],
+            idempotency_key="revoke-state-version",
+        ),
+    )
+    await seeded_db.execute(
+        "UPDATE content_projects SET intent_status='working_confirmed' WHERE id=:id",
+        {"id": project["id"]},
+    )
+    project = await ContentProjectService(seeded_db).get("u1", project["id"])
+    locked, _ = await PublishHypothesisService(seeded_db).lock(
+        "u1",
+        project["id"],
+        PublishHypothesisLock(
+            content_version_id=version["id"],
+            content_intent="solve",
+            audience_change="The reader can test one bounded process.",
+            primary_response="save",
+            observation_window_days=7,
+            audience_problem="The reader lacks a tested process.",
+            reader_promise="A creator-tested process with explicit limits.",
+            basis_refs=[f"evidence:{evidence['id']}"],
+            uncertainties=["The result may vary by context."],
+            expected_project_version=project["version"],
+            idempotency_key="revoke-state-lock",
+        ),
+    )
+
+    await EvidenceService(seeded_db).revoke(
+        "u1",
+        evidence["id"],
+        EvidenceRevocation(
+            expected_evidence_version=evidence["version"],
+            idempotency_key="revoke-state-revoke",
+        ),
+    )
+
+    rolled_back = await ContentProjectService(seeded_db).get("u1", project["id"])
+    event = await seeded_db.fetch_one(
+        "SELECT from_status,to_status,reason,actor_type FROM project_state_events "
+        "WHERE project_id=:project ORDER BY project_version DESC LIMIT 1",
+        {"project": project["id"]},
+    )
+    assert locked["project"]["status"] == "ready_to_publish"
+    assert rolled_back["status"] == "creating"
+    assert event == {
+        "from_status": "ready_to_publish",
+        "to_status": "creating",
+        "reason": "evidence_revoked",
+        "actor_type": "user",
+    }
 
 
 @pytest.mark.parametrize("intent", ["solve", "share", "record"])
@@ -1409,6 +1543,11 @@ async def test_snapshot_corrections_append_and_old_snapshot_cannot_be_reviewed(s
         snapshot["id"],
         corrected["snapshot"]["id"],
     }
+    event_count = await seeded_db.fetch_one(
+        "SELECT COUNT(*) AS count FROM project_state_events WHERE project_id=:project",
+        {"project": project["id"]},
+    )
+    assert event_count == {"count": 3}
 
     with pytest.raises(ValueError, match="superseded"):
         await BlindReviewService(seeded_db).create(

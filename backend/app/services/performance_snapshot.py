@@ -8,6 +8,7 @@ from sqlalchemy import text
 
 from app.core.exceptions import IdempotencyConflictException, VersionConflictException
 from app.models.v2.calibration import PerformanceSnapshotCreate
+from app.services.project_state import ProjectStateService
 from app.services.v2_utils import decode_json_fields, now, request_hash
 
 
@@ -117,24 +118,38 @@ class PerformanceSnapshotService:
                         "now": timestamp,
                     },
                 )
-                updated = await session.execute(
-                    text(
-                        "UPDATE content_projects SET status='awaiting_review',"
-                        "last_action='performance_snapshot_added',last_action_at=:now,"
-                        "updated_at=:now,version=version+1 WHERE id=:project "
-                        "AND owner_user_id=:owner AND version=:expected"
-                    ),
-                    {
-                        "now": timestamp,
-                        "project": record["project_id"],
-                        "owner": owner_user_id,
-                        "expected": body.expected_project_version,
-                    },
-                )
-                if updated.rowcount != 1:
-                    raise VersionConflictException(
-                        project["version"], body.expected_project_version
+                if project["status"] == "published":
+                    await ProjectStateService.apply(
+                        session,
+                        owner_user_id,
+                        project,
+                        to_status="awaiting_review",
+                        reason="performance_snapshot_added",
+                        actor_type="user",
+                        expected_version=body.expected_project_version,
+                        idempotency_key=f"state:snapshot:{body.idempotency_key}",
+                        digest=digest,
+                        timestamp=timestamp,
                     )
+                else:
+                    updated = await session.execute(
+                        text(
+                            "UPDATE content_projects SET "
+                            "last_action='performance_snapshot_added',last_action_at=:now,"
+                            "updated_at=:now,version=version+1 WHERE id=:project "
+                            "AND owner_user_id=:owner AND version=:expected"
+                        ),
+                        {
+                            "now": timestamp,
+                            "project": record["project_id"],
+                            "owner": owner_user_id,
+                            "expected": body.expected_project_version,
+                        },
+                    )
+                    if updated.rowcount != 1:
+                        raise VersionConflictException(
+                            project["version"], body.expected_project_version
+                        )
                 snapshot = (
                     await session.execute(
                         text("SELECT * FROM performance_snapshots_v2 WHERE id=:id"),

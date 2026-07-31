@@ -27,6 +27,7 @@ from app.services.content_version import ContentVersionService
 from app.services.creator_state import CreatorStateService
 from app.services.evidence import EvidenceService
 from app.services.intent_orchestrator import INTENT_CONFIG, IntentOrchestratorService
+from app.services.project_state import ProjectStateService
 from app.services.v2_utils import (
     effective_intent_status,
     normalize_project_intent,
@@ -1154,22 +1155,25 @@ class HumanGateService:
         observation = result["observation"]
         if plan.get("intent_outcome") == "unknown":
             if result["project"]["status"] != "settled":
-                updated = await self.db.execute(
-                    "UPDATE content_projects SET status='settled',"
-                    "last_action='unknown_outcome_confirmed',last_action_at=:now,"
-                    "updated_at=:now,version=version+1 WHERE id=:project "
-                    "AND owner_user_id=:owner AND version=:expected",
-                    {
-                        "now": now(),
-                        "project": result["project"]["id"],
-                        "owner": owner,
-                        "expected": result["project"]["version"],
-                    },
-                )
-                if updated is None or updated.rowcount != 1:
-                    raise VersionConflictException(
-                        result["project"]["version"] + 1,
-                        result["project"]["version"],
+                timestamp = now()
+                session = await self.db.get_session()
+                async with session, session.begin():
+                    project = await ProjectStateService._project(
+                        session, owner, result["project"]["id"]
+                    )
+                    await ProjectStateService.apply(
+                        session,
+                        owner,
+                        project,
+                        to_status="settled",
+                        reason="unknown_outcome_confirmed",
+                        actor_type="user",
+                        expected_version=result["project"]["version"],
+                        idempotency_key=f"state:unknown-outcome:{gate['id']}",
+                        digest=request_hash(
+                            {"gate_id": gate["id"], "to_status": "settled"}
+                        ),
+                        timestamp=timestamp,
                     )
             return observation
         await CreatorStateService(self.db).append_validated_insight(
