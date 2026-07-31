@@ -81,7 +81,10 @@ export default function MePage() {
             </ul>
             <p className="operations-meta">未处理纠正 {state.unresolved_correction_count} 条 · 当前可投入 {state.available_minutes ?? '未设置'} 分钟</p>
           </section>
-          <div className="operations-row-actions"><Button variant="contained" onClick={() => navigate('/content')}>查看内容项目</Button></div>
+          <div className="operations-row-actions">
+            <Button variant="contained" onClick={() => navigate('/onboarding/growth')}>导入历史内容并校对画像</Button>
+            <Button variant="outlined" onClick={() => navigate('/content')}>查看内容项目</Button>
+          </div>
         </>
       ) : <Alert severity="error" action={<Button onClick={() => void load()}>重试</Button>}>{error || '创作者状态暂不可用'}</Alert>}
     </PageContainer>

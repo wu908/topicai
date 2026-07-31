@@ -95,6 +95,8 @@ _EXPECTED_TABLES: frozenset[str] = frozenset(
         "experiment_assignments",
         "experiment_assignment_events",
         "project_state_events",
+        "history_imports",
+        "imported_notes",
         # bounded starter entry flow (029); content execution remains in projects
         "starter_assessments",
         "starter_direction_candidates",

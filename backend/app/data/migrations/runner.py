@@ -814,6 +814,67 @@ def apply(
                         ("unavailable_reason", "TEXT"),
                     ],
                 )
+            elif version == "042_growth_onboarding":
+                _ensure_columns(
+                    conn,
+                    "users",
+                    [
+                        (
+                            "product_mode",
+                            "TEXT NOT NULL DEFAULT 'growth' "
+                            "CHECK (product_mode IN ('starter','growth'))",
+                        ),
+                        (
+                            "onboarding_state",
+                            "TEXT NOT NULL DEFAULT 'not_started' "
+                            "CHECK (onboarding_state IN "
+                            "('not_started','in_progress','completed'))",
+                        ),
+                        (
+                            "onboarding_version",
+                            "INTEGER NOT NULL DEFAULT 1 CHECK (onboarding_version >= 1)",
+                        ),
+                        ("timezone", "TEXT NOT NULL DEFAULT 'Asia/Shanghai'"),
+                        (
+                            "weekly_publish_goal",
+                            "INTEGER NOT NULL DEFAULT 2 "
+                            "CHECK (weekly_publish_goal BETWEEN 1 AND 4)",
+                        ),
+                        ("consent_json", "TEXT NOT NULL DEFAULT '{}'"),
+                    ],
+                )
+                _ensure_columns(
+                    conn,
+                    "creator_profiles",
+                    [
+                        ("niche", "TEXT"),
+                        ("target_audience", "TEXT"),
+                        (
+                            "growth_goal",
+                            "TEXT NOT NULL DEFAULT 'stable_publish' "
+                            "CHECK (growth_goal IN "
+                            "('stable_publish','follower_growth','both'))",
+                        ),
+                        ("content_pillars_json", "TEXT NOT NULL DEFAULT '[]'"),
+                        ("voice_traits_json", "TEXT NOT NULL DEFAULT '[]'"),
+                        ("avoid_traits_json", "TEXT NOT NULL DEFAULT '[]'"),
+                        ("evidence_refs_json", "TEXT NOT NULL DEFAULT '[]'"),
+                        (
+                            "confirmation_state",
+                            "TEXT NOT NULL DEFAULT 'provisional' "
+                            "CHECK (confirmation_state IN "
+                            "('provisional','confirmed','needs_review'))",
+                        ),
+                        ("confirmed_at", "TEXT"),
+                        ("version", "INTEGER NOT NULL DEFAULT 1 CHECK (version >= 1)"),
+                        ("profile_attributes_json", "TEXT NOT NULL DEFAULT '{}'"),
+                    ],
+                )
+                # ponytail: 042 has only additive columns before this marker;
+                # use a shared SQL parser if compound pre-table DDL is added.
+                conn.executescript(
+                    sql[sql.index("CREATE TABLE IF NOT EXISTS history_imports") :]
+                )
             else:
                 conn.executescript(sql)
             post_step = MIGRATION_POST_STEPS.get(version)

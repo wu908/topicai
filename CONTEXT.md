@@ -28,6 +28,14 @@ A user-confirmed experience, knowledge area, viewpoint, ongoing process, or
 genuine question that gives a Content Opportunity creator-specific substance.
 _Avoid_: Generic AI premise, trend alone
 
+**Historical Content Evidence**:
+A source-bound record of the creator's earlier published content that may support profile attributes and future opportunities but is not itself a Content Project or proof of effectiveness.
+_Avoid_: Imported project, validated insight, performance proof
+
+**Creator Profile**:
+A user-correctable set of creator direction, audience, content pillars, expression preferences, and constraints whose attributes retain their evidence and confirmation state.
+_Avoid_: Fixed niche, AI-assigned identity, creator score
+
 **External Context**:
 Source-bound outside information that may add timeliness, audience language,
 or background to a Creator Anchor but cannot replace it.
