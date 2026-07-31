@@ -1,0 +1,17 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ci-tmp/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+.env
+data/*
+!data/benchmarks/
+!data/benchmarks/**
+backups/
+logs/
+chroma_db/

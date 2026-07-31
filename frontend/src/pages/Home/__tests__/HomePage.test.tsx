@@ -98,6 +98,41 @@ describe('HomePage', () => {
     expect(navigateMock).toHaveBeenCalledWith('/opportunities');
   });
 
+  it.each(['//evil.example', '/\\evil.example', 'https://evil.example'])(
+    'rejects the external fallback path %s from the API',
+    async (path) => {
+      api.getTodayWorkspace.mockResolvedValue({
+        action: {
+          ...action,
+          project_id: null,
+          fallback_action: { ...action.fallback_action, path },
+        },
+        creator_state: { completed_project_count: 0 },
+      });
+
+      render(<MemoryRouter><HomePage /></MemoryRouter>);
+      await screen.findByText(action.title);
+      fireEvent.click(screen.getByRole('button', { name: '手动继续' }));
+      expect(navigateMock).toHaveBeenCalledWith('/content');
+    },
+  );
+
+  it('preserves a valid internal fallback path from the API', async () => {
+    api.getTodayWorkspace.mockResolvedValue({
+      action: {
+        ...action,
+        project_id: null,
+        fallback_action: { ...action.fallback_action, path: '/materials?from=today#next' },
+      },
+      creator_state: { completed_project_count: 0 },
+    });
+
+    render(<MemoryRouter><HomePage /></MemoryRouter>);
+    await screen.findByText(action.title);
+    fireEvent.click(screen.getByRole('button', { name: '手动继续' }));
+    expect(navigateMock).toHaveBeenCalledWith('/materials?from=today#next');
+  });
+
   it('can defer the action without inventing dashboard metrics', async () => {
     render(<MemoryRouter><HomePage /></MemoryRouter>);
     await screen.findByText('确认这是一条“分享”内容吗？');

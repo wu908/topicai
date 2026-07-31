@@ -48,6 +48,9 @@ See `.specify/memory/constitution.md` Principle II for the full contract.
 ## Running tests
 
 ```bash
+# Install runtime and development dependencies
+pip install -r requirements-dev.txt
+
 # All tests with coverage gate
 pytest tests/ -q
 
