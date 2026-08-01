@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError as SAIntegrityError
 
 from app.core.exceptions import IdempotencyConflictException, SourceExpiredException, VersionConflictException
 from app.core.llm import LLMClient, wrap_user_input
@@ -42,6 +43,13 @@ GROWTH_ROLE_BY_GOAL = {
     "stable_publish": "trust",
     "follower_growth": "discovery",
     "both": "experiment",
+}
+INTENT_BY_OPPORTUNITY_TYPE = {
+    "history_derivative": "share",
+    "user_question": "solve",
+    "material_derivative": "share",
+    "insight_derivative": "share",
+    "evergreen": "solve",
 }
 
 
@@ -367,9 +375,10 @@ class ContentOpportunityService:
             trace_id = str(uuid.uuid4())
             timestamp = now()
             session = await self.db.get_session()
-            async with session:
-                async with session.begin():
-                    await AITraceService.create(
+            try:
+                async with session:
+                    async with session.begin():
+                        await AITraceService.create(
                         session,
                         owner,
                         AITraceCreate(
@@ -419,7 +428,7 @@ class ContentOpportunityService:
                             generated_at=timestamp,
                         ),
                     )
-                    await session.execute(
+                        await session.execute(
                         text(
                             "INSERT INTO content_opportunities (id,owner_user_id,opportunity_type,"
                             "source_ref,source_excerpt,source_url,source_published_at,source_refs_json,"
@@ -429,7 +438,7 @@ class ContentOpportunityService:
                             "unknown_refs_json,dimensions_json,status,proposal_source,ai_trace_id,"
                             "limitations_json,version,idempotency_key,request_hash,created_at,updated_at) "
                             "VALUES (:id,:owner,:type,:source,:excerpt,:url,:published,:source_refs,"
-                            "'verified','solve',"
+                            "'verified',:intent,"
                             "'graphic_note',:title,:change,:rationale,:materials,:evidence,'[]',:dimensions,"
                             "'proposed','deterministic_fallback',:trace,:limitations,1,:key,:hash,:now,:now)"
                         ),
@@ -445,6 +454,9 @@ class ContentOpportunityService:
                                 candidate["source_refs"], ensure_ascii=False
                             ),
                             "title": candidate["title"],
+                            "intent": INTENT_BY_OPPORTUNITY_TYPE.get(
+                                candidate["opportunity_type"], "share"
+                            ),
                             "change": candidate["audience_change"],
                             "rationale": candidate["rationale"],
                             "materials": json.dumps(["相关真实经历", "具体做法与限制"], ensure_ascii=False),
@@ -462,7 +474,7 @@ class ContentOpportunityService:
                             "now": timestamp,
                         },
                     )
-                    await self._event(
+                        await self._event(
                         session,
                         owner,
                         opportunity_id,
@@ -478,6 +490,17 @@ class ContentOpportunityService:
                         },
                         timestamp,
                     )
+            except SAIntegrityError:
+                # Concurrent generate() call won the race for the same
+                # idempotency key — just use the row that was already inserted.
+                existing = await self.db.fetch_one(
+                    "SELECT * FROM content_opportunities WHERE owner_user_id=:owner "
+                    "AND idempotency_key=:key",
+                    {"owner": owner, "key": key},
+                )
+                if existing:
+                    results.append(self._normalize(existing))
+                continue
             results.append(await self.get(owner, opportunity_id))
         return results
 
