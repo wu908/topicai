@@ -11,7 +11,11 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError as SAIntegrityError
 
-from app.core.exceptions import IdempotencyConflictException, SourceExpiredException, VersionConflictException
+from app.core.exceptions import (
+    IdempotencyConflictException,
+    SourceExpiredException,
+    VersionConflictException,
+)
 from app.core.llm import LLMClient, wrap_user_input
 from app.models.v2.action_domain import AITraceCreate
 from app.models.v2.content_opportunity import (

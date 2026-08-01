@@ -79,7 +79,11 @@ const expiredOpportunity = {
   source_authority: 'Example',
   expires_at: '2020-01-02T00:00:00Z',
   verification_status: 'verified',
-  required_action: null,
+  required_action: {
+    action_type: 'source_expired' as const,
+    reason: '来源已过期，请明确确认当前时效后再创建内容',
+    fallback: 'reverify_source' as const,
+  },
   version: 2,
   dimensions: {
     audience_fit: 'unknown', creator_fit: 'unknown', material_readiness: 'partial',
