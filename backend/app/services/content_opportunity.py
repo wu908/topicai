@@ -459,7 +459,15 @@ class ContentOpportunityService:
                             ),
                             "change": candidate["audience_change"],
                             "rationale": candidate["rationale"],
-                            "materials": json.dumps(["相关真实经历", "具体做法与限制"], ensure_ascii=False),
+                            "materials": json.dumps(
+                                MATERIALS_BY_INTENT.get(
+                                    INTENT_BY_OPPORTUNITY_TYPE.get(
+                                        candidate["opportunity_type"], "share"
+                                    ),
+                                    MATERIALS_BY_INTENT["share"],
+                                ),
+                                ensure_ascii=False,
+                            ),
                             "evidence": json.dumps(
                                 list(dict.fromkeys(candidate["evidence_refs"])),
                                 ensure_ascii=False,
@@ -492,7 +500,7 @@ class ContentOpportunityService:
                     )
             except SAIntegrityError:
                 # Concurrent generate() call won the race for the same
-                # idempotency key — just use the row that was already inserted.
+                # idempotency key — use the row that was already committed.
                 existing = await self.db.fetch_one(
                     "SELECT * FROM content_opportunities WHERE owner_user_id=:owner "
                     "AND idempotency_key=:key",
@@ -500,7 +508,11 @@ class ContentOpportunityService:
                 )
                 if existing:
                     results.append(self._normalize(existing))
-                continue
+                    continue
+                # No matching row means the conflict came from somewhere other
+                # than the idempotency key (e.g. a trace FK violation) — re-raise
+                # so the real error is not silently swallowed.
+                raise
             results.append(await self.get(owner, opportunity_id))
         return results
 
