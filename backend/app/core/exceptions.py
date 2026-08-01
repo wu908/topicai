@@ -258,6 +258,17 @@ class ValidationException(AppException):
         self.details = details or {}
 
 
+class SourceExpiredException(AppException):
+    """Source has expired and requires explicit re-verification before adoption."""
+
+    def __init__(self):
+        super().__init__(
+            message="expired source requires explicit confirmation before accepting this opportunity",
+            status_code=400,
+            error_code="SOURCE_EXPIRED",
+        )
+
+
 class VersionConflictException(AppException):
     """Optimistic concurrency token no longer matches the aggregate."""
 

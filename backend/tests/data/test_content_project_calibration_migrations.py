@@ -128,6 +128,7 @@ def test_project_state_event_migration_recovers_after_ddl_before_version_record(
         "041_project_state_events",
         "042_growth_onboarding",
         "043_first_party_opportunities",
+        "044_repair_opportunity_sources",
     ]
     assert replay == []
 
@@ -158,6 +159,7 @@ def test_capability_trust_migration_recovers_after_ddl_before_version_record(tmp
         "041_project_state_events",
         "042_growth_onboarding",
         "043_first_party_opportunities",
+        "044_repair_opportunity_sources",
     ]
     assert replay == []
 
@@ -186,6 +188,7 @@ def test_unavailable_result_migration_recovers_after_partial_ddl(tmp_path):
         "041_project_state_events",
         "042_growth_onboarding",
         "043_first_party_opportunities",
+        "044_repair_opportunity_sources",
     ]
     assert replay == []
     with sqlite3.connect(db_path) as conn:
@@ -232,6 +235,7 @@ def test_intent_action_migration_upgrades_from_019_and_replays(tmp_path):
         "041_project_state_events",
         "042_growth_onboarding",
         "043_first_party_opportunities",
+        "044_repair_opportunity_sources",
     ]
     assert replay == []
     with sqlite3.connect(db_path) as conn:
@@ -301,6 +305,7 @@ def test_action_lifecycle_migration_rebuilds_phase_15_constraints(tmp_path):
         "041_project_state_events",
         "042_growth_onboarding",
         "043_first_party_opportunities",
+        "044_repair_opportunity_sources",
     ]
     with sqlite3.connect(db_path) as conn:
         action_sql = conn.execute(
@@ -370,6 +375,7 @@ def test_source_verification_migration_preserves_series_opportunities(tmp_path):
         "041_project_state_events",
         "042_growth_onboarding",
         "043_first_party_opportunities",
+        "044_repair_opportunity_sources",
     ]
     with sqlite3.connect(db_path) as conn:
         opportunity = conn.execute(
@@ -829,6 +835,7 @@ def test_intent_lock_action_migration_upgrades_database_with_034_recorded(tmp_pa
         "041_project_state_events",
         "042_growth_onboarding",
         "043_first_party_opportunities",
+        "044_repair_opportunity_sources",
     ]
     with sqlite3.connect(db_path) as conn:
         action_sql = conn.execute(
@@ -837,6 +844,96 @@ def test_intent_lock_action_migration_upgrades_database_with_034_recorded(tmp_pa
         assert "'lock_intent'" in action_sql
         # 038 expands the same constraint again without dropping 035's value.
         assert "'scope_learning'" in action_sql
+
+
+def test_old_043_database_gets_backfilled_by_044(tmp_path):
+    """Regression: databases that ran old-043 (which hardcoded source_trigger='system',
+    source_refs_json='[]', dimensions_json='{}') must be repaired by migration 044.
+
+    The original 043 INSERT SELECT used hard-coded placeholders; the runner-marker
+    fix in 08f289c changed the *file*, but the runner skips any migration version
+    already recorded in schema_migrations.  A 044 repair migration is the only way
+    to reach those rows.
+    """
+    db_path = tmp_path / "old-043-repair.db"
+    through_043 = tmp_path / "through-043"
+    through_043.mkdir()
+    for path in DEFAULT_MIGRATIONS_DIR.glob("[0-9][0-9][0-9]_*.sql"):
+        if int(path.name[:3]) <= 43:
+            shutil.copy2(path, through_043 / path.name)
+
+    # Bring the schema up to 043 only (records it in schema_migrations but not 044).
+    apply(db_path, through_043)
+
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("PRAGMA foreign_keys=ON")
+        conn.execute(
+            "INSERT INTO users (id,email,username,password_hash,ai_calls_reset_at,created_at) "
+            "VALUES ('u1','u1@example.com','u1','hash','2026-07-24T00:00:00Z','2026-07-23T00:00:00Z')"
+        )
+        conn.execute(
+            "INSERT INTO ai_traces_v2 (id,owner_user_id,task_type,input_refs_json,"
+            "policy_version,capability,visibility_boundary_json,contamination_check_json,"
+            "calibration_state,output_ref,generated_at) VALUES "
+            "('trace-1','u1','manual_opportunity','[]','v1','manual_intake','{}','{}',"
+            "'valid','content-opportunity:op-1','2026-07-23T00:00:00Z')"
+        )
+        # Simulate what old-043 hardcoded: a user_source row with placeholder defaults.
+        conn.execute(
+            "INSERT INTO content_opportunities ("
+            "id,owner_user_id,opportunity_type,source_trigger,source_ref,"
+            "source_refs_json,verification_status,content_intent,content_format,"
+            "proposed_title,proposed_audience_change,proposed_rationale,"
+            "evidence_refs_json,unknown_refs_json,dimensions_json,"
+            "status,proposal_source,ai_trace_id,limitations_json,"
+            "version,idempotency_key,request_hash,created_at,updated_at"
+            ") VALUES ("
+            "'op-1','u1','user_source','system','keyword:python',"
+            "'[]','verified','share','graphic_note',"
+            "'Python basics','Developers','Beginner-friendly Python guide',"
+            "'[]','[]','{}',"
+            "'proposed','ai','trace-1','[]',"
+            "1,'op-key','op-hash','2026-07-23T00:00:00Z','2026-07-23T00:00:00Z'"
+            ")"
+        )
+        conn.commit()
+
+    # Pre-condition: row carries the bad placeholder values old-043 would have left.
+    with sqlite3.connect(db_path) as conn:
+        pre = conn.execute(
+            "SELECT source_refs_json, dimensions_json, source_trigger "
+            "FROM content_opportunities WHERE id='op-1'"
+        ).fetchone()
+    assert pre == ("[]", "{}", "system")
+
+    # 043 is already recorded → runner skips it; 044 must apply and fix the row.
+    upgraded = apply(db_path, DEFAULT_MIGRATIONS_DIR)
+    assert any(item.version == "044_repair_opportunity_sources" for item in upgraded)
+
+    with sqlite3.connect(db_path) as conn:
+        post = conn.execute(
+            "SELECT source_refs_json, dimensions_json, source_trigger "
+            "FROM content_opportunities WHERE id='op-1'"
+        ).fetchone()
+
+    source_refs = json.loads(post[0])
+    dimensions = json.loads(post[1])
+    assert len(source_refs) >= 1, "source_refs_json must be backfilled with at least one entry"
+    assert set(dimensions.keys()) == {
+        "audience_fit",
+        "creator_fit",
+        "material_readiness",
+        "growth_role",
+        "series_potential",
+        "timeliness",
+        "similarity_risk",
+        "safety_risk",
+    }, "dimensions_json must be backfilled with all dimension keys"
+    # user_source with no URL and no authority → user_keyword
+    assert post[2] == "user_keyword", "source_trigger must be backfilled for user_source"
+
+    # Idempotency: a second apply must be a no-op.
+    assert apply(db_path, DEFAULT_MIGRATIONS_DIR) == []
 
 
 def test_intent_lock_action_migration_repairs_interrupted_artifacts(tmp_path):

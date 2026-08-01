@@ -52,10 +52,9 @@ type TimelinessFilter = 'all' | NonNullable<ContentOpportunity['dimensions']>['t
 
 const makeKey = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
-function OpportunityRow({ item, onChanged, checkedAt }: {
+function OpportunityRow({ item, onChanged }: {
   item: ContentOpportunity;
   onChanged: () => Promise<void>;
-  checkedAt: string | null;
 }) {
   const navigate = useNavigate();
   const [title, setTitle] = useState(item.confirmed_title || item.proposed_title);
@@ -68,13 +67,8 @@ function OpportunityRow({ item, onChanged, checkedAt }: {
   const [sourceUrl, setSourceUrl] = useState(item.source_url ?? '');
   const [publishedAt, setPublishedAt] = useState(item.source_published_at ?? '');
   const [sourceAuthority, setSourceAuthority] = useState(item.source_authority ?? '');
-  const sourceExpired = item.expires_at !== null && checkedAt !== null
-    && Date.parse(item.expires_at) <= Date.parse(checkedAt);
-  const expiredSourceNeedsConfirmation = item.opportunity_type === 'user_source'
-    && sourceExpired
-    && item.dimensions?.timeliness !== 'expired';
-  const needsSourceVerification = item.verification_status !== 'verified'
-    || expiredSourceNeedsConfirmation;
+  const expiredSourceNeedsConfirmation = item.required_action?.action_type === 'source_expired';
+  const needsSourceVerification = item.required_action !== null;
   const [timeliness, setTimeliness] = useState<'current' | 'expiring' | 'expired'>(
     expiredSourceNeedsConfirmation ? 'expired' : 'current',
   );
@@ -228,7 +222,6 @@ function OpportunityRow({ item, onChanged, checkedAt }: {
 export default function OpportunitiesPage() {
   const navigate = useNavigate();
   const [items, setItems] = useState<ContentOpportunity[]>([]);
-  const [checkedAt, setCheckedAt] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>('all');
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all');
   const [timelinessFilter, setTimelinessFilter] = useState<TimelinessFilter>('all');
@@ -247,7 +240,6 @@ export default function OpportunitiesPage() {
     setError(null);
     try {
       setItems((await listContentOpportunities()).items);
-      setCheckedAt(new Date().toISOString());
     } catch (err) {
       setError(extractErrorMessage(err, '内容机会加载失败'));
     } finally {
@@ -357,7 +349,7 @@ export default function OpportunitiesPage() {
               </div>
             </section>
           ) : null}
-          {visible.length ? <div className="operations-list">{visible.map((item) => <OpportunityRow key={`${item.id}-${item.version}`} item={item} onChanged={load} checkedAt={checkedAt} />)}</div> : (
+          {visible.length ? <div className="operations-list">{visible.map((item) => <OpportunityRow key={`${item.id}-${item.version}`} item={item} onChanged={load} />)}</div> : (
             <section className="operations-empty">
               <h2>{items.length ? '这个状态下还没有机会' : '还没有可确认的内容机会'}</h2>
               <p>完成历史导入和画像确认后，可以从真实内容与常青需求生成机会，不依赖没有依据的爆款分。</p>

@@ -10,7 +10,7 @@ from typing import Any
 
 from sqlalchemy import text
 
-from app.core.exceptions import IdempotencyConflictException, VersionConflictException
+from app.core.exceptions import IdempotencyConflictException, SourceExpiredException, VersionConflictException
 from app.core.llm import LLMClient, wrap_user_input
 from app.models.v2.action_domain import AITraceCreate
 from app.models.v2.content_opportunity import (
@@ -937,6 +937,10 @@ class ContentOpportunityService:
             and opportunity.get("verification_status") != "verified"
         ):
             raise ValueError("source verification is required before accepting this opportunity")
+        if opportunity["version"] != body.expected_opportunity_version:
+            raise VersionConflictException(
+                opportunity["version"], body.expected_opportunity_version
+            )
         expires_at = opportunity.get("expires_at")
         if (
             body.decision == "accept"
@@ -946,13 +950,7 @@ class ContentOpportunityService:
             and json.loads(opportunity.get("dimensions_json") or "{}").get("timeliness")
             != "expired"
         ):
-            raise ValueError(
-                "expired source requires explicit confirmation before accepting this opportunity"
-            )
-        if opportunity["version"] != body.expected_opportunity_version:
-            raise VersionConflictException(
-                opportunity["version"], body.expected_opportunity_version
-            )
+            raise SourceExpiredException()
         status = {
             "accept": "accepted",
             "save": "saved",
@@ -1268,5 +1266,19 @@ class ContentOpportunityService:
                 "fallback": "manual_verification",
             }
         else:
-            result["required_action"] = None
+            _expires_at = result.get("expires_at")
+            if (
+                result.get("status") in {"proposed", "saved"}
+                and _expires_at
+                and datetime.fromisoformat(_expires_at.replace("Z", "+00:00"))
+                <= datetime.now(UTC)
+                and (result.get("dimensions") or {}).get("timeliness") != "expired"
+            ):
+                result["required_action"] = {
+                    "action_type": "source_expired",
+                    "reason": "来源已过期，请明确确认当前时效后再创建内容",
+                    "fallback": "reverify_source",
+                }
+            else:
+                result["required_action"] = None
         return result

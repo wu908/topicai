@@ -322,3 +322,143 @@ async def test_generate_and_list_first_party_opportunities(client, test_db):
         (evergreen["id"], "adopt", None),
         (rejected_item["id"], "reject", "与本周计划不符"),
     }
+
+
+@pytest.mark.asyncio
+async def test_version_conflict_takes_priority_over_source_expired(client):
+    """When accept() has both a stale version AND an expired source, the
+    response must be 409 VERSION_CONFLICT — not 400 SOURCE_EXPIRED.
+
+    Before the guard-order fix the expiration check fired first, masking
+    the real conflict and letting the client believe the only problem was
+    the expiry.
+    """
+    created = await client.post(
+        "/api/v2/content-opportunities/source-verification",
+        json={
+            "trigger": "user_url",
+            "pasted_text": "An outdated article",
+            "original_url": "https://example.com/old-article",
+            "expires_at": "2020-01-02T00:00:00Z",
+            "idempotency_key": "version-conflict-and-expired",
+        },
+    )
+    assert created.status_code == 201
+    opportunity = created.json()["data"]
+
+    verified = await client.post(
+        f"/api/v2/content-opportunities/{opportunity['id']}:verify-source",
+        json={
+            "verification_status": "verified",
+            "original_url": "https://example.com/old-article",
+            "published_at": "2020-01-01T00:00:00Z",
+            "authoritative_source": "Example",
+            "timeliness": "current",
+            "confirmed_by_user": True,
+            "expected_opportunity_version": opportunity["version"],
+            "idempotency_key": "verify-for-conflict-priority-test",
+        },
+    )
+    assert verified.status_code == 201
+    current_version = verified.json()["data"]["version"]
+
+    # Use a stale version — both conflicts are simultaneously true.
+    response = await client.post(
+        f"/api/v2/content-opportunities/{opportunity['id']}:decide",
+        json={
+            "decision": "accept",
+            "expected_opportunity_version": current_version - 1,
+            "idempotency_key": "decide-stale-and-expired",
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["meta"]["error_code"] == "VERSION_CONFLICT"
+
+
+@pytest.mark.asyncio
+async def test_expired_source_returns_typed_source_expired_error(client):
+    """decide(accept) on an expired source must return 400 with
+    error_code='SOURCE_EXPIRED' in the response meta, not a generic 400
+    with no error_code (which is what a raw ValueError produces).
+    """
+    created = await client.post(
+        "/api/v2/content-opportunities/source-verification",
+        json={
+            "trigger": "user_url",
+            "pasted_text": "Another outdated article",
+            "original_url": "https://example.com/another-old",
+            "expires_at": "2020-01-02T00:00:00Z",
+            "idempotency_key": "typed-expired-source-error",
+        },
+    )
+    assert created.status_code == 201
+    opportunity = created.json()["data"]
+
+    verified = await client.post(
+        f"/api/v2/content-opportunities/{opportunity['id']}:verify-source",
+        json={
+            "verification_status": "verified",
+            "original_url": "https://example.com/another-old",
+            "published_at": "2020-01-01T00:00:00Z",
+            "authoritative_source": "Example",
+            "timeliness": "current",
+            "confirmed_by_user": True,
+            "expected_opportunity_version": opportunity["version"],
+            "idempotency_key": "verify-for-typed-error-test",
+        },
+    )
+    assert verified.status_code == 201
+    verified_data = verified.json()["data"]
+
+    response = await client.post(
+        f"/api/v2/content-opportunities/{opportunity['id']}:decide",
+        json={
+            "decision": "accept",
+            "expected_opportunity_version": verified_data["version"],
+            "idempotency_key": "decide-expired-typed-error",
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["meta"]["error_code"] == "SOURCE_EXPIRED"
+
+
+@pytest.mark.asyncio
+async def test_expired_verified_source_carries_source_expired_required_action(client):
+    """After source verification, an opportunity whose source has expired must
+    carry required_action.action_type == 'source_expired' so the frontend can
+    read the backend contract rather than recalculating expiry client-side.
+    """
+    created = await client.post(
+        "/api/v2/content-opportunities/source-verification",
+        json={
+            "trigger": "user_url",
+            "pasted_text": "An expired article for required_action test",
+            "original_url": "https://example.com/ra-test",
+            "expires_at": "2020-01-02T00:00:00Z",
+            "idempotency_key": "required-action-expired-source",
+        },
+    )
+    assert created.status_code == 201
+    opportunity = created.json()["data"]
+
+    verified = await client.post(
+        f"/api/v2/content-opportunities/{opportunity['id']}:verify-source",
+        json={
+            "verification_status": "verified",
+            "original_url": "https://example.com/ra-test",
+            "published_at": "2020-01-01T00:00:00Z",
+            "authoritative_source": "Example",
+            "timeliness": "current",
+            "confirmed_by_user": True,
+            "expected_opportunity_version": opportunity["version"],
+            "idempotency_key": "verify-for-required-action-test",
+        },
+    )
+    assert verified.status_code == 201
+    verified_data = verified.json()["data"]
+
+    # The backend must signal the expired state, not leave required_action null.
+    assert verified_data["required_action"] is not None
+    assert verified_data["required_action"]["action_type"] == "source_expired"

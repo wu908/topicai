@@ -447,6 +447,10 @@ export interface ContentOpportunity {
     reason: string;
     accepted_inputs: Array<'original_url' | 'published_at' | 'authoritative_source' | 'timeliness'>;
     fallback: 'manual_verification';
+  } | {
+    action_type: 'source_expired';
+    reason: string;
+    fallback: 'reverify_source';
   } | null;
   project?: ContentProject;
 }
