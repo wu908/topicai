@@ -161,20 +161,6 @@ classDiagram
         +health_check() dict
     }
 
-    class ContentAnalyzer {
-        <<abstract>>
-        +analyze(content: Union~str,bytes~)* AnalysisResult
-    }
-
-    class TextAnalyzer {
-        +analyze(content: str) AnalysisResult
-    }
-
-    class ImageAnalyzer {
-        +analyze(content: bytes) AnalysisResult
-        +_call_vision_api(image: bytes) str
-    }
-
     class LLMClient {
         +str default_provider
         +dict providers
@@ -199,5 +185,3 @@ classDiagram
     DataSource <|-- LLMDataSource
     DataSource <|-- PreloadedDataSource
     DataManager o-- DataSource : manages
-    ContentAnalyzer <|-- TextAnalyzer
-    ContentAnalyzer <|-- ImageAnalyzer

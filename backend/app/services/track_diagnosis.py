@@ -23,9 +23,6 @@ FALLBACK_PROMPT = "你是一个内容市场分析师。请评估赛道的健康�
 class TrackDiagnosisService:
     """Content track diagnosis engine."""
 
-    def __init__(self):
-        pass
-
     # ---------- Heuristic helpers (preserved) ----------
 
     def _compute_scores(self, track_keyword: str) -> dict[str, Any]:

@@ -56,7 +56,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     Startup:
         - Initialize SQLite WAL mode
         - Start APScheduler (if configured)
-        - Initialize ChromaDB connection
 
     Shutdown:
         - Close database connections
@@ -78,26 +77,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         app.state.db = db
         await db.init_db()
         logger.info("Database initialized (SQLite WAL mode)")
-
-        # Apply pending SQL migrations through the Database's own engine
-        # (Spec-007 T004 + T103). The bridge routes file DBs to the sync
-        # runner via asyncio.to_thread and :memory: to the aiosqlite engine,
-        # so migrations always land on the SAME database init_db uses.
-        try:
-            await db.apply_migrations()
-        except Exception as e:
-            logger.warning(f"Migration runner skipped: {e}")
-
-        # Initialize ChromaDB (lazy - don't fail startup if unavailable)
-        try:
-            from app.core.chroma import get_chroma_client
-
-            chroma_client = get_chroma_client(settings.chroma_persist_dir)
-            app.state.chroma = chroma_client
-            logger.info("ChromaDB client initialized")
-        except Exception as e:
-            logger.warning(f"ChromaDB initialization skipped: {e}")
-            app.state.chroma = None
 
         # Initialize APScheduler for background tasks
         try:

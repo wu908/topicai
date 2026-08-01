@@ -23,9 +23,6 @@ FALLBACK_PROMPT = "你是发布时机顾问。请根据平台和内容类型推�
 class PublishAdvisorService:
     """Publish time suggestion service."""
 
-    def __init__(self):
-        pass
-
     # ---------- Heuristic helpers (preserved) ----------
 
     def _get_default_slots(

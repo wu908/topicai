@@ -1,12 +1,10 @@
 /**
  * AppLayout — V3 design (topicai-v3-login-meta.html).
  * Three-column layout: 200px sidebar | 780px main | 280px right panel.
- * Header is hidden (kept as DOM placeholder).
  */
 import React from 'react';
 import { useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
-import Header from './Header';
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -36,7 +34,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
           background: 'var(--v3-surface)',
         }}
       >
-        <Header />
         <div
           className="app-main-content"
           style={{

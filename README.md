@@ -118,7 +118,7 @@ TopicAI
 - 后端：FastAPI、Pydantic 2、SQLAlchemy 2、SQLite/aiosqlite、OpenAI-compatible SDK。
 - 前端：React 19、TypeScript 6、Vite 8、MUI 5、Zustand、Axios。
 - 测试：pytest、Vitest、Testing Library、Playwright。
-- 本地数据：SQLite WAL、可选 ChromaDB、本地对象存储。
+- 本地数据：SQLite WAL。
 
 ## 快速开始
 

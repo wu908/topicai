@@ -36,9 +36,6 @@ class FeedbackService:
     to adjust rubric weights and excluded patterns.
     """
 
-    def __init__(self):
-        pass
-
     # ---------------- public API ----------------
 
     async def submit(
@@ -111,7 +108,8 @@ class FeedbackService:
         query = (
             "SELECT id, user_id, source_type, source_id, feedback_type, "
             "feedback_value, reason, created_at "
-            "FROM user_feedback WHERE user_id = :uid"
+            "FROM user_feedback WHERE user_id = :uid "
+            "AND source_type != 'opportunity'"
         )
         params: dict[str, Any] = {"uid": user_id}
         if source_type:
@@ -182,7 +180,8 @@ class FeedbackService:
 
         # 2. Event count
         count_row = await db.fetch_one(
-            "SELECT COUNT(*) AS cnt FROM user_feedback WHERE user_id = :uid",
+            "SELECT COUNT(*) AS cnt FROM user_feedback "
+            "WHERE user_id = :uid AND source_type != 'opportunity'",
             {"uid": user_id},
         )
         total_events = int((count_row or {}).get("cnt", 0) or 0)
@@ -216,7 +215,8 @@ class FeedbackService:
         recent_rows = await db.fetch_all(
             "SELECT id, user_id, source_type, source_id, feedback_type, "
             "feedback_value, reason, created_at FROM user_feedback "
-            "WHERE user_id = :uid AND created_at >= :cutoff "
+            "WHERE user_id = :uid AND source_type != 'opportunity' "
+            "AND created_at >= :cutoff "
             "ORDER BY created_at DESC",
             {"uid": user_id, "cutoff": cutoff},
         )

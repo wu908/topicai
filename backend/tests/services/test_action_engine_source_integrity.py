@@ -17,7 +17,6 @@ ACTION_ENGINE_MODULES = (
 )
 FORBIDDEN_MODULE_PREFIXES = (
     "app.data_sources",
-    "app.config.data_source_config",
     "app.services.topic_recommend",
 )
 FORBIDDEN_SYMBOLS = {

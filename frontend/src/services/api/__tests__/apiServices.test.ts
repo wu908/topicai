@@ -163,7 +163,7 @@ describe('idea/title/topic/track wrappers', () => {
   });
 });
 
-// ─── publish.ts / viral.ts / feedback.ts / health.ts ───────────────────
+// ─── publish.ts / viral.ts / feedback.ts ───────────────────────────────
 describe('publish/viral/feedback/health wrappers', () => {
   it.skip('publish wrapper — function name TBD', () => {
     // Skipped: actual function name in publish.ts is different from guessed
@@ -190,9 +190,6 @@ describe('publish/viral/feedback/health wrappers', () => {
     expect(apiClient.get).toHaveBeenCalledWith('/feedback/history', { params: undefined });
   });
 
-  it.skip('health wrapper — function name TBD', () => {
-    // Skipped: actual function name in health.ts is 'checkHealth', not 'getHealth'
-  });
 });
 
 // ─── assets.ts / profiles.ts ───────────────────────────────────────────

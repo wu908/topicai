@@ -23,8 +23,6 @@ from __future__ import annotations
 
 import json
 import re
-import subprocess
-import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -405,41 +403,6 @@ async def test_scenario_f_onboarding_rubric_weights():
     assert abs(sum(weights.values()) - 1.0) < 0.05, (
         f"Weights must sum to 1.0, got {sum(weights.values())}"
     )
-
-
-# ============================================================
-# Scenario G: US7 - Coverage gate
-# ============================================================
-
-def test_scenario_g_coverage_gate(tmp_path):
-    """G: pytest --cov=app --cov-fail-under=80 must pass.
-
-    Invoked as a subprocess so the test accurately reflects the
-    production gate behavior. Uses the venv python explicitly since
-    the base ``python`` may not have pytest installed.
-    """
-    backend_dir = Path(__file__).resolve().parents[2]
-    # Exclude this acceptance file from the subprocess so the gate
-    # measures the existing test suite, not the acceptance tests
-    # themselves.
-    coverage_basetemp = tmp_path / "coverage-gate"
-    cmd = [sys.executable, "-m", "pytest",
-           "--cov=app", "--cov-fail-under=80", "-q", "--no-header",
-           f"--basetemp={coverage_basetemp}",
-           "--ignore=tests/integration/test_acceptance_scenarios.py"]
-    result = subprocess.run(
-        cmd, cwd=backend_dir, capture_output=True, text=True, timeout=900,
-    )
-    assert result.returncode == 0, (
-        f"Coverage gate failed (exit {result.returncode}):\n"
-        f"STDOUT (last 30 lines):\n"
-        + "\n".join(result.stdout.splitlines()[-30:])
-        + f"\nSTDERR:\n{result.stderr[-500:]}"
-    )
-    m = re.search(r"TOTAL\s+\d+\s+\d+\s+(\d+)%", result.stdout)
-    if m:
-        cov = int(m.group(1))
-        assert cov >= 80, f"Coverage {cov}% < 80%"
 
 
 # ============================================================

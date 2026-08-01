@@ -160,8 +160,8 @@ async def test_action_funnel_has_stable_denominator_and_safe_events(client, test
     response = await client.get(
         "/api/v2/internal/validation/action-metrics",
         params={
-            "start_at": "2026-07-01T00:00:00Z",
-            "end_at": "2026-08-01T00:00:00Z",
+            "start_at": "2026-07-15T00:00:00Z",
+            "end_at": "2026-08-15T00:00:00Z",
             "experiment_id": "E1",
             "cohort": "variant",
         },

@@ -44,6 +44,8 @@ import type {
   SeriesRevocationInput,
   SeriesExtensionCreateInput,
   OpportunityDecisionInput,
+  ManualOpportunityCreateInput,
+  OpportunitySourceVerificationInput,
   CreatorState,
 } from '@/types/contracts/v2/content';
 
@@ -247,10 +249,46 @@ export const decideContentOpportunity = (
     ),
   );
 
-export const listContentOpportunities = () =>
+export const createContentOpportunity = (input: ManualOpportunityCreateInput) =>
   getData(
-    v2Client.get<ApiEnvelope<{ items: ContentOpportunity[] }>>(
-      '/content-opportunities',
+    v2Client.post<ApiEnvelope<ContentOpportunity>>(
+      '/content-opportunities/source-verification',
+      input,
+    ),
+  );
+
+export const verifyContentOpportunitySource = (
+  opportunityId: string,
+  input: OpportunitySourceVerificationInput,
+) =>
+  getData(
+    v2Client.post<ApiEnvelope<ContentOpportunity>>(
+      `/content-opportunities/${opportunityId}:verify-source`,
+      input,
+    ),
+  );
+
+export const listContentOpportunities = (params?: {
+  type?: ContentOpportunity['opportunity_type'];
+  decision?: 'adopt' | 'save' | 'reject';
+  timeliness?: NonNullable<ContentOpportunity['dimensions']>['timeliness'];
+}) =>
+  getData(
+    params
+      ? v2Client.get<ApiEnvelope<{ items: ContentOpportunity[] }>>(
+        '/content-opportunities',
+        { params },
+      )
+      : v2Client.get<ApiEnvelope<{ items: ContentOpportunity[] }>>(
+        '/content-opportunities',
+      ),
+  );
+
+export const generateContentOpportunities = (desiredCount = 6) =>
+  getData(
+    v2Client.post<ApiEnvelope<{ items: ContentOpportunity[] }>>(
+      '/content-opportunities:generate',
+      { desired_count: desiredCount },
     ),
   );
 

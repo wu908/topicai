@@ -387,15 +387,31 @@ export interface CreatorSeries {
   revoked_at: string | null;
 }
 
+export interface OpportunitySourceReference {
+  ref_type: 'imported_note' | 'material' | 'validated_insight' | 'creator_profile' | 'creator_series' | 'user_keyword' | 'user_url' | 'official_inspiration';
+  entity_id: string | null;
+  url: string | null;
+  publisher: string | null;
+  published_at: string | null;
+  collected_at: string | null;
+  title: string | null;
+  excerpt: string | null;
+  verification_state: 'verified' | 'pending' | 'insufficient';
+  rights_note: string | null;
+}
+
 export interface ContentOpportunity {
   id: string;
-  opportunity_type: 'series_extension' | 'user_source';
+  opportunity_type: 'series_extension' | 'user_source' | 'history_derivative' | 'user_question' | 'material_derivative' | 'insight_derivative' | 'evergreen';
+  source_trigger: 'system' | 'user_keyword' | 'user_url' | 'official_inspiration';
   source_ref: string;
   source_excerpt: string | null;
   source_url: string | null;
   source_published_at: string | null;
   source_authority: string | null;
-  verification_status: 'verified' | 'pending_verification';
+  source_refs: OpportunitySourceReference[];
+  verification_status: 'verified' | 'pending_verification' | 'insufficient';
+  expires_at: string | null;
   content_intent: ContentIntent;
   content_format: ContentFormat;
   proposed_title: string;
@@ -407,11 +423,21 @@ export interface ContentOpportunity {
   confirmed_material_requirements: string[];
   evidence_refs: string[];
   unknown_refs: string[];
-  status: 'proposed' | 'accepted' | 'rejected';
+  status: 'proposed' | 'saved' | 'accepted' | 'rejected';
   proposal_source: 'ai' | 'deterministic_fallback';
   ai_trace_id: string;
   created_project_id: string | null;
   limitations: string[];
+  dimensions: {
+    audience_fit: 'strong' | 'medium' | 'weak' | 'unknown';
+    creator_fit: 'strong' | 'medium' | 'weak' | 'unknown';
+    material_readiness: 'ready' | 'partial' | 'missing';
+    growth_role: 'discovery' | 'trust' | 'series' | 'retention' | 'experiment';
+    series_potential: 'high' | 'medium' | 'low' | 'unknown';
+    timeliness: 'evergreen' | 'current' | 'expiring' | 'expired' | 'unknown';
+    similarity_risk: 'high' | 'medium' | 'low' | 'unknown';
+    safety_risk: 'high' | 'medium' | 'low' | 'unknown';
+  } | null;
   version: number;
   created_at: string;
   updated_at: string;
@@ -419,8 +445,12 @@ export interface ContentOpportunity {
   required_action: {
     action_type: 'verify_source';
     reason: string;
-    accepted_inputs: Array<'original_url' | 'published_at' | 'authoritative_source'>;
+    accepted_inputs: Array<'original_url' | 'published_at' | 'authoritative_source' | 'timeliness'>;
     fallback: 'manual_verification';
+  } | {
+    action_type: 'source_expired';
+    reason: string;
+    fallback: 'reverify_source';
   } | null;
   project?: ContentProject;
 }
@@ -758,7 +788,7 @@ export interface SeriesExtensionCreateInput {
 }
 
 export interface OpportunityDecisionInput {
-  decision: 'accept' | 'reject';
+  decision: 'accept' | 'save' | 'reject';
   confirmed_title?: string;
   confirmed_audience_change?: string;
   confirmed_material_requirements?: string[];
@@ -766,6 +796,29 @@ export interface OpportunityDecisionInput {
   confirmed_content_intent?: ContentIntent;
   confirmed_content_format?: ContentFormat;
   reason?: string;
+  expected_opportunity_version: number;
+  idempotency_key: string;
+}
+
+export interface ManualOpportunityCreateInput {
+  trigger: 'user_keyword' | 'user_url' | 'official_inspiration';
+  pasted_text: string;
+  original_url?: string;
+  published_at?: string;
+  authoritative_source?: string;
+  expires_at?: string;
+  content_intent?: ContentIntent;
+  idempotency_key: string;
+}
+
+export interface OpportunitySourceVerificationInput {
+  verification_status: 'verified' | 'insufficient';
+  original_url?: string;
+  published_at?: string;
+  authoritative_source?: string;
+  timeliness?: 'current' | 'expiring' | 'expired';
+  reason?: string;
+  confirmed_by_user: true;
   expected_opportunity_version: number;
   idempotency_key: string;
 }

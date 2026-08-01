@@ -30,19 +30,11 @@ dependencies = [
     "sqlalchemy==2.0.36",
     "aiosqlite==0.20.0",
     "openai==1.58.1",
-    "langchain==0.3.13",
-    "langchain-openai==0.2.14",
     "zhipuai==2.1.5.20250726",
     "httpx==0.28.1",
-    "python-jose[cryptography]==3.3.0",
     "passlib[bcrypt]==1.7.4",
-    "python-multipart==0.0.18",
     "apscheduler==3.11.0",
     "sentry-sdk==2.19.2",
-    "langfuse==2.56.0",
-    "posthog==3.7.4",
-    "python-dotenv==1.0.1",
-    "aiofiles==24.1.0",
 ]
 
 [project.optional-dependencies]

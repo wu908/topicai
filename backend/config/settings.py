@@ -27,11 +27,6 @@ class Settings(BaseSettings):
         default="sqlite+aiosqlite:///./data/topicai.db",
         alias="DATABASE_URL",
     )
-    chroma_persist_dir: str = Field(
-        default="./data/chroma",
-        alias="CHROMA_PERSIST_DIR",
-    )
-
     # ==================== Provider-neutral LLM ====================
     # Spec-008 v2 uses one OpenAI-compatible endpoint. The legacy provider
     # fields below remain temporarily for v1 compatibility and migration tests.
@@ -50,9 +45,7 @@ class Settings(BaseSettings):
     tianapi_key: str = Field(default="", alias="TIANAPI_KEY")
 
     # ==================== Content Project v2 ====================
-    content_project_v2_enabled: bool = Field(default=True, alias="CONTENT_PROJECT_V2_ENABLED")
     ai_enabled: bool = Field(default=True, alias="AI_ENABLED")
-    vision_enabled: bool = Field(default=False, alias="VISION_ENABLED")
 
     # ==================== Authentication ====================
     jwt_secret_key: str = Field(
@@ -82,26 +75,6 @@ class Settings(BaseSettings):
     sentry_dsn: str = Field(default="", alias="SENTRY_DSN")
     langfuse_public_key: str = Field(default="", alias="LANGFUSE_PUBLIC_KEY")
     langfuse_secret_key: str = Field(default="", alias="LANGFUSE_SECRET_KEY")
-    posthog_api_key: str = Field(default="", alias="POSTHOG_API_KEY")
-    posthog_host: str = Field(
-        default="https://app.posthog.com", alias="POSTHOG_HOST"
-    )
-
-    # ==================== Backup ====================
-    backup_dir: str = Field(default="./backups", alias="BACKUP_DIR")
-    backup_retention_count: int = Field(
-        default=30, alias="BACKUP_RETENTION_COUNT"
-    )
-    backup_schedule_hour: int = Field(default=3, alias="BACKUP_SCHEDULE_HOUR")
-    backup_schedule_minute: int = Field(
-        default=0, alias="BACKUP_SCHEDULE_MINUTE"
-    )
-
-    # ==================== Content Cleanup ====================
-    content_retention_days: int = Field(
-        default=90, alias="CONTENT_RETENTION_DAYS"
-    )
-
     # ==================== CORS ====================
     cors_origins: list[str] = Field(
         default=[
@@ -132,11 +105,6 @@ class Settings(BaseSettings):
         return self.environment.strip().lower() == "production"
 
     @property
-    def is_test(self) -> bool:
-        """Check if running in test environment (case-insensitive)."""
-        return self.environment.strip().lower() == "test"
-
-    @property
     def is_development(self) -> bool:
         """Check if running in development environment (case-insensitive)."""
         return self.environment.strip().lower() == "development"
@@ -156,4 +124,3 @@ def get_settings() -> Settings:
     if _settings is None:
         _settings = Settings()
     return _settings
-

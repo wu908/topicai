@@ -112,6 +112,16 @@ def _existing_columns(conn: sqlite3.Connection, table: str) -> set[str]:
     return {row[1] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
 
 
+def _replace_marked_expression(sql: str, marker: str, replacement: str) -> str:
+    start = f"/* runner:{marker}:start */"
+    end = f"/* runner:{marker}:end */"
+    before, found_start, remainder = sql.partition(start)
+    expression, found_end, after = remainder.partition(end)
+    if not found_start or not found_end or not expression.strip():
+        raise ValueError(f"migration expression marker is incomplete: {marker}")
+    return before + replacement + after
+
+
 def _ensure_columns(
     conn: sqlite3.Connection,
     table: str,
@@ -875,6 +885,25 @@ def apply(
                 conn.executescript(
                     sql[sql.index("CREATE TABLE IF NOT EXISTS history_imports") :]
                 )
+            elif version == "043_first_party_opportunities":
+                columns = _existing_columns(conn, "content_opportunities")
+                if "dimensions_json" in columns:
+                    sql = _replace_marked_expression(
+                        sql, "dimensions_json", "dimensions_json"
+                    )
+                if "source_trigger" in columns:
+                    sql = _replace_marked_expression(
+                        sql, "source_trigger", "source_trigger"
+                    ).replace(
+                        "verification_status,NULL,content_intent,",
+                        "verification_status,expires_at,content_intent,",
+                        1,
+                    )
+                if "source_refs_json" in columns:
+                    sql = _replace_marked_expression(
+                        sql, "source_refs_json", "source_refs_json"
+                    )
+                conn.executescript(sql)
             else:
                 conn.executescript(sql)
             post_step = MIGRATION_POST_STEPS.get(version)

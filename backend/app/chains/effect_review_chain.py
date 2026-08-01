@@ -46,26 +46,6 @@ _ATTRIBUTE_SYSTEM = (
 )
 
 
-def _load_prompt(module: str, fallback: str) -> str:
-    """Best-effort load of a prompt from the registry; fall back inline.
-
-    Spec-007 T006 lists ``effect_review`` prompt files as a Phase-1 task,
-    but the on-disk ``prompts/effect_review/v1/system.md`` may not exist
-    in every environment. We never want a missing prompt to take down the
-    chain — so we degrade to the inline fallback and log a warning.
-    """
-    try:
-        from app.prompts.registry import PromptRegistry
-
-        return PromptRegistry.get_prompt(module, "v1", "system.md")
-    except (FileNotFoundError, OSError):
-        logger.warning(
-            "effect_review_chain.prompt_missing",
-            extra={"prompt_module": module, "fallback": "inline"},
-        )
-        return fallback
-
-
 # ==================== Chain ====================
 
 
@@ -100,7 +80,7 @@ class EffectReviewChain:
             generic caveat is set.
         """
         prompt = _build_predict_prompt(topic_title, content_outline)
-        system_prompt = _load_prompt("effect_review.predict", _PREDICT_SYSTEM)
+        system_prompt = _PREDICT_SYSTEM
 
         try:
             from app.core.llm import LLMClient
@@ -141,7 +121,7 @@ class EffectReviewChain:
             pred_dict = prediction or {}
 
         prompt = _build_attribute_prompt(pred_dict, actual_result)
-        system_prompt = _load_prompt("effect_review.attribute", _ATTRIBUTE_SYSTEM)
+        system_prompt = _ATTRIBUTE_SYSTEM
 
         try:
             from app.core.llm import LLMClient
