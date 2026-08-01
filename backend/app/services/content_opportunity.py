@@ -925,8 +925,17 @@ class ContentOpportunityService:
                     },
                 )
                 if updated.rowcount != 1:
+                    actual = await session.execute(
+                        text(
+                            "SELECT version FROM content_opportunities"
+                            " WHERE id=:id AND owner_user_id=:owner"
+                        ),
+                        {"id": opportunity_id, "owner": owner},
+                    )
+                    actual_row = actual.fetchone()
                     raise VersionConflictException(
-                        opportunity["version"] + 1, body.expected_opportunity_version
+                        actual_row[0] if actual_row else opportunity["version"],
+                        body.expected_opportunity_version,
                     )
                 await self._event(
                     session,
@@ -1040,8 +1049,17 @@ class ContentOpportunityService:
                     },
                 )
                 if updated.rowcount != 1:
+                    actual = await session.execute(
+                        text(
+                            "SELECT version FROM content_opportunities"
+                            " WHERE id=:id AND owner_user_id=:owner"
+                        ),
+                        {"id": opportunity_id, "owner": owner},
+                    )
+                    actual_row = actual.fetchone()
                     raise VersionConflictException(
-                        opportunity["version"] + 1, body.expected_opportunity_version
+                        actual_row[0] if actual_row else opportunity["version"],
+                        body.expected_opportunity_version,
                     )
                 await self._event(
                     session, owner, opportunity_id, status, from_status, status,
@@ -1218,10 +1236,10 @@ class ContentOpportunityService:
             "FROM content_opportunities o LEFT JOIN content_projects p "
             "ON p.id=o.created_project_id AND p.owner_user_id=o.owner_user_id "
             "WHERE o.owner_user_id=:owner AND o.source_ref=:source "
-            "AND o.status IN ('proposed','accepted')",
+            "AND o.status IN ('proposed','saved','accepted')",
             {"owner": owner, "source": f"creator-series:{series_id}"},
         )
-        if any(row["status"] == "proposed" for row in rows):
+        if any(row["status"] in {"proposed", "saved"} for row in rows):
             raise ValueError("this series already has a pending opportunity")
         if any(
             row["status"] == "accepted"
