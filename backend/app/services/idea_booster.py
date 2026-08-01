@@ -36,9 +36,6 @@ class IdeaBoosterService:
     error, malformed JSON, schema mismatch — the template path runs.
     """
 
-    def __init__(self):
-        pass
-
     # ---------- LLM plumbing (lazy + isolated for tests) ----------
 
     def _get_llm(self):

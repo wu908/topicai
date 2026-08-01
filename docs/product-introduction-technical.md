@@ -176,7 +176,6 @@ POST /publish/suggest
 ```text
 POST /api/v1/viral/analyze
   → ViralAnalysisService
-    → ContentAnalyzerFactory 选择 TextAnalyzer / ImageAnalyzer
     → _analyze_with_llm() 真实调用 LLMClient.generate
     → 返回结构化 ViralAnalysis
 ```
@@ -301,9 +300,7 @@ stateDiagram-v2
 Assets:
   frontend → /api/v1/assets/*
     → AssetService
-    → LocalObjectStorage (backend/app/core/storage.py:32)
-    → assets 表 + 本地文件
-    → 可平滑替换为 S3/OSS
+    → assets 表 + 下载 URL
 
 Team:
   /api/v1/team/members

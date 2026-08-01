@@ -28,7 +28,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 def override_test_env(monkeypatch):
     """Override environment variables for testing."""
     monkeypatch.setenv("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
-    monkeypatch.setenv("CHROMA_PERSIST_DIR", "./test_chroma/")
     monkeypatch.setenv("DEEPSEEK_API_KEY", "test-deepseek-key")
     monkeypatch.setenv("DASHSCOPE_API_KEY", "test-dashscope-key")
     monkeypatch.setenv("ZHIPU_API_KEY", "test-zhipu-key")
@@ -49,19 +48,13 @@ def override_test_env(monkeypatch):
 async def test_db():
     """SQLite :memory: mode database, isolated per test.
 
-    Schema comes from ``Database.apply_migrations()`` (the migration runner
-    routed through the aiosqlite engine — T103), NOT from an inline
-    re-implementation of migrations 002/003/004. ``init_db`` still also runs
-    the legacy SQL_SCHEMA until T104 retires it; the bridge then makes the
-    migration-only tables (user_feedback / risk_keywords / platform_tokens)
-    available on the SAME in-memory engine the tests use.
+    Schema comes from ``Database.init_db()`` and its migration runner, using
+    the same in-memory engine the tests use.
     """
     from app.core.database import Database
 
     db = Database("sqlite+aiosqlite:///:memory:")
     await db.init_db()
-    await db.apply_migrations()
-
     yield db
     await db.close()
 

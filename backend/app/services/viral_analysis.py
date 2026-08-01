@@ -19,9 +19,6 @@ class ViralAnalysisService:
     Supports text and image input (image → GLM-5V-Turbo → text → chain).
     """
 
-    def __init__(self):
-        pass
-
     def validate_input(self, content: str, input_type: str) -> None:
         """Validate input content.
 

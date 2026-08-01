@@ -307,15 +307,11 @@ class TestDatabaseApplyMigrations:
     """
 
     @pytest.mark.asyncio
-    async def test_database_apply_migrations_creates_tables_on_memory(self):
+    async def test_database_init_db_applies_migrations_on_memory(self):
         from app.core.database import Database
 
         db = Database("sqlite+aiosqlite:///:memory:")
-        # init_db creates the engine, sets pragmas, and (once T104 lands)
-        # calls apply_migrations. During T102 init_db still also runs
-        # SQL_SCHEMA, so we exercise the bridge directly here.
         await db.init_db()
-        await db.apply_migrations()
         try:
             async with db.engine.begin() as conn:  # type: ignore[union-attr]
                 rows = await conn.execute(

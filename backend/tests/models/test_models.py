@@ -93,59 +93,6 @@ class TestCommonModels:
         assert resp.meta == {"ai_quality": {"confidence": 0.9}}
 
 
-class TestUserModel:
-    """TC02-01: User model validation."""
-
-    def test_user_creation(self):
-        """Given valid User data, When creating User,
-        Then ai_calls_today defaults to 0."""
-        from app.models.user import UserCreate
-
-        create = UserCreate(
-            email="test@example.com",
-            username="testuser",
-            password="securepassword123",
-        )
-        assert create.email == "test@example.com"
-        assert create.username == "testuser"
-
-    def test_user_email_validation(self):
-        """Given invalid email, When validated, Then error."""
-        from app.models.user import UserCreate
-
-        with pytest.raises(ValidationError):
-            UserCreate(
-                email="not-an-email",
-                username="test",
-                password="password123",
-            )
-
-    def test_user_short_password(self):
-        """Given short password, When validated, Then error."""
-        from app.models.user import UserCreate
-
-        with pytest.raises(ValidationError):
-            UserCreate(
-                email="test@test.com",
-                username="test",
-                password="short",
-            )
-
-    def test_user_response_format(self):
-        """Given UserResponse, When checked, Then has correct fields."""
-        from app.models.user import UserResponse
-
-        resp = UserResponse(
-            id="user-1",
-            email="test@example.com",
-            username="testuser",
-            ai_calls_today=5,
-            created_at=utc_now(),
-        )
-        assert resp.id == "user-1"
-        assert resp.ai_calls_today == 5
-
-
 class TestCreatorProfileModel:
     """Test CreatorProfile schema."""
 

@@ -214,15 +214,6 @@ class TestConfigurationLoading:
         settings = Settings()
         assert settings.tianapi_key == "test-tianapi-key"
 
-    def test_settings_monitoring_disabled_in_test(self):
-        """Given test environment, When loading settings,
-        Then monitoring DSNs are empty."""
-        from config.settings import Settings
-
-        settings = Settings()
-        assert settings.sentry_dsn == ""
-        assert settings.langfuse_public_key == ""
-
     def test_settings_ai_call_limit_default(self):
         """Given no custom limit, When loading settings,
         Then ai_calls_per_day defaults to 20."""

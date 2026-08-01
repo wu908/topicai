@@ -13,15 +13,6 @@ def test_get_scheduler_returns_none_before_init() -> None:
 
 
 @pytest.mark.asyncio
-async def test_run_helpers_are_quiet_noops() -> None:
-    """The four _run_* helpers are pass-throughs in v4.0; should not raise."""
-    await scheduler_mod._run_backup()  # noqa: SLF001
-    await scheduler_mod._run_health_check()  # noqa: SLF001
-    await scheduler_mod._run_content_cleanup()  # noqa: SLF001
-    await scheduler_mod._run_data_refresh()  # noqa: SLF001
-
-
-@pytest.mark.asyncio
 async def test_observation_window_job_marks_due_projects(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -43,7 +34,7 @@ async def test_observation_window_job_marks_due_projects(
 
 
 def test_init_scheduler_registers_jobs(monkeypatch: pytest.MonkeyPatch) -> None:
-    """init_scheduler wires 4 jobs onto a stub scheduler and starts it."""
+    """init_scheduler wires observation reminders and starts the scheduler."""
     scheduler_mod._scheduler = None  # noqa: SLF001
 
     class _StubJob:
@@ -72,25 +63,13 @@ def test_init_scheduler_registers_jobs(monkeypatch: pytest.MonkeyPatch) -> None:
         raising=False,
     )
 
-    # settings: defaults are fine; ensure backup_schedule_hour/minute exist
-    from config.settings import get_settings  # type: ignore[import-not-found]
-    s = get_settings()
-    assert hasattr(s, "backup_schedule_hour")
-    assert hasattr(s, "backup_schedule_minute")
-
     db = object()
     result = scheduler_mod.init_scheduler(db)
     assert result is stub
     assert stub.started is True
-    assert len(stub.jobs) == 5
+    assert len(stub.jobs) == 1
     job_ids = {j.kwargs["id"] for j in stub.jobs}
-    assert job_ids == {
-        "daily_backup",
-        "health_check",
-        "content_cleanup",
-        "data_refresh",
-        "observation_window_reminders",
-    }
+    assert job_ids == {"observation_window_reminders"}
     reminder_job = next(
         job for job in stub.jobs if job.kwargs["id"] == "observation_window_reminders"
     )

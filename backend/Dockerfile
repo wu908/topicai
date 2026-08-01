@@ -16,7 +16,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
 COPY . .
 
 # Create data directories
-RUN mkdir -p /app/data /app/backups /app/logs /app/chroma_db
+RUN mkdir -p /app/data /app/logs
 
 EXPOSE 8000
 

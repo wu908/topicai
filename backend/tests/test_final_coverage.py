@@ -6,7 +6,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.prompts.registry import PromptRegistry
 from app.services.topic_recommend import TopicRecommendService
 from app.services.track_diagnosis import TrackDiagnosisService
 
@@ -107,79 +106,6 @@ class TestTrackDiagnosisService:
         # (Constitution Principle VI: hybrid AI discipline).
         assert out["confidence"] <= 0.5
         assert out["data_source"] == "template_fallback"
-
-
-class TestPromptRegistry:
-    def test_list_modules_returns_sorted_list(self):
-        # Spec-007 fix: PromptRegistry.list_modules now returns a sorted
-        # list (not a set) so iteration order is deterministic. Set
-        # iteration order is hash-based, so `next(iter(set))` could pick
-        # any module — including ones whose v1/ has no system.md
-        # (e.g. effect_review, viral_analysis) — making 3 other tests
-        # in this class flaky.
-        mods = PromptRegistry.list_modules()
-        assert isinstance(mods, list)
-        assert len(mods) > 0
-        assert mods == sorted(mods)
-
-    def test_list_versions_for_real_module(self):
-        mods = PromptRegistry.list_modules()
-        if mods:
-            m = next(iter(mods))
-            versions = PromptRegistry.list_versions(m)
-            assert isinstance(versions, list)
-            assert all(v.startswith("v") for v in versions)
-
-    def test_list_versions_unknown_module_returns_empty(self):
-        assert PromptRegistry.list_versions("nonexistent_module_xyz") == []
-
-    def test_get_latest_version_for_real_module(self):
-        mods = PromptRegistry.list_modules()
-        if mods:
-            m = next(iter(mods))
-            v = PromptRegistry.get_latest_version(m)
-            assert v.startswith("v")
-
-    def test_get_latest_version_unknown_raises(self):
-        with pytest.raises(FileNotFoundError, match="No versions"):
-            PromptRegistry.get_latest_version("nonexistent_module_xyz")
-
-    def test_get_prompt_loads_system_md(self):
-        mods = PromptRegistry.list_modules()
-        if mods:
-            m = next(iter(mods))
-            v = PromptRegistry.get_latest_version(m)
-            content = PromptRegistry.get_prompt(m, version=v, file_name="system.md")
-            assert isinstance(content, str)
-            assert len(content) > 0
-
-    def test_get_prompt_latest_keyword(self):
-        mods = PromptRegistry.list_modules()
-        if mods:
-            m = next(iter(mods))
-            content = PromptRegistry.get_prompt(m, version="latest", file_name="system.md")
-            assert isinstance(content, str)
-
-    def test_get_prompt_missing_file_raises(self):
-        mods = PromptRegistry.list_modules()
-        if mods:
-            m = next(iter(mods))
-            v = PromptRegistry.get_latest_version(m)
-            with pytest.raises(FileNotFoundError, match="Prompt file not found"):
-                PromptRegistry.get_prompt(m, version=v, file_name="nonexistent.md")
-
-    def test_validate_version_real(self):
-        mods = PromptRegistry.list_modules()
-        if mods:
-            m = next(iter(mods))
-            v = PromptRegistry.get_latest_version(m)
-            assert PromptRegistry.validate_version(m, v) is True
-
-    def test_validate_version_bad_format(self):
-        assert PromptRegistry.validate_version("any", "1.0") is False
-
-    def test_validate_version_unknown(self):
-        assert PromptRegistry.validate_version("nonexistent", "v1") is False
 
 
 class TestTianAPIFetchEndpoint:

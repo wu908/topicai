@@ -27,9 +27,6 @@ class TitleOptimizerService:
     technique explanations.
     """
 
-    def __init__(self):
-        pass
-
     # ---------- Heuristic helpers (preserved for existing tests) ----------
 
     def _generate_variations(self, original_title: str) -> list[str]:

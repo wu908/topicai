@@ -36,9 +36,6 @@ class FeedbackService:
     to adjust rubric weights and excluded patterns.
     """
 
-    def __init__(self):
-        pass
-
     # ---------------- public API ----------------
 
     async def submit(
