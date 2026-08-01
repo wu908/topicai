@@ -56,13 +56,25 @@ class OpportunityDimensions(StrictModel):
     safety_risk: Literal["high", "medium", "low", "unknown"]
 
 
-class OpportunityRequiredAction(StrictModel):
+class VerifySourceAction(StrictModel):
     action_type: Literal["verify_source"]
     reason: str
     accepted_inputs: list[
         Literal["original_url", "published_at", "authoritative_source", "timeliness"]
     ]
     fallback: Literal["manual_verification"]
+
+
+class SourceExpiredAction(StrictModel):
+    action_type: Literal["source_expired"]
+    reason: str
+    fallback: Literal["reverify_source"]
+
+
+OpportunityRequiredAction = Annotated[
+    VerifySourceAction | SourceExpiredAction,
+    Field(discriminator="action_type"),
+]
 
 
 class SourceReference(StrictModel):
