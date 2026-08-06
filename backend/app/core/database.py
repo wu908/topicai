@@ -236,11 +236,99 @@ class Database:
                     )
                 ).fetchall()
             }
+
+            async def ensure_columns(
+                table: str, columns: list[tuple[str, str]]
+            ) -> None:
+                present = {
+                    row[1]
+                    for row in (
+                        await conn.execute(text(f"PRAGMA table_info({table})"))
+                    ).fetchall()
+                }
+                for name, ddl_type in columns:
+                    if name not in present:
+                        await conn.execute(
+                            text(f"ALTER TABLE {table} ADD COLUMN {name} {ddl_type}")
+                        )
+                        present.add(name)
+
             for path in files:
                 version = path.stem
                 if version in known:
                     continue
                 sql = path.read_text(encoding="utf-8")
+                if version == "046_release_contract_gaps":
+                    await ensure_columns(
+                        "users",
+                        [
+                            ("xiaohongshu_account_reference", "TEXT"),
+                            (
+                                "settings_version",
+                                "INTEGER NOT NULL DEFAULT 1 CHECK (settings_version >= 1)",
+                            ),
+                        ],
+                    )
+                    await ensure_columns(
+                        "materials",
+                        [
+                            ("content_text", "TEXT"),
+                            ("storage_path", "TEXT"),
+                            (
+                                "privacy_level",
+                                "TEXT NOT NULL DEFAULT 'private' CHECK "
+                                "(privacy_level IN ('public','private','sensitive'))",
+                            ),
+                            (
+                                "version",
+                                "INTEGER NOT NULL DEFAULT 1 CHECK (version >= 1)",
+                            ),
+                            ("idempotency_key", "TEXT"),
+                            ("request_hash", "TEXT"),
+                        ],
+                    )
+                elif version == "048_release_audit_fixes":
+                    await ensure_columns("users", [("credentials_revoked_at", "TEXT")])
+                    await ensure_columns(
+                        "ai_traces_v2",
+                        [
+                            (
+                                "user_decision",
+                                "TEXT NOT NULL DEFAULT 'pending' CHECK "
+                                "(user_decision IN "
+                                "('pending','confirmed','rejected','edited'))",
+                            ),
+                            (
+                                "confidence_label",
+                                "TEXT NOT NULL DEFAULT 'low' CHECK "
+                                "(confidence_label IN "
+                                "('high','medium','low','unavailable'))",
+                            ),
+                            (
+                                "outcome",
+                                "TEXT NOT NULL DEFAULT 'success' CHECK "
+                                "(outcome IN "
+                                "('success','fallback','failed','cancelled'))",
+                            ),
+                        ],
+                    )
+                    await ensure_columns(
+                        "snapshot_extractions_v2",
+                        [
+                            (
+                                "user_decision",
+                                "TEXT NOT NULL DEFAULT 'pending' CHECK "
+                                "(user_decision IN "
+                                "('pending','confirmed','rejected','edited'))",
+                            ),
+                            ("decided_at", "TEXT"),
+                            (
+                                "snapshot_id",
+                                "TEXT REFERENCES performance_snapshots_v2(id) "
+                                "ON DELETE SET NULL",
+                            ),
+                        ],
+                    )
                 for stmt in _split_sql_statements(sql):
                     await conn.execute(text(stmt))
                 await conn.execute(

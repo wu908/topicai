@@ -42,6 +42,13 @@ jobs:
       - name: Install backend dependencies
         run: python -m pip install -r requirements-dev.txt bandit==1.8.6
 
+      - name: Check v2 source and UTF-8 integrity
+        working-directory: .
+        shell: pwsh
+        run: |
+          ./scripts/check-v2-source-integrity.ps1
+          ./scripts/check-utf8.ps1
+
       - name: Check backend quality and security
         run: |
           python -m ruff check app config tests
@@ -103,7 +110,7 @@ jobs:
         run: pnpm --dir frontend lint
 
       - name: Run frontend unit tests
-        run: pnpm --dir frontend test
+        run: pnpm --dir frontend exec vitest run --coverage
 
       - name: Build frontend
         run: pnpm --dir frontend build
@@ -137,7 +144,7 @@ jobs:
           exit 1
 
       - name: Run frontend E2E suites
-        run: pnpm --dir frontend exec playwright test e2e/starter-flow.spec.ts e2e/intent-driven-loop.spec.ts
+        run: pnpm --dir frontend exec playwright test
 
       - name: Upload Playwright artifacts
         if: always()

@@ -210,7 +210,7 @@ Reconciles the existing asset domain.
 | `source_url` | text nullable | links |
 | `storage_path` | text nullable | reuse local object storage |
 | `mime_type`, `size` | existing | file metadata |
-| `privacy_level` | enum | `public`, `account_private`, `sensitive` |
+| `privacy_level` | enum | `public`, `private`, `sensitive` |
 | `origin` | enum | `manual`, `history_import`, `interview`, `screenshot` |
 | `source_ref_json` | JSON nullable | traceable external/import source |
 
@@ -248,6 +248,12 @@ A finding includes `finding_id`, `start`, `end`, `matched_text`, `reason`, `seve
 
 MVP metric keys: `views`, `likes`, `favorites`, `comments`, `shares`, `follows_gained`. Missing metrics are null, not zero.
 
+### SnapshotExtraction
+
+An AI-assisted screenshot proposal: `material_id`, `metrics_json`, `ai_trace_id`, `user_decision` (`pending`, `confirmed`, `rejected`, `edited`), `decided_at`, and `snapshot_id`.
+
+`material_id` and `snapshot_id` are nullable after migration 048. Deleting a source material or the derived snapshot changes the corresponding reference to `NULL` with `ON DELETE SET NULL`; the proposal and trace remain auditable until account deletion. Confirming changed values records `edited`; accepting unchanged values records `confirmed`.
+
 ### Review
 
 `project_id`, `publish_record_id`, `status` (`draft`, `completed`, `reopened`), `facts_json`, `hypotheses_json`, `continue_action`, `stop_action`, `experiment_action`, `ai_trace_id`, `completed_at`, `revision_number`.
@@ -282,6 +288,7 @@ Reconcile existing table to generic targets:
 - Raw imported content and screenshot materials default to 90-day expiry unless promoted to a retained Material.
 - External excerpts retain only the minimal text needed for provenance plus rights note.
 - AI traces retain identifiers, policy, limitations, and decisions; raw prompts/responses are not required domain fields.
+- Account deletion revokes credentials inside its database transaction and moves the owner storage directory to a job-scoped quarantine first. A transaction failure restores that directory; successful commit purges it. The completed deletion retains only the minimal account-data job audit record.
 
 ## Migration Sequence
 
@@ -292,5 +299,8 @@ Implemented foundation and cleanup migrations:
 3. `042_growth_onboarding.sql` and `043_first_party_opportunities.sql`: growth profile/import and first-party opportunity sources.
 4. `044_repair_opportunity_sources.sql`: source-reference repair.
 5. `045_drop_legacy_v1_tables.sql`: migrate asset data to `materials`, rebuild `creator_profiles` as v2-only, and drop v1-only business tables.
+6. `046_release_contract_gaps.sql`: material payload/privacy/version fields, version-bound publish checks/resolutions, and screenshot extraction proposals.
+7. `047_account_data_jobs.sql`: minimal persisted job state for owner export and deletion; account deletion retains only this operational audit record.
+8. `048_release_audit_fixes.sql`: credential revocation, screenshot-extraction decisions, full export linkage, and legacy material-kind normalization.
 
 Historical SQL files remain immutable for upgrades. No old recommendation, title, viral, publish-suggestion, or prediction row is copied into the v2 domain.

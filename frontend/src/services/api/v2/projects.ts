@@ -47,6 +47,12 @@ import type {
   ManualOpportunityCreateInput,
   OpportunitySourceVerificationInput,
   CreatorState,
+  Material,
+  PublishCheck,
+  SnapshotExtractionProposal,
+  UserSettings,
+  AccountDataJob,
+  OwnerDataExport,
 } from '@/types/contracts/v2/content';
 
 async function getData<T>(promise: Promise<{ data: ApiEnvelope<T> }>): Promise<T> {
@@ -326,6 +332,73 @@ export const appendSnapshot = (publishRecordId: string, input: SnapshotInput) =>
       input,
     ),
   );
+
+export const listMaterials = () =>
+  getData(v2Client.get<ApiEnvelope<{ items: Material[]; total: number }>>('/materials'));
+
+export const createMaterial = (input: {
+  kind: Material['kind'];
+  title: string;
+  content?: string;
+  content_base64?: string;
+  mime_type?: string;
+  privacy_level: Material['privacy_level'];
+  project_id?: string;
+  idempotency_key: string;
+}) => getData(v2Client.post<ApiEnvelope<Material>>('/materials', input));
+
+export const addMaterialUsage = (
+  materialId: string,
+  input: { project_id: string; idempotency_key: string },
+) => getData(v2Client.post<ApiEnvelope<Material>>(`/materials/${materialId}/usages`, input));
+
+export const deleteMaterial = (materialId: string, confirmed = false) =>
+  v2Client.delete(`/materials/${materialId}`, { params: { confirmed } });
+
+export const getUserSettings = () =>
+  getData(v2Client.get<ApiEnvelope<UserSettings>>('/settings'));
+
+export const updateUserSettings = (input: {
+  weekly_publish_goal: number;
+  content_strategy: string;
+  xiaohongshu_account_reference?: string;
+  consent: Record<string, unknown>;
+  expected_version: number;
+}) => getData(v2Client.put<ApiEnvelope<UserSettings>>('/settings', input));
+
+export const runPublishCheck = (
+  projectId: string,
+  input: { content_version_id: string; idempotency_key: string },
+) => getData(v2Client.post<ApiEnvelope<PublishCheck>>(`/projects/${projectId}/publish-checks`, input));
+
+export const getLatestPublishCheck = (projectId: string) =>
+  getData(v2Client.get<ApiEnvelope<PublishCheck | null>>(`/projects/${projectId}/publish-checks/latest`));
+
+export const resolvePublishCheck = (
+  checkId: string,
+  input: { findings: Record<string, 'acknowledged' | 'resolved'>; idempotency_key: string },
+) => getData(v2Client.put<ApiEnvelope<PublishCheck>>(`/publish-checks/${checkId}/resolution`, input));
+
+export const extractSnapshotMetrics = (input: { material_id: string; idempotency_key: string }) =>
+  getData(v2Client.post<ApiEnvelope<SnapshotExtractionProposal>>('/snapshots:extract', input));
+
+export const requestDataExport = (idempotencyKey: string) =>
+  getData(v2Client.post<ApiEnvelope<HumanGate>>('/account/data-export:request', {
+    idempotency_key: idempotencyKey,
+  }));
+
+export const downloadDataExport = (gateId: string) =>
+  getData(v2Client.get<ApiEnvelope<OwnerDataExport>>('/account/data-export', {
+    params: { gate_id: gateId },
+  }));
+
+export const requestAccountDeletion = (idempotencyKey: string) =>
+  getData(v2Client.post<ApiEnvelope<HumanGate>>('/account/deletion:request', {
+    idempotency_key: idempotencyKey,
+  }));
+
+export const deleteAccount = (gateId: string) =>
+  getData(v2Client.delete<ApiEnvelope<AccountDataJob>>('/account', { params: { gate_id: gateId } }));
 
 export const createBlindReview = (projectId: string, input: BlindReviewInput) =>
   getData(

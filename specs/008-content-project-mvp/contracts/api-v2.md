@@ -40,17 +40,22 @@
 | `PUT /ai-suggestions/{id}/decision` | Accept/reject suggestion | decision, reason, expected project version | New version if accepted; feedback event always |
 | `PUT /projects/{id}/draft-recovery` | Store recoverable working draft | device id, base version, draft, expiry | Recovery pointer |
 | `POST /projects/{id}/publish-checks` | Check a selected version | `content_version_id`, `idempotency_key` | Version-bound findings |
+| `GET /projects/{id}/publish-checks/latest` | Read the newest project check | none | Latest check or `null` |
 | `PUT /publish-checks/{id}/resolution` | Acknowledge/resolve findings | finding decisions | Updated check; original findings unchanged |
 | `POST /projects/{id}/publish-records` | Lock version and record publication | version id, note URL, published time, idempotency | Immutable publish record |
 | `POST /publish-records/{id}/snapshots` | Append manual/confirmed screenshot metrics | captured time, source, metrics, confirmation, supersedes id, idempotency | Snapshot |
-| `POST /snapshots:extract` | Extract proposed metrics from screenshot | material id | Unconfirmed values + AI trace or vision-unavailable error |
+| `POST /snapshots:extract` | Extract proposed metrics from screenshot | material id | Unconfirmed values, decision state, and complete AI trace, or vision-unavailable error |
 | `GET/PUT /projects/{id}/review` | Read/save fact-hypothesis-experiment review | facts, hypotheses, one continue/stop/experiment, `expected_version` | Review and proposed insights |
 | `PUT /insights/{id}/decision` | Confirm/reject/retire insight | state | Insight; only confirmed enters context |
 | `GET/POST /materials` | List/create text/link/image/document materials | filters; or kind/title/content/privacy/project | Material list/material |
 | `GET/PATCH/DELETE /materials/{id}` | Read/update/delete with impact check | changes, expected version | Material or dependency impact |
-| GET/PUT /settings | Read/update weekly goal, strategy, account reference, and consent | changed fields, expected_version | User settings and AI capability status |
-| `POST /account/export` | Request full personal-data export | none | Job state |
-| `POST /account/deletion` | Revoke credentials and request deletion | confirmation | Job state |
+| `GET /materials/{id}/content` | Download stored image/document bytes | none | Original media bytes |
+| `POST /materials/{id}/usages` | Reuse a material in another project | project id, idempotency key | Updated material and usages |
+| `GET/PUT /settings` | Read/update weekly goal, strategy, account reference, and consent | changed fields, `expected_version` | User settings and AI capability status |
+| `POST /account/data-export:request` | Open an owner-scoped privacy gate | idempotency key | Pending HumanGate |
+| `GET /account/data-export` | Export after confirming the privacy gate | `gate_id` | Owner data plus completed audit job |
+| `POST /account/deletion:request` | Open an owner-scoped deletion gate | idempotency key | Pending HumanGate |
+| `DELETE /account` | Delete after confirming the deletion gate | `gate_id` | `202` with completed minimal audit job |
 
 ## Canonical Types
 
@@ -103,6 +108,15 @@ screenshot_material_id?, confirmed_by_user, supersedes_id?, created_at
 ```
 
 Missing metrics are `null`, never inferred as zero. Screenshot extraction is proposed data until user confirmation.
+
+### `SnapshotExtraction`
+
+```text
+id, material_id?, metrics, confirmed_by_user, user_decision=pending|confirmed|rejected|edited,
+decided_at?, snapshot_id?, ai_trace{capability=vision, confidence_label, limitations[], outcome}
+```
+
+Changing any proposed metric before confirmation records `edited`; accepting unchanged proposed values records `confirmed`. `material_id` and `snapshot_id` become `null` when their source material or derived snapshot is deleted, retaining the extraction and AI audit trail until account deletion.
 
 ### `Review`
 

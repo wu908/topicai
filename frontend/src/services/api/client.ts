@@ -142,7 +142,8 @@ export function createApiClient(apiPrefix: '/api/v2') {
       request<T>(baseUrl, 'PUT', url, data),
     patch: <T>(url: string, data?: unknown) =>
       request<T>(baseUrl, 'PATCH', url, data),
-    delete: <T>(url: string) => request<T>(baseUrl, 'DELETE', url),
+    delete: <T>(url: string, config?: { params?: Record<string, unknown> }) =>
+      request<T>(baseUrl, 'DELETE', url, undefined, config?.params),
   };
 }
 

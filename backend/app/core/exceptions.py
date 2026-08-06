@@ -52,6 +52,27 @@ class LLMStructuredOutputException(LLMException):
         self.retries = retries
 
 
+class AINotConfiguredException(LLMException):
+    def __init__(self):
+        super().__init__(
+            "AI is not configured; continue with the manual path",
+            503,
+            "AI_NOT_CONFIGURED",
+            "openai_compatible",
+        )
+
+
+class AICapabilityMissingException(LLMException):
+    def __init__(self, capability: str):
+        super().__init__(
+            f"AI capability is not available: {capability}",
+            422,
+            "AI_CAPABILITY_MISSING",
+            "openai_compatible",
+        )
+        self.capability = capability
+
+
 class AuthenticationException(AppException):
     def __init__(self, message: str = "Authentication failed"):
         super().__init__(message, 401, "AUTHENTICATION_FAILED")
@@ -108,6 +129,35 @@ class IdempotencyConflictException(AppException):
         )
 
 
+class MaterialInUseException(AppException):
+    def __init__(self, details: dict):
+        super().__init__(
+            "Material is referenced by one or more projects",
+            409,
+            "MATERIAL_IN_USE",
+        )
+        self.details = details
+
+
+class PublishCheckBlockedException(AppException):
+    def __init__(self, check: dict):
+        stale = bool(check.get("stale"))
+        super().__init__(
+            "Publish check is stale" if stale else "Publish check findings require a decision",
+            409,
+            "PUBLISH_CHECK_STALE" if stale else "PUBLISH_CHECK_UNRESOLVED",
+        )
+        self.details = {
+            "publish_check_id": check.get("id"),
+            "status": check.get("status"),
+            "open_finding_ids": [
+                item["id"]
+                for item in check.get("findings", [])
+                if item.get("status") == "open"
+            ],
+        }
+
+
 def setup_exception_handlers(app: "FastAPI") -> None:
     from fastapi import Request
     from fastapi.encoders import jsonable_encoder
@@ -139,6 +189,8 @@ def setup_exception_handlers(app: "FastAPI") -> None:
                 "current_version": exc.current_version,
                 "expected_version": exc.expected_version,
             }
+        elif hasattr(exc, "details"):
+            meta["details"] = exc.details
         return JSONResponse(
             status_code=exc.status_code,
             content={

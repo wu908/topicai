@@ -104,6 +104,17 @@ def test_content_project_calibration_schema_applies_and_replays(tmp_path):
             "request_hash",
             "created_at",
         } <= event_columns
+        assert "credentials_revoked_at" in {
+            row[1] for row in conn.execute("PRAGMA table_info(users)")
+        }
+        assert "user_decision" in {
+            row[1] for row in conn.execute("PRAGMA table_info(ai_traces_v2)")
+        }
+        assert {"user_decision", "decided_at", "snapshot_id"} <= {
+            row[1] for row in conn.execute(
+                "PRAGMA table_info(snapshot_extractions_v2)"
+            )
+        }
 
 
 def test_project_state_event_migration_recovers_after_ddl_before_version_record(
@@ -130,8 +141,70 @@ def test_project_state_event_migration_recovers_after_ddl_before_version_record(
         "043_first_party_opportunities",
         "044_repair_opportunity_sources",
         "045_drop_legacy_v1_tables",
+        "046_release_contract_gaps",
+        "047_account_data_jobs",
+        "048_release_audit_fixes",
     ]
     assert replay == []
+
+
+def test_release_contract_migration_recovers_after_partial_ddl(tmp_path):
+    db_path = tmp_path / "release-contract-recovery.db"
+    through_045 = tmp_path / "through-045"
+    through_045.mkdir()
+    for path in DEFAULT_MIGRATIONS_DIR.glob("[0-9][0-9][0-9]_*.sql"):
+        if int(path.name[:3]) <= 45:
+            shutil.copy2(path, through_045 / path.name)
+
+    apply(db_path, through_045)
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            "ALTER TABLE users ADD COLUMN xiaohongshu_account_reference TEXT"
+        )
+
+    upgraded = apply(db_path, DEFAULT_MIGRATIONS_DIR)
+    replay = apply(db_path, DEFAULT_MIGRATIONS_DIR)
+
+    assert [item.version for item in upgraded] == [
+        "046_release_contract_gaps",
+        "047_account_data_jobs",
+        "048_release_audit_fixes",
+    ]
+    assert replay == []
+
+
+def test_release_audit_migration_recovers_after_partial_ddl(tmp_path):
+    db_path = tmp_path / "release-audit-recovery.db"
+    through_047 = tmp_path / "through-047"
+    through_047.mkdir()
+    for path in DEFAULT_MIGRATIONS_DIR.glob("[0-9][0-9][0-9]_*.sql"):
+        if int(path.name[:3]) <= 47:
+            shutil.copy2(path, through_047 / path.name)
+
+    apply(db_path, through_047)
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("ALTER TABLE users ADD COLUMN credentials_revoked_at TEXT")
+        conn.execute(
+            "ALTER TABLE ai_traces_v2 ADD COLUMN user_decision TEXT NOT NULL "
+            "DEFAULT 'pending' CHECK (user_decision IN "
+            "('pending','confirmed','rejected','edited'))"
+        )
+
+    upgraded = apply(db_path, DEFAULT_MIGRATIONS_DIR)
+    replay = apply(db_path, DEFAULT_MIGRATIONS_DIR)
+
+    assert [item.version for item in upgraded] == ["048_release_audit_fixes"]
+    assert replay == []
+    with sqlite3.connect(db_path) as conn:
+        trace_columns = {
+            row[1] for row in conn.execute("PRAGMA table_info(ai_traces_v2)")
+        }
+        extraction_sql = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' "
+            "AND name='snapshot_extractions_v2'"
+        ).fetchone()[0]
+    assert {"user_decision", "confidence_label", "outcome"} <= trace_columns
+    assert "ON DELETE SET NULL" in extraction_sql
 
 
 def test_capability_trust_migration_recovers_after_ddl_before_version_record(tmp_path):
@@ -162,6 +235,9 @@ def test_capability_trust_migration_recovers_after_ddl_before_version_record(tmp
         "043_first_party_opportunities",
         "044_repair_opportunity_sources",
         "045_drop_legacy_v1_tables",
+        "046_release_contract_gaps",
+        "047_account_data_jobs",
+        "048_release_audit_fixes",
     ]
     assert replay == []
 
@@ -192,6 +268,9 @@ def test_unavailable_result_migration_recovers_after_partial_ddl(tmp_path):
         "043_first_party_opportunities",
         "044_repair_opportunity_sources",
         "045_drop_legacy_v1_tables",
+        "046_release_contract_gaps",
+        "047_account_data_jobs",
+        "048_release_audit_fixes",
     ]
     assert replay == []
     with sqlite3.connect(db_path) as conn:
@@ -240,6 +319,9 @@ def test_intent_action_migration_upgrades_from_019_and_replays(tmp_path):
         "043_first_party_opportunities",
         "044_repair_opportunity_sources",
         "045_drop_legacy_v1_tables",
+        "046_release_contract_gaps",
+        "047_account_data_jobs",
+        "048_release_audit_fixes",
     ]
     assert replay == []
     with sqlite3.connect(db_path) as conn:
@@ -311,6 +393,9 @@ def test_action_lifecycle_migration_rebuilds_phase_15_constraints(tmp_path):
         "043_first_party_opportunities",
         "044_repair_opportunity_sources",
         "045_drop_legacy_v1_tables",
+        "046_release_contract_gaps",
+        "047_account_data_jobs",
+        "048_release_audit_fixes",
     ]
     with sqlite3.connect(db_path) as conn:
         action_sql = conn.execute(
@@ -382,6 +467,9 @@ def test_source_verification_migration_preserves_series_opportunities(tmp_path):
         "043_first_party_opportunities",
         "044_repair_opportunity_sources",
         "045_drop_legacy_v1_tables",
+        "046_release_contract_gaps",
+        "047_account_data_jobs",
+        "048_release_audit_fixes",
     ]
     with sqlite3.connect(db_path) as conn:
         opportunity = conn.execute(
@@ -843,6 +931,9 @@ def test_intent_lock_action_migration_upgrades_database_with_034_recorded(tmp_pa
         "043_first_party_opportunities",
         "044_repair_opportunity_sources",
         "045_drop_legacy_v1_tables",
+        "046_release_contract_gaps",
+        "047_account_data_jobs",
+        "048_release_audit_fixes",
     ]
     with sqlite3.connect(db_path) as conn:
         action_sql = conn.execute(

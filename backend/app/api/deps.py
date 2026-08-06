@@ -10,7 +10,7 @@ async def get_current_user(request: Request) -> dict:
 
     user = await request.app.state.db.fetch_one(
         "SELECT id, email, username, ai_calls_today, created_at, last_login "
-        "FROM users WHERE id = :id",
+        "FROM users WHERE id = :id AND credentials_revoked_at IS NULL",
         {"id": user_id},
     )
     if not user:

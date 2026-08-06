@@ -174,12 +174,12 @@ As a creator, I can add lightweight text, link, image, and document materials fr
 - **FR-016**: Brief creation MUST collect audience, promise, conclusion, evidence needs, structure, image plan, differentiation, and known risks.
 - **FR-017**: When personal evidence is insufficient, AI assistance MUST ask interview questions before offering a complete draft.
 - **FR-018**: AI modifications MUST default to local suggestions with accept/reject, reason feedback, version comparison, and non-destructive regeneration.
-- **FR-019**: Every AI output MUST record task type, input entity references, evidence references, prompt-policy version, configured model identifier, generation time, confidence label, limitations, and user decision.
+- **FR-019**: Every AI output MUST record task type, input entity references, evidence references, prompt-policy version, configured model identifier, generation time, confidence label, limitations, outcome, and user decision.
 - **FR-020**: AI failure MUST not fabricate a substitute answer; it MUST preserve input and provide a deterministic or manual path appropriate to the task.
 - **FR-021**: Content versions MUST be immutable after creation; edits and accepted AI changes MUST create child versions.
 - **FR-022**: Publish checks MUST be bound to a version and show finding location, reason, severity, rule source, and rule update time.
 - **FR-023**: Publish checks MUST be described as assistance only and MUST NOT promise platform approval.
-- **FR-024**: MVP publishing MUST support copying body text, exporting images, entering a note link, and recording publication manually; automatic publishing is outside MVP.
+- **FR-024**: MVP publishing MUST support copying body text, exporting an image plan as PNG, entering a note link, and recording publication manually; automatic publishing is outside MVP.
 - **FR-025**: The selected publish version MUST be locked and remain auditable after publication.
 - **FR-026**: Performance data MUST support manual entry and user-confirmed screenshot extraction; automatic Xiaohongshu synchronization is outside MVP.
 - **FR-027**: Performance snapshots MUST be append-only; corrections create a new snapshot linked to the superseded snapshot.
@@ -188,10 +188,10 @@ As a creator, I can add lightweight text, link, image, and document materials fr
 - **FR-030**: Materials MUST support lightweight list, project drawer, usage references, privacy level, and safe deletion behavior.
 - **FR-031**: The product MUST preserve feedback on AI suggestions, opportunities, reviews, and risk findings as immutable user decision events.
 - **FR-032**: Pages MUST provide loading, empty, partial failure, timeout, stale source, duplicate submission, unsaved change, offline recovery, and insufficient-data states where applicable.
-- **FR-033**: The product MUST provide data export and account deletion covering user-generated content, derived profile data, source excerpts, metrics, feedback, and AI traces.
+- **FR-033**: The product MUST provide data export and account deletion covering user-generated content, derived profile data, source excerpts, metrics, feedback, and AI traces. Account deletion MUST revoke credentials and preserve storage if the database transaction cannot complete.
 - **FR-034**: The MVP MUST remain limited to one user workspace, one primary Xiaohongshu account, and graphic knowledge/experience notes; team, MCN, matrix accounts, live commerce, video editing, and multi-platform publishing are excluded.
 - **FR-035**: Legacy isolated tools, frontend routes, and `/api/v1` endpoints MUST be absent. Requests to removed paths use the standard not-found response and MUST NOT redirect into v2 or create legacy records.
-- **FR-036**: Existing databases MUST upgrade through migration 045 without losing `users`, `creator_profiles`, `schema_migrations`, or v2 aggregate data; audited-empty v1 business tables MUST be removed.
+- **FR-036**: Existing databases MUST upgrade through migration 048 without losing `users`, `creator_profiles`, `schema_migrations`, or v2 aggregate data; migration 045 MUST remove audited-empty v1 business tables.
 
 ### Key Entities
 
@@ -206,6 +206,7 @@ As a creator, I can add lightweight text, link, image, and document materials fr
 - **ContentVersion**: Immutable title, body, cover plan, image plan, ancestry, author origin, and evidence snapshot.
 - **PublishCheck / PublishRecord**: Version-bound risk assistance and immutable publication fact.
 - **PerformanceSnapshot**: Append-only metrics collected manually, by confirmed screenshot extraction, or future API synchronization.
+- **SnapshotExtraction**: Auditable proposed screenshot metrics with a user decision, nullable deleted-source references, and an AI trace.
 - **Review / LearnedInsight**: Fact-hypothesis-experiment review and user-confirmed reusable learning.
 - **UserFeedback**: Immutable user decision about an AI or product output.
 - **AITrace**: Provenance and user-control record for each AI task.

@@ -80,6 +80,12 @@ _EXPECTED_TABLES: frozenset[str] = frozenset(
         "starter_assessments",
         "starter_direction_candidates",
         "starter_sprints",
+        # release contract gaps (046)
+        "publish_checks_v2",
+        "publish_check_resolutions_v2",
+        "snapshot_extractions_v2",
+        # auditable owner-data operations (047)
+        "account_data_jobs",
     }
 )
 

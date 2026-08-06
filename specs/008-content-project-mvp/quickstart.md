@@ -48,6 +48,10 @@ cd G:\codex_project\topicAI\mvp
 pnpm install --frozen-lockfile
 pnpm --dir frontend test
 pnpm --dir frontend build
+pnpm --dir frontend exec playwright install chromium
+pnpm --dir frontend exec playwright test
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/check-v2-source-integrity.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/check-utf8.ps1
 ```
 
 Record exact passing counts and coverage; do not rely on historical README claims.
@@ -66,7 +70,7 @@ Expected:
 - Backend becomes healthy at `http://localhost:8000/api/v2/health`.
 - v2 schema is visible in the API docs and includes `/api/v2/projects`.
 - Frontend opens at `http://localhost`.
-- Fresh volumes apply the migration chain through 045 exactly once.
+- Fresh volumes apply the migration chain through 048 exactly once.
 - Restarting Compose preserves created users/projects.
 
 ## 5. Manual No-AI Smoke
@@ -77,11 +81,11 @@ Leave model configuration empty.
 2. Choose Growth mode.
 3. Import a mixed batch with at least one valid and one invalid historical note.
 4. Confirm or manually create a creator profile.
-5. Create a blank opportunity or project.
+5. Add a manual source, verify its original link, time, and authority, then adopt it into one project.
 6. Complete Brief with personal evidence manually.
 7. Create and save a version.
 8. Run deterministic publish checks.
-9. Copy body/export available artifacts and record a publication.
+9. Copy body, export the image plan as PNG, and record a publication.
 10. Enter a performance snapshot manually.
 11. Complete a review with one continue, stop, and experiment action.
 12. Confirm one insight and reject another.
@@ -116,6 +120,7 @@ Only run when the configured endpoint supports vision and both capability/config
 Expected:
 
 - Extraction creates no confirmed snapshot before user confirmation.
+- Accepting unchanged proposed values records `confirmed`; correcting a proposed value records `edited`.
 - Missing vision capability returns `AI_CAPABILITY_MISSING` and manual fields remain available.
 
 ## 8. Automated Release Gates
@@ -124,15 +129,17 @@ Expected:
 cd G:\codex_project\topicAI\mvp\backend
 python -m pytest --cov=app --cov-fail-under=80
 ruff check app tests
-mypy app
+mypy --no-site-packages app config
 bandit -r app
 
 cd G:\codex_project\topicAI\mvp
-pnpm --dir frontend test -- --coverage
+pnpm --dir frontend exec vitest run --coverage
 pnpm --dir frontend lint
 pnpm --dir frontend build
-pnpm --dir frontend test:e2e
+pnpm --dir frontend exec playwright test
 pnpm audit --audit-level high
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/check-v2-source-integrity.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/check-utf8.ps1
 ```
 
 Required scenarios:
@@ -147,19 +154,14 @@ Required scenarios:
 
 ## 9. Source-Integrity Scan
 
-The v2 runtime must produce no matches for prohibited source/provider concepts:
+Run the versioned static gates from the repository root:
 
 ```powershell
-rg -n "llm_simulation|estimated_heat|composite_score|ctr_estimate|viral_probability|TianAPI|BilibiliSource|PreloadedDataSource" backend/app/api/v2 backend/app/services frontend/src/features frontend/src/services/api/v2
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/check-v2-source-integrity.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/check-utf8.ps1
 ```
 
-Expected result: no matches.
-
-Also scan user-facing source for common mojibake markers and manually inspect any match:
-
-```powershell
-rg -n "锟|鈥|鎴|鐨|鍐|绔" frontend/src specs/008-content-project-mvp
-```
+Expected result: both scans pass with no violations.
 
 ## 10. Acceptance Completion
 

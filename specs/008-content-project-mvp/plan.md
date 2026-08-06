@@ -13,7 +13,7 @@ The implementation explicitly removes fake precision and runtime hotspot simulat
 
 **Language/Version**: Python 3.11+ backend; TypeScript 6 / React 19 frontend.  
 **Primary Dependencies**: Existing FastAPI, Pydantic 2, SQLAlchemy 2, aiosqlite, OpenAI-compatible SDK, React Router, MUI 5, Zustand, Axios. No new production dependency is planned.  
-**Storage**: Existing SQLite async database and local object storage; immutable SQL migration history through `045`. Chroma is not required.
+**Storage**: Existing SQLite async database and local object storage; immutable SQL migration history through `048`. Chroma is not required.
 **Testing**: pytest/pytest-asyncio/pytest-cov, Vitest/Testing Library, Playwright.  
 **Target Platform**: Local Docker Compose on desktop; responsive web UI at mobile and desktop widths.  
 **Project Type**: Existing full-stack web application.  
@@ -54,7 +54,7 @@ backend/
 │   ├── services/               # aggregate/domain services
 │   ├── prompts/                # versioned task policies
 │   ├── core/                   # auth, database, generic LLM, storage
-│   └── data/migrations/        # immutable upgrade chain through 045
+│   └── data/migrations/        # immutable upgrade chain through 048
 └── tests/                      # contract, service, migration, integration
 frontend/
 ├── src/
@@ -110,19 +110,19 @@ specs/008-content-project-mvp/  # specification, design, contracts, tasks
 ### 6. Publish, performance, and review
 
 - Adapt `ContentRiskService` into a version-bound publish-check service. Preserve deterministic rules when AI is unavailable; add finding ranges, rule source/update time, staleness, and acknowledgements.
-- Add copy/export commands using existing browser/local storage primitives. Partial image export is retryable per artifact.
+- Add copy/export commands using existing browser/local storage primitives. Export the image plan as a native Canvas PNG; partial artifact failure is retryable per artifact.
 - Publication locks one immutable version and creates a manual `PublishRecord`. Duplicate requests replay the same record.
 - Add manual metrics and optional screenshot extraction when `vision` capability is declared. Extracted values remain proposed until user confirmation.
 - Replace prediction/attribution flow with snapshot -> facts -> hypotheses -> exactly one continue/stop/experiment -> proposed insights. Only confirmed insights enter future context.
 
 ### 7. Materials, My, privacy, and v2-only cleanup
 
-- Adapt assets into lightweight Materials with text/link/image/document kinds, privacy, project links, usage inspection, and locked-version reference snapshots.
-- My contains creator strategy, weekly goal, Xiaohongshu account reference, AI configuration status (never key value), privacy/export/deletion, and sign-out.
-- Add export/deletion jobs using existing scheduler/task patterns; local MVP may execute synchronously behind a job-state contract but the API remains asynchronous.
+- Adapt assets into lightweight Materials with text/link/image/document kinds, privacy, project links, usage inspection, a project-workspace Drawer, and locked-version reference snapshots.
+- My contains creator strategy, weekly goal, Xiaohongshu account reference, AI configuration status (never key value), privacy/export/deletion, and sign-out. Deletion revokes credentials, quarantines owned files through the database transaction, restores them on rollback, and purges after commit.
+- Persist export/deletion job state without adding a queue; the local MVP completes work synchronously and returns the completed job contract.
 - Remove all legacy frontend routes instead of redirecting them; unknown paths use the normal Not Found view.
 - Remove all `/api/v1` routers, schemas, services, data sources, providers, tests, and dependencies. OpenAPI must contain no v1 path.
-- Retain immutable migration history for upgrades. Migration 045 moves reused asset rows to `materials`, rebuilds `creator_profiles` with v2 columns, drops v1-only tables, and preserves `users`, `schema_migrations`, and every v2 record.
+- Retain immutable migration history for upgrades. Migration 045 performs v1 cleanup, 046 closes release contracts, and 047 persists minimal account-data job audit state.
 
 ## Delivery Phases
 
@@ -140,14 +140,14 @@ Each phase lands only when its independent test is green; later phases may not w
 
 ### Backend
 
-- Fresh and upgrade migration tests through 045, including repeat application, checksums, v1-table removal, and retained-data assertions.
+- Fresh and upgrade migration tests through 048, including repeat application, checksums, v1-table removal, release contracts, credential revocation, and retained-data assertions.
 - Project-state matrix tests for every allowed/blocked transition and archive behavior.
 - Idempotency tests for project, version, publish, snapshot, and screenshot extraction.
 - Concurrency tests returning `409` with no silent overwrite.
 - Owner-isolation tests for every v2 resource.
 - AI tests for success, timeout, malformed JSON, missing configuration, missing vision capability, evidence omissions, and manual fallback.
 - Source-integrity tests proving v2 never calls legacy hotspot sources and never emits prohibited predictive fields.
-- Deletion/export tests including stored files and locked reference snapshots.
+- Deletion/export tests including stored files, locked reference snapshots, screenshot extraction audit retention, and storage restoration after a failed deletion transaction.
 
 ### Frontend
 
@@ -159,7 +159,7 @@ Each phase lands only when its independent test is green; later phases may not w
 ### End-to-end
 
 - Starter: register -> starter assessment -> direction -> sprint -> first project -> publish -> starter review.
-- Growth: register -> import mixed valid/invalid history -> confirm profile -> adopt opportunity -> brief/interview -> version -> check/export -> publish -> snapshots -> review -> confirm insight.
+- Growth: register -> import mixed valid/invalid history -> confirm profile -> manual source -> verify -> adopt opportunity -> brief/interview -> version -> Canvas PNG export -> check -> publish -> snapshots -> review -> confirm insight.
 - Recovery: interrupt editing, refresh/offline simulation, restore draft, then resolve a version conflict.
 - AI unavailable: complete core flow manually with no configured model.
 - Responsive smoke: 390x844 and 1440x900 for onboarding and all five primary navigation nodes.

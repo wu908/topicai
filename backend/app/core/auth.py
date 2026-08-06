@@ -315,7 +315,8 @@ class AuthManager:
 
         # Find user
         user = await db.fetch_one(
-            "SELECT * FROM users WHERE email = :email",
+            "SELECT * FROM users WHERE email = :email "
+            "AND credentials_revoked_at IS NULL",
             {"email": email},
         )
         if not user:
@@ -382,6 +383,8 @@ class AuthManager:
             raise InvalidTokenException("Not a refresh token")
 
         user_id = payload["sub"]
+        if await self.get_user(user_id) is None:
+            raise InvalidTokenException("Refresh token subject is no longer active")
 
         # Generate new token pair
         new_access_token = self.create_access_token(user_id)
@@ -409,7 +412,7 @@ class AuthManager:
             await db.init_db()
 
         user = await db.fetch_one(
-            "SELECT * FROM users WHERE id = :id",
+            "SELECT * FROM users WHERE id = :id AND credentials_revoked_at IS NULL",
             {"id": user_id},
         )
 

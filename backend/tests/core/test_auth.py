@@ -110,6 +110,25 @@ class TestJWTToken:
         # Access token has type='access', not 'refresh'
         assert payload["type"] == "access"
 
+    @pytest.mark.asyncio
+    async def test_revoked_credentials_cannot_login_or_refresh(self, test_db):
+        from app.core.auth import AuthManager
+        from app.core.exceptions import AuthenticationException, InvalidTokenException
+
+        auth = AuthManager(db=test_db)
+        await test_db.execute(
+            "INSERT INTO users (id,email,username,password_hash,ai_calls_today,"
+            "ai_calls_reset_at,created_at,credentials_revoked_at) VALUES "
+            "('revoked-user','revoked@test.com','revoked',:password,0,'',:now,:now)",
+            {"password": auth.hash_password("password123"), "now": utc_now()},
+        )
+        refresh_token = auth.create_refresh_token("revoked-user")
+
+        with pytest.raises(AuthenticationException):
+            await auth.login("revoked@test.com", "password123")
+        with pytest.raises(InvalidTokenException):
+            await auth.refresh_token(refresh_token)
+
 
 class TestJWTIssuerAudience:
     """D1: JWT iss/aud validation."""

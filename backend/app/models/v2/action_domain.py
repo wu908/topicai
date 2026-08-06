@@ -193,6 +193,9 @@ class AITraceCreate(StrictModel):
     limitations: list[str] = Field(default_factory=list)
     output_ref: str
     generated_at: str
+    confidence_label: Literal["high", "medium", "low", "unavailable"] = "low"
+    outcome: Literal["success", "fallback", "failed", "cancelled"] = "success"
+    user_decision: Literal["pending", "confirmed", "rejected", "edited"] = "pending"
 
 
 class AITrace(AITraceCreate):
