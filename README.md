@@ -76,9 +76,9 @@ flowchart LR
 - `ContentOpportunity`：基于已确认系列准备下一篇机会，接受后才创建项目。
 - `ContentGenome`：聚合规则、例外、观点、系列和项目关系，形成可审计的个性化上下文。
 
-### 旧版兼容
+### V2-only
 
-仓库仍保留 `/api/v1` 和部分旧页面，用于认证、画像、素材、账号及历史工具兼容。新的主链路位于 `/api/v2` 与前端 `/content` 工作台。热点推荐、爆款分析、标题优化等旧能力不是新版产品的核心流程，后续将逐步收敛到内容项目上下文中。
+应用只暴露 `/api/v2`，认证和健康检查也在 v2。旧工具页、旧路由、`/api/v1`、固定模型供应商和热点数据源均已删除；未知旧地址进入普通 Not Found 页面。
 
 ## 当前边界
 
@@ -91,15 +91,14 @@ flowchart LR
 - “一键爆款”、精确流量预测或审核必过承诺。
 - 将持续热点/新闻数据源作为内容推荐的必要前置条件。
 
-`TianAPI` 等数据源仍作为旧版可选能力保留，不是意图驱动内容闭环的运行依赖。
+机会只来自用户历史、问题、素材、系列、已确认经验和用户主动提交的来源，不接入旧热点供应商。
 
 ## 技术架构
 
 ```text
 TopicAI
 ├── backend/
-│   ├── app/api/v1/              # 认证、画像、素材及旧功能兼容 API
-│   ├── app/api/v2/              # 内容项目、AI 行动、复盘与个性化资产 API
+│   ├── app/api/v2/              # 唯一 API：认证、内容项目、复盘与个性化资产
 │   ├── app/models/v2/           # v2 结构化契约
 │   ├── app/services/            # 编排、证据、版本、复盘、规则和系列服务
 │   ├── app/data/migrations/     # SQLite 增量迁移
@@ -128,7 +127,7 @@ TopicAI
 - Node.js 22+
 - pnpm 10+
 - 一个强随机 `JWT_SECRET_KEY`
-- 可选：DeepSeek 或 OpenAI-compatible 模型凭据
+- 可选：OpenAI-compatible 模型凭据
 
 ### 1. 启动后端
 
@@ -146,13 +145,7 @@ Copy-Item .env.example .env
 JWT_SECRET_KEY=replace-with-a-random-secret-at-least-32-characters
 ```
 
-使用 DeepSeek：
-
-```dotenv
-DEEPSEEK_API_KEY=your-key
-```
-
-或使用任意 OpenAI-compatible 文本模型：
+使用任意 OpenAI-compatible 文本模型：
 
 ```dotenv
 LLM_BASE_URL=https://your-provider.example/v1
@@ -169,7 +162,7 @@ python -m uvicorn main:create_app --factory --host 127.0.0.1 --port 8000 --reloa
 
 - API：<http://127.0.0.1:8000>
 - Swagger：<http://127.0.0.1:8000/docs>
-- 健康检查：<http://127.0.0.1:8000/api/v1/health>
+- 健康检查：<http://127.0.0.1:8000/api/v2/health>
 
 ### 2. 启动前端
 
@@ -213,22 +206,18 @@ cd frontend
 pnpm lint
 pnpm test
 pnpm build
+
+# 前端 E2E：与 ci-frontend 中的 E2E 步骤等价；需要先启动后端 8765
+pnpm exec playwright install chromium
+pnpm exec playwright test e2e/starter-flow.spec.ts e2e/intent-driven-loop.spec.ts
 ```
 
 面向 `main` 的 Pull Request 必须通过以下检查：
 
 - `ci-backend`：后端测试和 80% 覆盖率门禁。
-- `ci-frontend`：前端 lint、单元测试和 production build。
+- `ci-frontend`：前端 lint、单元测试、production build，以及真实后端运行时的 starter/growth Playwright 回归；失败时上传测试产物。
 
-Playwright E2E 当前保留为本地手动检查，不属于首批强制合并门禁。
-
-最近一次完整验证（2026-07-21）：
-
-- 后端非递归全量：744 passed，1 deselected，覆盖率 86.67%。
-- 前端全量：338 passed，2 skipped。
-- 前端 lint：通过。
-- Production build：通过。
-- 前后端健康检查：HTTP 200。
+发布结果以当前分支实际运行的测试、覆盖率和 Compose 验证记录为准，不引用历史版本数字。
 
 ## 关键文档
 

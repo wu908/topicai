@@ -13,7 +13,7 @@ The implementation explicitly removes fake precision and runtime hotspot simulat
 
 **Language/Version**: Python 3.11+ backend; TypeScript 6 / React 19 frontend.  
 **Primary Dependencies**: Existing FastAPI, Pydantic 2, SQLAlchemy 2, aiosqlite, OpenAI-compatible SDK, React Router, MUI 5, Zustand, Axios. No new production dependency is planned.  
-**Storage**: Existing SQLite async database and local object storage; additive SQL migrations `009` through `017`. Chroma is not required by the MVP path.  
+**Storage**: Existing SQLite async database and local object storage; immutable SQL migration history through `045`. Chroma is not required.
 **Testing**: pytest/pytest-asyncio/pytest-cov, Vitest/Testing Library, Playwright.  
 **Target Platform**: Local Docker Compose on desktop; responsive web UI at mobile and desktop widths.  
 **Project Type**: Existing full-stack web application.  
@@ -23,7 +23,7 @@ The implementation explicitly removes fake precision and runtime hotspot simulat
 
 ## Constitution Check
 
-Constitution v2.0.0 was amended before planning because v1.1.0 required fixed model vendors and simulated hotspot fallbacks that contradicted the approved product.
+Constitution v3.0.0 ends the compatibility release and makes the implemented product v2-only. Historical migrations remain upgradeable, but v1 runtime code and public routes are removed.
 
 | Principle | Plan compliance |
 |---|---|
@@ -40,7 +40,7 @@ Constitution v2.0.0 was amended before planning because v1.1.0 required fixed mo
 | XI. Risk guard | Existing rules adapt to version-bound checks with provenance and staleness. |
 | XII. Manual platform boundary | Export/copy/manual link/manual metrics only. |
 | XIII. Security/privacy | Existing auth and owner scoping reused; export/deletion and retention added. |
-| XIV. Versioning/migrations | Breaking domain is `/api/v2`; migrations are additive and idempotent. |
+| XIV. Versioning/migrations | The public surface is `/api/v2` only; migration 045 removes audited-empty v1 business tables while preserving users, creator profiles, and v2 data. |
 
 **Gate result**: PASS before design and PASS after data/API design. No unjustified violation remains.
 
@@ -49,13 +49,12 @@ Constitution v2.0.0 was amended before planning because v1.1.0 required fixed mo
 ```text
 backend/
 ├── app/
-│   ├── api/v1/                 # retained auth/health + legacy deprecation shims
-│   ├── api/v2/                 # new typed routers
+│   ├── api/v2/                 # sole typed API, including auth and health
 │   ├── models/                 # v2 domain and AI trace schemas
 │   ├── services/               # aggregate/domain services
 │   ├── prompts/                # versioned task policies
 │   ├── core/                   # auth, database, generic LLM, storage
-│   └── data/migrations/        # 009-017 additive migrations
+│   └── data/migrations/        # immutable upgrade chain through 045
 └── tests/                      # contract, service, migration, integration
 frontend/
 ├── src/
@@ -69,7 +68,7 @@ frontend/
 specs/008-content-project-mvp/  # specification, design, contracts, tasks
 ```
 
-**Structure decision**: Preserve the two-project repository. New frontend behavior is grouped by product feature while shared visual primitives stay in existing component folders. New backend behavior follows existing model/service/router boundaries. Legacy code remains isolated until compatibility shims are verified, then becomes deletion-eligible in a later release.
+**Structure decision**: Preserve the two-project repository. Frontend behavior is grouped by product feature while shared visual primitives stay in existing component folders. Backend behavior follows existing model/service/router boundaries. The compatibility period is complete: v1 runtime code, routes, schemas, pages, providers, and tests are deleted.
 
 ## Implementation Changes
 
@@ -78,11 +77,11 @@ specs/008-content-project-mvp/  # specification, design, contracts, tasks
 - Re-run backend and frontend tests inside the writable copy before behavior changes. Record passing count and coverage. Reproduce the one observed integration failure separately from source-path permission errors.
 - Normalize source files to UTF-8 and add a check for mojibake markers in user-facing TypeScript/Markdown. Fix only displayed strings touched by the MVP; do not perform an unrelated whole-repo rewrite.
 - Replace fixed provider settings with `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`, `LLM_TIMEOUT_SECONDS`, and `LLM_CAPABILITIES=text[,vision]`. Keep the existing OpenAI client, structured parser, retry limits, and observability interface.
-- Remove TianAPI and named provider variables from the MVP Docker path and `.env.example`; legacy modules may still import old settings until their routes become shims, but the v2 app must not require them.
+- Remove TianAPI, named-provider variables, and their runtime modules from Docker, environment examples, and dependencies.
 
 ### 2. Backend foundation and persistence
 
-- Add `app/api/v2/router.py` and register it beside v1. Keep v1 auth/health stable.
+- Register only `app/api/v2/router.py`; authentication and health live under `/api/v2`.
 - Add migrations `009`-`017` exactly as sequenced in [data-model.md](./data-model.md). Each migration is idempotent and covered on fresh DB plus copied-v4 baseline.
 - Implement shared `IdempotencyService`, optimistic concurrency helper, owner-scoped repository helpers, and canonical `ProjectStateService`. Keep SQL behind services and transactions.
 - Add Pydantic modules for starter, opportunity, content project, material, publish/review, AI trace, and common v2 errors. Generate/sync TypeScript contracts from the reviewed shapes without introducing runtime code generation.
@@ -116,19 +115,14 @@ specs/008-content-project-mvp/  # specification, design, contracts, tasks
 - Add manual metrics and optional screenshot extraction when `vision` capability is declared. Extracted values remain proposed until user confirmation.
 - Replace prediction/attribution flow with snapshot -> facts -> hypotheses -> exactly one continue/stop/experiment -> proposed insights. Only confirmed insights enter future context.
 
-### 7. Materials, My, privacy, and compatibility
+### 7. Materials, My, privacy, and v2-only cleanup
 
 - Adapt assets into lightweight Materials with text/link/image/document kinds, privacy, project links, usage inspection, and locked-version reference snapshots.
 - My contains creator strategy, weekly goal, Xiaohongshu account reference, AI configuration status (never key value), privacy/export/deletion, and sign-out.
 - Add export/deletion jobs using existing scheduler/task patterns; local MVP may execute synchronously behind a job-state contract but the API remains asynchronous.
-- Legacy route migration:
-  - `/topics` -> `/opportunities`
-  - `/writing`, `/ideas`, `/titles`, `/viral` -> `/content` or current project stage
-  - `/publish` -> `/content?status=ready_to_publish`
-  - `/analytics`, `/review` -> `/content?status=awaiting_review`
-  - `/assets` -> `/materials`
-  - `/accounts`, `/profile`, `/tracks` -> `/me`
-- Once v2 E2E is green, v1 business endpoints stop creating legacy records and return typed deprecation payloads. Team UI is removed from navigation but code is not deleted in this feature.
+- Remove all legacy frontend routes instead of redirecting them; unknown paths use the normal Not Found view.
+- Remove all `/api/v1` routers, schemas, services, data sources, providers, tests, and dependencies. OpenAPI must contain no v1 path.
+- Retain immutable migration history for upgrades. Migration 045 moves reused asset rows to `materials`, rebuilds `creator_profiles` with v2 columns, drops v1-only tables, and preserves `users`, `schema_migrations`, and every v2 record.
 
 ## Delivery Phases
 
@@ -137,7 +131,7 @@ specs/008-content-project-mvp/  # specification, design, contracts, tasks
 3. **Phase C - Growth onboarding and opportunities**: history import, profile confirmation, first-party opportunity generation, adoption.
 4. **Phase D - Starter path**: assessment, direction candidates, sprint, three experiment projects, starter review.
 5. **Phase E - Publish and learning**: risk checks, export, snapshots, screenshot fallback, reviews, confirmed insights.
-6. **Phase F - Materials, privacy, compatibility**: Materials, My, export/delete, legacy redirects/shims, documentation.
+6. **Phase F - Materials, privacy, v2-only cleanup**: Materials, My, export/delete, removal of v1 runtime surfaces, cleanup migration, and documentation.
 7. **Phase G - Release validation**: full tests/coverage, fresh-volume Docker quickstart, desktop/mobile Playwright, source-integrity scan, OpenAPI sync.
 
 Each phase lands only when its independent test is green; later phases may not weaken earlier contracts.
@@ -146,7 +140,7 @@ Each phase lands only when its independent test is green; later phases may not w
 
 ### Backend
 
-- Fresh and upgrade migration tests for 009-017, including repeat application and checksums.
+- Fresh and upgrade migration tests through 045, including repeat application, checksums, v1-table removal, and retained-data assertions.
 - Project-state matrix tests for every allowed/blocked transition and archive behavior.
 - Idempotency tests for project, version, publish, snapshot, and screenshot extraction.
 - Concurrency tests returning `409` with no silent overwrite.
@@ -171,19 +165,18 @@ Each phase lands only when its independent test is green; later phases may not w
 - Responsive smoke: 390x844 and 1440x900 for onboarding and all five primary navigation nodes.
 - Docker: fresh volumes, migrations, health, auth, core loop, restart persistence.
 
-## Release and Rollback
+## Release and Recovery
 
-- Use fresh named Docker volumes for MVP acceptance; never mount source runtime data.
-- Keep v1 tables and code during the compatibility release. Rollback disables `/api/v2` registration and restores old frontend route bundle without reversing additive migrations.
-- Do not drop legacy tables in Spec-008. A later cleanup spec may remove them after v2 validation and export verification.
-- Feature flags: `CONTENT_PROJECT_V2_ENABLED` controls v2 routes/navigation; `AI_ENABLED` controls calls while preserving manual paths; `VISION_ENABLED` requires both declared capability and operator enablement.
+- Validate a fresh named Docker project and an existing-database upgrade before release; never mount source runtime data into the validation project.
+- There is no v1 runtime rollback. Recover by restoring a verified database backup and deploying a compatible v2 release; never reverse migration 045 in place.
+- `AI_ENABLED` controls model calls while preserving manual paths. Vision requires both `VISION_ENABLED=true` and `vision` in `LLM_CAPABILITIES`.
 
 ## Complexity Tracking
 
 | Decision | Why needed | Simpler alternative rejected because |
 |---|---|---|
 | New `/api/v2` domain | Old public schemas contain prohibited concepts and incompatible lifecycle semantics | In-place v1 mutation would silently break clients and violate API governance |
-| Nine additive migrations | Preserves frozen baseline and compatibility while introducing normalized aggregate data | Rewriting migration 000 would make existing database upgrades unsafe |
+| Immutable migration chain plus cleanup migration 045 | Existing databases must upgrade without losing users, profiles, or v2 aggregates | Rewriting migration 000 or deleting history would make upgrades unsafe |
 | Draft recovery separate from immutable versions | Users need refresh/offline recovery without polluting version history | Saving every keystroke as a version creates noise and storage churn |
 
 No new production dependency, queue, external database, or runtime web-research service is introduced.

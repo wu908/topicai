@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "topicai"
-version = "4.0.0"
-description = "TopicAI v4.0 Air Pro — AI-powered content creation assistant"
+version = "5.0.0"
+description = "TopicAI content-project workspace"
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.11"
@@ -30,7 +30,6 @@ dependencies = [
     "sqlalchemy==2.0.36",
     "aiosqlite==0.20.0",
     "openai==1.58.1",
-    "zhipuai==2.1.5.20250726",
     "httpx==0.28.1",
     "passlib[bcrypt]==1.7.4",
     "apscheduler==3.11.0",

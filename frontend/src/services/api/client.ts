@@ -4,7 +4,7 @@
  * observed with axios in Vite dev proxy environment.
  * All API calls go through this module.
  */
-import type { ApiResponse } from '@/types/api';
+import type { ApiResponse } from '@/types/auth';
 
 /** Clear auth tokens and redirect to login */
 function forceLogout() {
@@ -14,7 +14,7 @@ function forceLogout() {
 }
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
-const AUTH_BASE_URL = `${API_BASE_URL}/api/v1`;
+const AUTH_BASE_URL = `${API_BASE_URL}/api/v2`;
 
 /** Get auth headers with JWT token */
 function getHeaders(): Record<string, string> {
@@ -131,7 +131,7 @@ async function request<T>(
 }
 
 /** Create a versioned client while sharing JWT refresh and error behavior. */
-export function createApiClient(apiPrefix: '/api/v1' | '/api/v2') {
+export function createApiClient(apiPrefix: '/api/v2') {
   const baseUrl = `${API_BASE_URL}${apiPrefix}`;
   return {
     get: <T>(url: string, config?: { params?: Record<string, unknown> }) =>
@@ -146,7 +146,6 @@ export function createApiClient(apiPrefix: '/api/v1' | '/api/v2') {
   };
 }
 
-/** Fetch-based v1 client with the existing axios-compatible interface. */
-const apiClient = createApiClient('/api/v1');
+const apiClient = createApiClient('/api/v2');
 
 export default apiClient;

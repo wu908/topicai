@@ -10,19 +10,52 @@ vi.mock('../client', () => ({
 import v2Client from '../client';
 import {
   appendSnapshot,
+  classifyRetrospectiveIntent,
+  confirmProjectIntent,
   createBlindReview,
+  createContentOpportunity,
   createContentVersion,
   createObservation,
   createProject,
+  decideCandidateSegment,
+  decideContentOpportunity,
+  decideSeriesCandidate,
+  decideViewpointCandidate,
+  decideEvidence,
+  decideHumanGate,
+  decideRuleCandidate,
+  generateContentOpportunities,
   getCalibrationWorkspace,
+  getCandidateReview,
   getContentGenome,
   getProjectContentGenome,
+  getProjectNextAction,
+  getTodayWorkspace,
   getCreatorState,
   listContentOpportunities,
+  listCreatorRules,
+  listCreatorSeries,
+  listCreatorViewpoints,
+  listProjectEvidence,
   listProjects,
   lockPublishHypothesis,
+  openHumanGate,
+  proposeRuleCandidate,
+  proposeSeriesCandidate,
+  proposeSeriesExtension,
+  proposeViewpointCandidate,
   recordPublication,
+  resolveCreatorRuleConflict,
+  restoreCandidateVersion,
+  revokeCreatorSeries,
+  revokeCreatorViewpoint,
+  revokeEvidence,
+  reviseCandidate,
+  rollbackCreatorRule,
+  respondToAction,
+  transitionAction,
   transitionObservation,
+  verifyContentOpportunitySource,
 } from '../projects';
 
 describe('v2 content project API', () => {
@@ -145,5 +178,86 @@ describe('v2 content project API', () => {
       '/observations/o1/transitions',
       expect.any(Object),
     );
+  });
+
+  it('maps the remaining action, evidence, learning, and opportunity resources', async () => {
+    const input = {} as never;
+
+    await getCandidateReview('p1');
+    await getProjectContentGenome('p2', 'cover-test');
+    await getTodayWorkspace();
+    await getProjectNextAction('p1');
+    await listProjectEvidence('p1');
+    await listCreatorViewpoints();
+    await listCreatorSeries();
+    await listCreatorRules();
+    await listContentOpportunities({ decision: 'save' });
+
+    await decideCandidateSegment('p1', 's1', input);
+    await reviseCandidate('p1', input);
+    await restoreCandidateVersion('p1', input);
+    await confirmProjectIntent('p1', input);
+    await classifyRetrospectiveIntent('p1', input);
+    await respondToAction('a1', input);
+    await transitionAction('a1', input);
+    await openHumanGate('a1');
+    await decideHumanGate('g1', input);
+    await decideEvidence('e1', input);
+    await revokeEvidence('e1', input);
+    await proposeViewpointCandidate('p1', input);
+    await decideViewpointCandidate('v1', input);
+    await revokeCreatorViewpoint('v1', input);
+    await proposeSeriesCandidate(input);
+    await decideSeriesCandidate('s1', input);
+    await revokeCreatorSeries('s1', input);
+    await proposeSeriesExtension('s1', input);
+    await decideContentOpportunity('o1', input);
+    await createContentOpportunity(input);
+    await verifyContentOpportunitySource('o1', input);
+    await generateContentOpportunities(3);
+    await proposeRuleCandidate('obs1', input);
+    await decideRuleCandidate('rv1', input);
+    await rollbackCreatorRule('r1', input);
+    await resolveCreatorRuleConflict('r1', 'r2', input);
+
+    expect(vi.mocked(v2Client.get).mock.calls.map(([path]) => path)).toEqual([
+      '/projects/p1/candidate-review',
+      '/projects/p2/content-genome',
+      '/today',
+      '/projects/p1/next-action',
+      '/projects/p1/evidence',
+      '/creator-viewpoints',
+      '/creator-series',
+      '/creator-rules',
+      '/content-opportunities',
+    ]);
+    expect(vi.mocked(v2Client.post).mock.calls.map(([path]) => path)).toEqual([
+      '/projects/p1/candidate-review/segments/s1:decide',
+      '/projects/p1/candidate-review:revise',
+      '/projects/p1/candidate-review:restore',
+      '/projects/p1/intent:confirm',
+      '/projects/p1/intent:classify-retrospective',
+      '/actions/a1:respond',
+      '/actions/a1:transition',
+      '/actions/a1/human-gate',
+      '/human-gates/g1:decide',
+      '/evidence/e1:decide',
+      '/evidence/e1:revoke',
+      '/projects/p1/viewpoint-candidates',
+      '/creator-viewpoints/v1:decide',
+      '/creator-viewpoints/v1:revoke',
+      '/creator-series-candidates',
+      '/creator-series/s1:decide',
+      '/creator-series/s1:revoke',
+      '/creator-series/s1/extension-opportunities',
+      '/content-opportunities/o1:decide',
+      '/content-opportunities/source-verification',
+      '/content-opportunities/o1:verify-source',
+      '/content-opportunities:generate',
+      '/observations/obs1/rule-candidates',
+      '/creator-rule-versions/rv1:decide',
+      '/creator-rules/r1:rollback',
+      '/creator-rules/r1/conflicts/r2:resolve',
+    ]);
   });
 });

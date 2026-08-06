@@ -17,7 +17,7 @@ class Settings(BaseSettings):
 
     # ==================== Application ====================
     app_name: str = Field(default="TopicAI", alias="APP_NAME")
-    app_version: str = Field(default="4.0.0", alias="APP_VERSION")
+    app_version: str = Field(default="5.0.0", alias="APP_VERSION")
     environment: str = Field(default="development", alias="ENVIRONMENT")
     debug: bool = Field(default=True, alias="DEBUG")
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
@@ -28,24 +28,15 @@ class Settings(BaseSettings):
         alias="DATABASE_URL",
     )
     # ==================== Provider-neutral LLM ====================
-    # Spec-008 v2 uses one OpenAI-compatible endpoint. The legacy provider
-    # fields below remain temporarily for v1 compatibility and migration tests.
     llm_base_url: str = Field(default="", alias="LLM_BASE_URL")
     llm_api_key: str = Field(default="", alias="LLM_API_KEY")
     llm_model: str = Field(default="", alias="LLM_MODEL")
     llm_timeout_seconds: float = Field(default=30.0, alias="LLM_TIMEOUT_SECONDS", gt=0)
     llm_capabilities: str = Field(default="text", alias="LLM_CAPABILITIES")
 
-    # ==================== Legacy LLM Providers ====================
-    deepseek_api_key: str = Field(default="", alias="DEEPSEEK_API_KEY")
-    dashscope_api_key: str = Field(default="", alias="DASHSCOPE_API_KEY")
-    zhipu_api_key: str = Field(default="", alias="ZHIPU_API_KEY")
-
-    # ==================== Data Sources ====================
-    tianapi_key: str = Field(default="", alias="TIANAPI_KEY")
-
     # ==================== Content Project v2 ====================
     ai_enabled: bool = Field(default=True, alias="AI_ENABLED")
+    vision_enabled: bool = Field(default=False, alias="VISION_ENABLED")
 
     # ==================== Authentication ====================
     jwt_secret_key: str = Field(
@@ -63,18 +54,12 @@ class Settings(BaseSettings):
     jwt_aud: str = Field(default="topica", alias="JWT_AUD", min_length=1)
 
     # ==================== Rate Limiting ====================
-    ai_calls_per_day: int = Field(default=20, alias="AI_CALLS_PER_DAY")
     auth_rate_limit_per_minute: int = Field(
         default=5, alias="AUTH_RATE_LIMIT_PER_MINUTE", ge=1
-    )
-    anonymous_ai_calls_per_hour: int = Field(
-        default=20, alias="ANONYMOUS_AI_CALLS_PER_HOUR", ge=1
     )
 
     # ==================== Monitoring ====================
     sentry_dsn: str = Field(default="", alias="SENTRY_DSN")
-    langfuse_public_key: str = Field(default="", alias="LANGFUSE_PUBLIC_KEY")
-    langfuse_secret_key: str = Field(default="", alias="LANGFUSE_SECRET_KEY")
     # ==================== CORS ====================
     cors_origins: list[str] = Field(
         default=[

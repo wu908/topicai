@@ -5,7 +5,7 @@ const email = `intent-loop-${runId}@test.com`;
 const password = 'Intent-loop-pw-123';
 
 test.beforeAll(async ({ request }) => {
-  const response = await request.post('http://127.0.0.1:8765/api/v1/auth/register', {
+  const response = await request.post('http://127.0.0.1:8765/api/v2/auth/register', {
     data: { email, username: `intent${runId}`, password },
   });
   expect([201, 409]).toContain(response.status());

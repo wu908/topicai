@@ -78,9 +78,9 @@ describe('App routing', () => {
     ['/analytics', 'page-home'],
     ['/accounts', 'page-me'],
     ['/tracks', 'page-me'],
-  ])('redirects legacy route %s into the intent-driven product', async (path, testId) => {
+  ])('does not retain legacy route %s', async (path) => {
     renderAt(path);
-    expect(await screen.findByTestId(testId)).toBeInTheDocument();
+    expect(await screen.findByTestId('page-notfound')).toBeInTheDocument();
   });
 
   it('fetches the current user when the auth token exists without a user', async () => {

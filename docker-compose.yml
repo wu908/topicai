@@ -1,5 +1,5 @@
 # ============================================================
-# TopicAI v4.0 "Air Pro" — Docker Compose
+# TopicAI v2-only Docker Compose
 # ============================================================
 # Usage:
 #   cp .env.example .env && edit .env
@@ -22,15 +22,18 @@ services:
       - topicai_logs:/app/logs
     environment:
       - DATABASE_URL=sqlite+aiosqlite:////app/data/topicai.db
-      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
-      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY:-}
-      - ZHIPU_API_KEY=${ZHIPU_API_KEY:-}
-      - TIANAPI_KEY=${TIANAPI_KEY:-}
+      - LLM_BASE_URL=${LLM_BASE_URL:-}
+      - LLM_API_KEY=${LLM_API_KEY:-}
+      - LLM_MODEL=${LLM_MODEL:-}
+      - LLM_TIMEOUT_SECONDS=${LLM_TIMEOUT_SECONDS:-30}
+      - LLM_CAPABILITIES=${LLM_CAPABILITIES:-text}
+      - AI_ENABLED=${AI_ENABLED:-true}
+      - VISION_ENABLED=${VISION_ENABLED:-false}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-}
       - ENVIRONMENT=${ENVIRONMENT:-production}
       - SENTRY_DSN=${SENTRY_DSN:-}
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v2/health"]
       interval: 30s
       timeout: 10s
       retries: 3

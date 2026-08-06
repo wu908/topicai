@@ -3,7 +3,7 @@
  * Manages user, tokens, and auth state.
  */
 import { create } from 'zustand';
-import type { User } from '@/types/models';
+import type { User } from '@/types/auth';
 import * as authApi from '@/services/api/auth';
 import { extractErrorMessage } from '@/utils/error';
 
@@ -71,7 +71,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         email: user.email,
         username: user.username,
         ai_calls_today: 0,
-        ai_calls_reset_at: '',
+        ai_calls_reset_at: user.ai_calls_reset_at,
         created_at: user.created_at,
         last_login: null,
       };

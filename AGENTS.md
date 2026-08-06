@@ -1,31 +1,37 @@
-﻿<!-- SPECKIT START -->
-For the active rebuild, read `specs/008-content-project-mvp/plan.md` first.
-Supporting artifacts are in the same directory: `spec.md`, `research.md`,
-`data-model.md`, `contracts/api-v2.md`, `quickstart.md`, and `tasks.md`.
+<!-- SPECKIT START -->
+## Active Rebuild
 
-The governing Constitution is `.specify/memory/constitution.md` (v2.0.0).
-It supersedes the copied v4 assumptions about fixed model vendors, simulated
-hotspots, preloaded trend fallback, and predicted content performance.
-
-## Spec-008 operating rules
-
+- Read `specs/008-content-project-mvp/plan.md` first. Use its adjacent `spec.md`,
+  `research.md`, `data-model.md`, `contracts/api-v2.md`, `quickstart.md`, and
+  `tasks.md` as needed.
+- `.specify/memory/constitution.md` v3.0.0 governs and overrides copied v4
+  assumptions.
 - Implement only in this copied repository; do not edit the source repository.
 - Reuse auth, database/migrations, API envelope, storage, feedback, risk,
   observability, MUI, Zustand, and test infrastructure before adding new code.
-- New product behavior uses `/api/v2` and the `ContentProject` aggregate.
-- New v2 code must not call legacy `DataManager`, `LLMDataSource`, TianAPI,
-  Bilibili, or preloaded trend sources.
-- AI is configured through an OpenAI-compatible endpoint and never acts as a
-  factual source for realtime claims or user experience.
-- Tests precede implementation and backend/frontend coverage remains >=80%.
-- Do not copy `.env`, local databases, Chroma data, uploads, keys, caches,
-  generated output, agent worktrees, or source Git metadata into the project.
-
-## Copied v4 baseline
-
-Spec-007 is retained as historical implementation context. Its completed auth,
-migration, feedback, risk, profile, asset, and test foundations are candidates
-for reuse. Its fixed provider routing, tiered hotspot cascade, fake precision,
-independent tool pages, and prediction-oriented effect review are not the active
-product contract.
+- `/api/v2` is the only public API and `ContentProject` is the product aggregate.
+  Do not add v1 routes, compatibility shims, legacy data sources, or named-provider
+  runtime code. Keep historical SQL migrations only for safe database upgrades.
+- Configure AI through an OpenAI-compatible endpoint; never use it as a factual
+  source for realtime claims or user experience.
+- Write tests before implementation and keep backend/frontend coverage >=80%.
+- Do not copy `.env`, databases, Chroma data, uploads, keys, caches, generated
+  output, agent worktrees, or source Git metadata into the project.
+- Treat Spec-007 as historical implementation context: reuse completed
+  foundations, not fixed providers, hotspot cascades, fake precision,
+  independent tool pages, or prediction-oriented product assumptions.
 <!-- SPECKIT END -->
+
+## Windows Development and Docker Validation
+
+- `G:\codex_project\topicAI\mvp` is the only source tree; WSL exposes the same
+  files at `/mnt/g/codex_project/topicAI/mvp`. Do not create another clone or
+  make lasting source changes inside containers.
+- Keep ordinary editing, Git, dependencies, builds, unit tests, linting, and
+  type checks in PowerShell.
+- For Docker Compose, full-stack runtime, or container validation, explicitly
+  invoke `$windows-wsl-docker-validation`. Read
+  `docs/agents/wsl-docker-development.md` for project-specific paths, commands,
+  and volume retention; do not duplicate the Skill workflow here.
+- Improve that Skill only after a reproducible gap and stop at its stated
+  maturity limit.

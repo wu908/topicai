@@ -1,7 +1,7 @@
 ﻿# API Contract: TopicAI v2 Content Project
 
 **Base path**: `/api/v2`  
-**Authentication**: Bearer JWT from compatible `/api/v1/auth/*` endpoints.  
+**Authentication**: Bearer JWT from `/api/v2/auth/register`, `/login`, and `/refresh`.
 **Envelope**: `{ code, data, message, meta }`; `meta` may include `request_id`, `idempotency_replayed`, and `ai_trace`.
 
 ## Shared Rules
@@ -139,10 +139,9 @@ Stable error codes:
 - `PUBLISH_CHECK_STALE`, `LOCKED_VERSION_IMMUTABLE`
 - `MATERIAL_IN_USE`, `EXPORT_PARTIAL_FAILURE`
 
-## Legacy Compatibility
+## Version Boundary
 
-- `/api/v1/auth/*`, `/api/v1/health*`, and compatible upload/download primitives remain available.
-- `/api/v1/topics`, `/ideas`, `/titles`, `/viral`, `/publish`, and prediction-oriented review endpoints become typed deprecation shims after equivalent v2 navigation is live.
-- Shims return `replacement`, `deprecated=true`, and a removal target release; they do not generate new legacy records.
-- New frontend code imports only v2 domain contracts except auth and low-level file upload.
-
+- `/api/v2` is the sole public API, including auth and health.
+- `/api/v1/*` is not registered and returns the standard not-found response.
+- Frontend code imports only v2 contracts and clients.
+- Future breaking changes require a new API version rather than a compatibility shim inside v2.

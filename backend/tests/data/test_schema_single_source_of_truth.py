@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+import shutil
 import sqlite3
 from pathlib import Path
 
@@ -33,34 +34,12 @@ from app.data.migrations.runner import DEFAULT_MIGRATIONS_DIR, apply
 # stable diff output.
 _EXPECTED_TABLES: frozenset[str] = frozenset(
     {
-        # 000_initial originals (19 business tables + schema_migrations)
+        # v2-only final schema
         "schema_migrations",
         "users",
         "creator_profiles",
-        "topic_recommendations",
-        "viral_analyses",
-        "idea_boosters",
-        "title_optimizations",
-        "track_diagnoses",
-        # feedback_records / feedback_analyses intentionally omitted —
-        # retired by migration 007 (T201-T204). Production writes
-        # user_feedback (002) and never touches these legacy tables.
-        "effect_reviews",
-        "content_risks",
-        "publish_suggestions",
-        "user_events",
-        "llm_call_logs",
-        "upgrade_signals",
-        "assets",
-        "asset_tags",
-        "asset_tag_links",
-        "asset_usages",
-        "platform_accounts",
-        "team_members",
-        # migration-only additions (002/004/006)
-        "user_feedback",
-        "risk_keywords",
-        "platform_tokens",
+        "materials",
+        "material_usages",
         # v2 content-project foundation and intent orchestration (012-033)
         "content_projects",
         "content_versions",
@@ -151,11 +130,7 @@ class TestBootstrapFullSchema:
         )
         assert len(rows["000_initial_schema"]) == 64  # SHA-256 hex
 
-    def test_creator_profiles_has_authoritative_check(self, tmp_path):
-        """T101 (supporting T105): the 000/migration definition of
-        creator_profiles carries the recommendation_mode CHECK that the
-        SQL_SCHEMA version lacked. Verified by inspecting the fresh DB's
-        table SQL (sqlite_master) — the CHECK clause must be present."""
+    def test_creator_profiles_has_v2_checks(self, tmp_path):
         db = tmp_path / "fresh.db"
         apply(db, DEFAULT_MIGRATIONS_DIR)
 
@@ -164,21 +139,17 @@ class TestBootstrapFullSchema:
                 "SELECT sql FROM sqlite_master WHERE name='creator_profiles'"
             ).fetchone()
 
-        assert "recommendation_mode" in sql
-        assert "CHECK" in sql.upper(), (
-            "creator_profiles missing the recommendation_mode CHECK — "
-            "the SQL_SCHEMA (CHECK-less) version won instead of the "
-            "migration-authoritative definition.\nSQL:\n" + str(sql)
-        )
+        assert "growth_goal" in sql
+        assert "confirmation_state" in sql
+        assert "recommendation_mode" not in sql
+        assert "CHECK" in sql.upper()
 
 
 # ==================== T105 ====================
 
 
 class TestCreatorProfilesCheckEnforced:
-    """T105: a row violating recommendation_mode's CHECK is rejected at
-    the SQLite layer on a fresh DB (proves the constraint is real, not
-    just textual)."""
+    """The final v2 profile enum constraints are enforced by SQLite."""
 
     def test_creator_profiles_check_enforced_on_fresh_db(self, tmp_path):
         db = tmp_path / "fresh.db"
@@ -195,11 +166,8 @@ class TestCreatorProfilesCheckEnforced:
             with pytest.raises(sqlite3.IntegrityError):
                 conn.execute(
                     "INSERT INTO creator_profiles "
-                    "(id, user_id, track, content_formats, "
-                    "production_complexity, content_depth, hotspot_preference, "
-                    "recommendation_mode, rubric_weights, created_at, updated_at) "
-                    "VALUES ('p1','u1','t','[]','low','shallow','hot',"
-                    "'bogus_mode_not_in_check','{}','2026-01-01','2026-01-01')"
+                    "(id,user_id,growth_goal,confirmation_state,created_at,updated_at) "
+                    "VALUES ('p1','u1','bogus_goal','provisional','2026-01-01','2026-01-01')"
                 )
 
 
@@ -365,12 +333,7 @@ class TestDatabaseApplyMigrations:
 
 
 class TestConftestFixtureRoutedThroughBridge:
-    """T103: the ``test_db`` fixture (and the lifespan startup) must get
-    their schema from ``Database.apply_migrations()``, NOT from conftest's
-    inline re-implementation of migrations 002/003/004. Assert the
-    migration-only tables (platform_tokens, user_feedback, risk_keywords)
-    are present on the fixture's aiosqlite engine — proving the bridge ran.
-    """
+    """The test fixture receives the final v2 schema from the migration runner."""
 
     @pytest.mark.asyncio
     async def test_conftest_fixture_has_all_production_tables(self, test_db):
@@ -380,9 +343,7 @@ class TestConftestFixtureRoutedThroughBridge:
             )
             tables = {r[0] for r in rows.fetchall()}
 
-        # Tables that ONLY exist via migrations (002/004/006), not via the
-        # legacy SQL_SCHEMA. If the bridge didn't run, these are missing.
-        migration_only = {"user_feedback", "risk_keywords", "platform_tokens"}
+        migration_only = {"content_projects", "creator_states", "materials"}
         missing = migration_only - tables
         assert not missing, (
             f"test_db fixture missing migration-only tables {sorted(missing)} "
@@ -450,118 +411,6 @@ class TestInitDbRetiresSqlSchema:
         )
 
 
-# ==================== T201-T204 (drop unused feedback tables) ============
-
-
-class TestDropUnusedFeedbackTables:
-    """T201-T204: migration 007 retires the legacy ``feedback_records`` and
-    ``feedback_analyses`` tables.
-
-    Background (from spec-007 notes in ``000_initial_schema.sql`` lines
-    138-156): production has always written to ``user_feedback`` (added by
-    migration 002). The two legacy tables were carried in 000 to preserve
-    fresh-DB / old-prod-DB parity and to keep the FK-graph documented.
-    With parity no longer required (002 has shipped, all writers point at
-    ``user_feedback``), migration 007 drops them.
-
-    Invariants verified here:
-      * Neither dead table appears in a freshly-bootstrapped DB.
-      * Migration 007 is recorded in ``schema_migrations`` with a
-        SHA-256 hex checksum (64 chars).
-      * ``user_feedback`` (the live table) is still present — the drop
-        does not cascade beyond the two retired tables.
-      * Applying migrations a second time is a no-op (idempotent).
-    """
-
-    _DEAD_TABLES: frozenset[str] = frozenset({"feedback_records", "feedback_analyses"})
-
-    def test_dead_tables_absent_on_fresh_db(self, tmp_path):
-        db = tmp_path / "fresh.db"
-        apply(db, DEFAULT_MIGRATIONS_DIR)
-
-        with sqlite3.connect(db) as conn:
-            tables = _tables_in(conn)
-
-        leaked = self._DEAD_TABLES & tables
-        assert not leaked, (
-            f"migration 007 should have dropped {sorted(leaked)} but they "
-            f"are still present in the fresh DB"
-        )
-
-    def test_user_feedback_still_present_after_drop(self, tmp_path):
-        """The live user_feedback table (migration 002) must survive — the
-        drop targets only the two legacy tables, not the production
-        feedback store."""
-        db = tmp_path / "fresh.db"
-        apply(db, DEFAULT_MIGRATIONS_DIR)
-
-        with sqlite3.connect(db) as conn:
-            tables = _tables_in(conn)
-
-        assert "user_feedback" in tables, (
-            "user_feedback (the live feedback table from migration 002) "
-            "must still exist after migration 007"
-        )
-
-    def test_migration_007_recorded_with_sha256_checksum(self, tmp_path):
-        """The runner must have recorded migration 007 in
-        ``schema_migrations`` with a 64-char SHA-256 hex checksum, just
-        like every other migration."""
-        db = tmp_path / "fresh.db"
-        apply(db, DEFAULT_MIGRATIONS_DIR)
-
-        with sqlite3.connect(db) as conn:
-            rows = {
-                row[0]: row[1]
-                for row in conn.execute(
-                    "SELECT version, checksum FROM schema_migrations"
-                )
-            }
-
-        assert "007_drop_unused_feedback_tables" in rows, (
-            "007_drop_unused_feedback_tables not recorded in schema_migrations; "
-            f"recorded versions: {sorted(rows)}"
-        )
-        assert len(rows["007_drop_unused_feedback_tables"]) == 64  # SHA-256 hex
-
-    def test_drop_is_idempotent_via_runner(self, tmp_path):
-        """Re-running ``apply`` on an already-migrated DB is a no-op — the
-        runner records the version on first apply and skips it on
-        subsequent calls. The dead tables must still be absent after the
-        second pass."""
-        db = tmp_path / "fresh.db"
-        apply(db, DEFAULT_MIGRATIONS_DIR)  # first pass
-        applied_again = apply(db, DEFAULT_MIGRATIONS_DIR)  # second pass
-
-        assert applied_again == [], (
-            f"second apply pass should be a no-op, got: "
-            f"{[m.version for m in applied_again]}"
-        )
-
-        with sqlite3.connect(db) as conn:
-            tables = _tables_in(conn)
-        leaked = self._DEAD_TABLES & tables
-        assert not leaked, (
-            f"dead tables reappeared after second apply: {sorted(leaked)}"
-        )
-
-    def test_expected_tables_set_excludes_dead_tables(self):
-        """Belt-and-suspenders: ``_EXPECTED_TABLES`` (the module-level
-        single-source-of-truth set) must NOT contain the dropped tables.
-        If a future refactor accidentally re-adds them, the bootstrap
-        test in ``TestBootstrapFullSchema`` would silently mask the
-        regression (it would just see the dead tables as 'expected').
-        This test pins the lock-down at the constant level."""
-        assert "feedback_records" not in _EXPECTED_TABLES, (
-            "_EXPECTED_TABLES still includes feedback_records — the 007 "
-            "drop should have removed it from the expected set"
-        )
-        assert "feedback_analyses" not in _EXPECTED_TABLES, (
-            "_EXPECTED_TABLES still includes feedback_analyses — the 007 "
-            "drop should have removed it from the expected set"
-        )
-
-
 # ==================== T301-T305 (008 creator_profiles reconcile) ============
 
 
@@ -601,6 +450,15 @@ class TestCreatorProfilesReconcile:
         "created_at TEXT NOT NULL, "
         "last_login TEXT"
     )
+
+    @staticmethod
+    def _through_008(tmp_path: Path) -> Path:
+        migrations = tmp_path / "through-008"
+        migrations.mkdir(exist_ok=True)
+        for source in DEFAULT_MIGRATIONS_DIR.glob("[0-9][0-9][0-9]_*.sql"):
+            if source.name <= "008_creator_profiles_reconcile.sql":
+                shutil.copy2(source, migrations / source.name)
+        return migrations
 
     def _create_legacy_creator_profiles(self, conn: sqlite3.Connection) -> None:
         """Simulate a pre-005 schema: ``users`` + ``creator_profiles``
@@ -662,7 +520,7 @@ class TestCreatorProfilesReconcile:
             )
             conn.commit()
 
-        apply(db, DEFAULT_MIGRATIONS_DIR)
+        apply(db, self._through_008(tmp_path))
 
         with sqlite3.connect(db) as conn:
             conn.execute("PRAGMA foreign_keys=ON")
@@ -707,7 +565,7 @@ class TestCreatorProfilesReconcile:
             )
             conn.commit()
 
-        apply(db, DEFAULT_MIGRATIONS_DIR)
+        apply(db, self._through_008(tmp_path))
 
         with sqlite3.connect(db) as conn:
             (count,) = conn.execute(
@@ -731,7 +589,7 @@ class TestCreatorProfilesReconcile:
         rebuild — the CHECK and the ``idx_creator_profiles_user_id``
         index both survive."""
         db = tmp_path / "fresh.db"
-        apply(db, DEFAULT_MIGRATIONS_DIR)
+        apply(db, self._through_008(tmp_path))
 
         with sqlite3.connect(db) as conn:
             (sql,) = conn.execute(
@@ -757,7 +615,7 @@ class TestCreatorProfilesReconcile:
         64-char SHA-256 hex checksum (mirrors the contract every other
         shipped migration honours)."""
         db = tmp_path / "fresh.db"
-        apply(db, DEFAULT_MIGRATIONS_DIR)
+        apply(db, self._through_008(tmp_path))
 
         with sqlite3.connect(db) as conn:
             rows = {

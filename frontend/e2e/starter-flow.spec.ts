@@ -39,7 +39,7 @@ test('starter reaches three existing content projects without a second workflow'
     localStorage.setItem('access_token', 'starter-e2e-token');
     localStorage.setItem('refresh_token', 'starter-e2e-refresh');
   });
-  await page.route('**/api/v1/auth/me', (route) => route.fulfill({
+  await page.route('**/api/v2/auth/me', (route) => route.fulfill({
     status: 200,
     contentType: 'application/json',
     body: JSON.stringify(envelope({ user: { id: 'u1', username: 'Starter', email: 'starter@test.com' } })),

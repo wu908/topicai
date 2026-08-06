@@ -1,7 +1,7 @@
 # Tasks: 008 TopicAI Content Project MVP
 
 **Input**: [spec.md](./spec.md), [plan.md](./plan.md), [research.md](./research.md), [data-model.md](./data-model.md), [contracts/api-v2.md](./contracts/api-v2.md), [quickstart.md](./quickstart.md)  
-**Method**: Test-first per Constitution v2.0.0. Every user-story phase is independently demonstrable.  
+**Method**: Test-first per Constitution v3.0.0. Every user-story phase is independently demonstrable.
 **Format**: `- [ ] T### [P?] [US?] Action with exact file path`
 
 ## Phase 1: Setup and Baseline
@@ -29,8 +29,8 @@
 
 ### Tests first
 
-- [ ] T013 [P] Add fresh-database and repeat-application tests for migrations 009-017 in `backend/tests/data/test_content_project_migrations.py`
-- [ ] T014 [P] Add copied-v4-baseline upgrade tests for migrations 009-017 in `backend/tests/data/test_content_project_upgrade.py`
+- [x] T013 [P] Add fresh-database and migration-history tests through 045 in `backend/tests/data/`
+- [x] T014 [P] Add upgrade-data preservation tests through 045 in `backend/tests/data/test_v2_only_cleanup_migration.py`
 - [ ] T015 [P] Add exhaustive allowed/blocked transition tests in `backend/tests/services/test_project_state.py`
 - [ ] T016 [P] Add idempotency replay/conflict and immutable generic feedback-target tests in `backend/tests/services/test_idempotency.py` and `backend/tests/services/test_feedback_v2.py`
 - [ ] T017 [P] Add optimistic concurrency and owner-isolation tests in `backend/tests/services/test_v2_concurrency.py`
@@ -246,17 +246,21 @@
 
 **Checkpoint**: Supporting material and account controls work without a complex DAM or platform OAuth.
 
-## Phase 11: Compatibility, Polish, and Release Validation
+## Phase 11: V2-Only Cleanup, Polish, and Release Validation
 
 **Goal**: Retire old primary workflows safely, synchronize documentation/contracts, and prove the local Docker MVP.
 
-### Legacy compatibility
+### V2-only removal
 
-- [ ] T128 [P] Add frontend redirect tests for all legacy paths in `frontend/src/__tests__/legacyRoutes.test.tsx`
-- [ ] T129 [P] Add typed v1 deprecation-shim tests in `backend/tests/api/test_legacy_deprecation.py`
-- [ ] T130 Implement legacy frontend redirects in `frontend/src/app/routes.tsx` per `plan.md`
-- [ ] T131 Implement v1 business endpoint deprecation responses without new legacy writes in `backend/app/api/v1/topics.py`, `ideas.py`, `titles.py`, `viral.py`, `publish.py`, and `reviews.py`
-- [ ] T132 Remove team/account-matrix entries from active navigation and build reachability in `frontend/src/components/layout/Sidebar.tsx` and `frontend/src/app/routes.tsx`
+- [x] T128 [P] Add frontend tests proving removed legacy paths reach Not Found in `frontend/src/__tests__/App.test.tsx`
+- [x] T129 [P] Add OpenAPI and removed-v1 contract tests in `backend/tests/api/v2/test_v2_only_contract.py`
+- [x] T130 Remove all legacy frontend routes and redirects from `frontend/src/App.tsx`
+- [x] T131 Remove `/api/v1`, legacy services/models/data sources/providers, and their tests and dependencies
+- [x] T132 Remove team/account-matrix entries from active navigation and build reachability in `frontend/src/components/layout/Sidebar.tsx` and `frontend/src/App.tsx`
+- [x] T149 Add migration 045 and upgrade tests that migrate reused asset/profile data, drop v1-only tables, and preserve users, migration history, and v2 data
+- [x] T150 Synchronize Constitution, plan, spec, research, data model, API contract, quickstart, READMEs, and agent guidance with the v2-only release
+- [x] T151 Run final backend and frontend lint, tests, coverage, and production build
+- [x] T152 Validate the rebuilt Compose stack, then remove only approved TopicAI images/volumes and global build cache while retaining base dependency images
 
 ### Cross-cutting validation
 
@@ -270,11 +274,11 @@
 - [ ] T140 [P] Add prohibited source/field scan to `scripts/check-v2-source-integrity.ps1`
 - [ ] T141 [P] Add UTF-8/mojibake scan to `scripts/check-utf8.ps1`
 - [ ] T142 Synchronize generated OpenAPI, v2 TypeScript contracts, and `specs/008-content-project-mvp/contracts/api-v2.md` in `backend/openapi3.json`
-- [ ] T143 Update `README.md`, `backend/README.md`, and `frontend/README.md` to the implemented five-node MVP and generic model config
+- [x] T143 Update `README.md`, `backend/README.md`, and `frontend/README.md` to the implemented five-node MVP and generic model config
 - [ ] T144 Update `docker-compose.yml`, `backend/Dockerfile`, `frontend/Dockerfile`, and health checks for fresh-volume runtime
-- [ ] T145 Run backend pytest/ruff/mypy/bandit and enforce >=80% coverage from `backend/pyproject.toml`
-- [ ] T146 Run frontend Vitest coverage/lint/build/npm audit and all Playwright suites from `frontend/`
-- [ ] T147 Execute [quickstart.md](./quickstart.md) against fresh Docker volumes, restart services, and record results in `specs/008-content-project-mvp/release-validation.md`
+- [x] T145 Run backend pytest/ruff/mypy/bandit and enforce >=80% coverage from `backend/pyproject.toml`
+- [x] T146 Run frontend Vitest coverage/lint/build/npm audit and all Playwright suites from `frontend/`
+- [x] T147 Execute [quickstart.md](./quickstart.md) against fresh Docker volumes, restart services, and record results in `specs/008-content-project-mvp/release-validation.md`
 - [ ] T148 Run SpecKit cross-artifact analysis and resolve every CRITICAL/HIGH inconsistency before implementation is declared complete in `specs/008-content-project-mvp/`
 
 ## Dependencies and Execution Order

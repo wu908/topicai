@@ -135,7 +135,8 @@ class ContentOpportunityService:
             None,
         )
         material = await self.db.fetch_one(
-            "SELECT * FROM assets WHERE owner_id=:owner ORDER BY updated_at DESC,id LIMIT 1",
+            "SELECT * FROM materials WHERE owner_user_id=:owner "
+            "ORDER BY updated_at DESC,id LIMIT 1",
             {"owner": owner},
         )
         state = await self.db.fetch_one(
@@ -247,28 +248,28 @@ class ContentOpportunityService:
             candidates.append(
                 {
                     "opportunity_type": "material_derivative",
-                    "source_ref": f"asset:{material['id']}",
-                    "source_excerpt": material["filename"],
-                    "source_url": material["url"],
+                    "source_ref": f"material:{material['id']}",
+                    "source_excerpt": material["name"],
+                    "source_url": material["source_url"],
                     "source_published_at": None,
                     "source_refs": [
                         SourceReference(
                             ref_type="material",
                             entity_id=material["id"],
-                            url=material["url"],
+                            url=material["source_url"],
                             publisher=None,
                             published_at=None,
                             collected_at=material["created_at"],
-                            title=material["filename"],
-                            excerpt=material["filename"],
+                            title=material["name"],
+                            excerpt=material["name"],
                             verification_state="verified",
                             rights_note="用户保存的个人素材",
                         ).model_dump()
                     ],
-                    "title": f"用素材「{material['filename']}」讲清楚 {pillar['value']}",
+                    "title": f"用素材「{material['name']}」讲清楚 {pillar['value']}",
                     "audience_change": f"让 {audience['value']} 从真实素材中获得一个可执行做法",
                     "rationale": "这条机会来自你已保存的个人素材；采用前仍需确认素材中的具体事实。",
-                    "evidence_refs": [f"asset:{material['id']}"],
+                    "evidence_refs": [f"material:{material['id']}"],
                     "dimensions": {
                         **common_dimensions,
                         "audience_fit": "unknown",
@@ -1070,25 +1071,6 @@ class ContentOpportunityService:
                     opportunity["version"] + 1, body.idempotency_key, digest,
                     {"reason": body.reason, "confirmed_title": title if status == "accepted" else None},
                     timestamp,
-                )
-                await session.execute(
-                    text(
-                        "INSERT INTO user_feedback (id,user_id,source_type,source_id,"
-                        "feedback_type,feedback_value,reason,created_at) VALUES "
-                        "(:id,:owner,'opportunity',:opportunity,:feedback,NULL,:reason,:now)"
-                    ),
-                    {
-                        "id": str(uuid.uuid4()),
-                        "owner": owner,
-                        "opportunity": opportunity_id,
-                        "feedback": {
-                            "accept": "adopt",
-                            "save": "save",
-                            "reject": "reject",
-                        }[body.decision],
-                        "reason": body.reason.strip() if body.reason else None,
-                        "now": timestamp,
-                    },
                 )
         result = await self.get(owner, opportunity_id)
         if status == "accepted":

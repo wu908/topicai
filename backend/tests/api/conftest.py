@@ -38,7 +38,7 @@ async def app(test_db):
     get_db dependencies so the app talks to our :memory: database with a
     fake authenticated user.
     """
-    from app.api.v1.deps import get_current_user, get_db
+    from app.api.deps import get_current_user, get_db
     from main import create_app
 
     app = create_app()
@@ -59,7 +59,7 @@ async def app(test_db):
 @pytest_asyncio.fixture
 async def app_as_u2(test_db):
     """Same as `app` but authenticated as user 'u2' — for cross-user tests."""
-    from app.api.v1.deps import get_current_user, get_db
+    from app.api.deps import get_current_user, get_db
     from main import create_app
 
     app = create_app()
@@ -110,7 +110,7 @@ async def client_no_auth(test_db):
     get_current_user which will 401 when request.state.user_id is missing."""
     from httpx import ASGITransport, AsyncClient
 
-    from app.api.v1.deps import get_db
+    from app.api.deps import get_db
     from main import create_app
 
     app = create_app()

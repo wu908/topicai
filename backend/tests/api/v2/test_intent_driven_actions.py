@@ -851,9 +851,9 @@ async def test_growth_creator_completes_confirmed_learning_loop(
             )
             await session.execute(
                 text(
-                    "INSERT INTO assets (id,owner_id,filename,mime_type,type,size,url,"
-                    "used_count,created_at,updated_at) VALUES ('deletion-screenshot','u1',"
-                    "'metrics.png','image/png','image',12,'/private/metrics.png',0,"
+                    "INSERT INTO materials (id,owner_user_id,name,mime_type,kind,size,source_url,"
+                    "created_at,updated_at) VALUES ('deletion-screenshot','u1',"
+                    "'metrics.png','image/png','image',12,'/private/metrics.png',"
                     "'2026-07-22T00:00:00Z','2026-07-22T00:00:00Z')"
                 )
             )
@@ -931,7 +931,7 @@ async def test_growth_creator_completes_confirmed_learning_loop(
             ("creator_rules", "deletion-rule"),
             ("creator_series", "deletion-series"),
             ("content_opportunities", "deletion-opportunity"),
-            ("assets", "deletion-screenshot"),
+            ("materials", "deletion-screenshot"),
         ):
             count = (
                 await session.execute(

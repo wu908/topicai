@@ -6,7 +6,7 @@
 
 ## Decision 1: Fork a clean working copy instead of editing the source repository
 
-**Decision**: Implement only in `G:\codex_project\no_1_project\mvp`. Exclude `.git`, `.codegraph`, agent worktrees, `node_modules`, virtual environments, caches, builds, test artifacts, `.env`, local databases, Chroma data, logs, uploads, and user/API secrets.
+**Decision**: Implement only in `G:\codex_project\topicAI\mvp`. Exclude `.git`, `.codegraph`, agent worktrees, `node_modules`, virtual environments, caches, builds, test artifacts, `.env`, local databases, Chroma data, logs, uploads, and user/API secrets.
 
 **Rationale**: The source worktree contains untracked user documents and local configuration. A clean copy protects the original, creates a fresh-data MVP, and prevents runtime data or credentials from leaking into the new project.
 
@@ -40,19 +40,19 @@
 | LLM client, prompt registry, structured-output parser | Adapt reuse | Collapse vendor-specific config to one OpenAI-compatible boundary and capability declaration |
 | Effect review persistence | Adapt reuse | Remove predictions; add append-only snapshots, fact/hypothesis/experiment review, confirmed insights |
 | Account service | Minimal reuse | Restrict MVP UI to one primary Xiaohongshu reference; no OAuth/sync implementation |
-| Topic recommendation/DataManager/data sources | Stop for new domain | Do not call from Opportunity v2; retain temporarily only for v1 compatibility tests until routes redirect |
-| Idea/title/viral/publish-time independent services/pages | Stop as primary workflows | Reuse selected prompt/rule helpers inside ContentProject; redirect legacy routes |
-| Team service and team pages | Disable from navigation/build scope | Keep code isolated for compatibility, do not migrate into MVP domain |
+| Topic recommendation/DataManager/data sources | Delete | V2 opportunities use first-party evidence and manual source intake only |
+| Idea/title/viral/publish-time independent services/pages | Delete | Their approved behavior is represented inside ContentProject services |
+| Team service and team pages | Delete | Team/MCN behavior is outside the MVP |
 
 ## Decision 4: Introduce a new v2 domain contract
 
-**Decision**: Add `/api/v2/` endpoints for onboarding, opportunities, content projects, versions, publication, performance, reviews, insights, and AI task traces. Keep `/api/v1/auth`, health, and compatible asset operations where their wire contract is unchanged. Legacy v1 tool routes return a typed deprecation/redirect payload after the v2 flow is available.
+**Decision**: `/api/v2/` is the only public API. It includes authentication, health, onboarding, opportunities, content projects, publication, performance, reviews, and account-data operations. Removed v1 paths return the standard not-found response.
 
 **Rationale**: `TopicItem`, title optimization, publish advice, and effect prediction contain breaking concepts such as estimated heat, composite scores, CTR estimates, fixed models, and performance forecasts. Mutating those response shapes under v1 would violate the Constitution.
 
 **Alternatives considered**:
 - Rewrite v1 in place: rejected because it silently breaks clients and tests.
-- Run two complete products indefinitely: rejected; compatibility shims expire after one release.
+- Keep compatibility shims after the v2 release: rejected because they retain duplicate runtime behavior and dependencies.
 
 ## Decision 5: Make ContentProject the aggregate and SQLite the transaction boundary
 
@@ -71,7 +71,7 @@
 **Rationale**: This matches the user's explicit preference and avoids coupling product semantics to a provider. The existing OpenAI client and structured parser remain reusable.
 
 **Alternatives considered**:
-- Preserve fixed DeepSeek/Qwen/GLM tiers: rejected by product direction and Constitution v2.0.0.
+- Preserve fixed DeepSeek/Qwen/GLM tiers: rejected by product direction and Constitution v3.0.0.
 - Automatically probe arbitrary models: rejected because capability probing is unreliable and complicates deterministic tests.
 
 ## Decision 7: Remove fake precision and simulated hotspot fallback
@@ -94,15 +94,15 @@
 - Add TipTap/Lexical: deferred until formatting needs are validated.
 - Edit immutable versions in place: rejected because it destroys audit and publish reproducibility.
 
-## Decision 9: Fresh data and additive migrations
+## Decision 9: Immutable migration history and audited cleanup
 
-**Decision**: The copied MVP starts empty. Add migrations after existing `008_creator_profiles_reconcile.sql`; do not copy or transform source SQLite rows. Migration tests must prove both fresh bootstrap and upgrade from the copied schema baseline.
+**Decision**: Keep every historical migration so old databases can upgrade. Migration 045 converts reused asset data to `materials`, rebuilds `creator_profiles` with v2 columns, and drops the v1-only tables after the local data audit. Tests prove fresh bootstrap and upgrade-data preservation.
 
-**Rationale**: The user selected fresh data, while additive migrations preserve engineering discipline and make future upgrades safe.
+**Rationale**: Runtime compatibility code can be deleted without making existing user/profile/v2 data disposable.
 
 **Alternatives considered**:
 - Rewrite `000_initial_schema.sql`: rejected because the baseline is frozen.
-- Delete legacy tables immediately: deferred until the compatibility release ends.
+- Delete migration history: rejected because existing databases would no longer be upgradeable.
 
 ## Decision 10: Local Docker is the release environment
 
@@ -120,7 +120,7 @@
 
 ## Resolved Clarifications
 
-- Target directory: `G:\codex_project\no_1_project\mvp`.
+- Target directory: `G:\codex_project\topicAI\mvp`.
 - Audience: shared foundation with lightweight starter entry and complete growth loop.
 - Authentication: preserve login/registration.
 - Runtime data: fresh database and files.

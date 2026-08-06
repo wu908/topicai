@@ -6,13 +6,15 @@
 
 分支：`feature/explainable-opportunities`
 
-当前 HEAD：`08f289c` - `fix: address explainable opportunity review findings`
+当前 HEAD：`28151b7` - `refactor: remove verified over-engineering`
 
 ## 当前状态
 
-全仓库过度工程复审、确认删除和验证已经完成，修改尚未提交。范围仅限本仓库；不要操作 `G:\codex_project\no.2_project\product_drill_AI`。
+全仓库过度工程复审、确认删除、验证和提交已经完成。范围仅限本仓库；不要操作 `G:\codex_project\no.2_project\product_drill_AI`。
 
-本次差异以 `git diff` 为准。排除用户已有的 `AGENTS.md` 修改后，当前统计为：`87 files changed, 223 insertions, 8577 deletions`。`git diff --check` 已通过。
+清理提交为 `28151b7`，父提交为 `08f289c`。完整差异以 `git diff 08f289c..28151b7` 为准，统计为：`88 files changed, 306 insertions, 8577 deletions`。提交前 `git diff --cached --check` 已通过。
+
+除本交接文档的状态更新外，本次清理没有未提交代码差异。工作树仍包含用户已有的 `AGENTS.md` 修改和其他未跟踪项目文档。
 
 ## 已完成工作
 
@@ -63,21 +65,21 @@
 
 ## 工作树边界
 
-用户已有的 [`AGENTS.md`](../../AGENTS.md) 修改，以及 `docs/agents/`、`docs/handoffs/` 下其他未跟踪文档，不属于本次代码清理。不得覆盖、删除、批量暂存或默认提交。本交接文档本身也是新增未跟踪文档。
+用户已有的 [`AGENTS.md`](../../AGENTS.md) 修改，以及 `docs/agents/`、`docs/handoffs/` 下其他未跟踪文档，不属于本次代码清理。不得覆盖、删除、批量暂存或默认提交。本交接文档已包含在 `28151b7` 中；当前这次状态更新尚未提交。
 
 开发和容器命令继续遵守 [`AGENTS.md`](../../AGENTS.md) 的 WSL-first 规则。WSL 会报告 systemd 用户会话警告；Docker 命令仍可运行。Windows PowerShell 执行策略会拦截 `npm.ps1` 和部分全局脚本，必要时使用 `npm.cmd`，不要修改系统执行策略。
 
 ## 建议后续顺序
 
-1. 审阅当前 `git diff`，确认删除范围和保留决策，不再扩展清理范围。
-2. 若准备提交，显式暂存本次代码文件，排除 `AGENTS.md` 和其他用户文档。
+1. 使用 `git show 28151b7` 审阅已提交的删除范围和保留决策，不再扩展清理范围。
+2. 如需提交本次交接状态更新，只暂存本文件，排除 `AGENTS.md` 和其他用户文档。
 3. 是否修复 experiment metrics 失败由用户决定；先诊断指标契约，再做最小根因修复。
-4. 提交或 PR 前重新运行相关测试、全量门禁和 Compose 健康检查。
+4. 若后续代码继续变化，在提交或 PR 前重新运行相关测试、全量门禁和 Compose 健康检查。
 5. 两个历史 data 卷只有在用户明确确认不需要回滚数据时才删除。
 
 ## Suggested skills
 
-- `code-review`：提交前审查当前大规模删除 diff，重点检查行为回归、错误删除和测试缺口。
+- `code-review`：审查提交 `28151b7`，重点检查行为回归、错误删除和测试缺口。
 - `diagnose`：定位 experiment metrics 中 `offered` 计数为 0 的根因并核对指标契约。
 - `ponytail-review`：仅在继续清理时使用，要求每项删除都有生产调用证据；不要重新发起无边界全仓库重构。
 - `handoff`：下一阶段完成后更新状态，引用本文件、提交和测试结果，不复制完整 diff。

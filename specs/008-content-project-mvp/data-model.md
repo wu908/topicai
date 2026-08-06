@@ -27,7 +27,7 @@ New fields through migration:
 
 | Field | Type | Rules |
 |---|---|---|
-| `product_mode` | enum text | `starter` or `growth`; default `growth` for compatibility |
+| `product_mode` | enum text | `starter` or `growth`; existing rows default to `growth` during migration |
 | `timezone` | text | IANA timezone; default `Asia/Shanghai` |
 | `weekly_publish_goal` | integer | 1..4; default 2 |
 | `onboarding_state` | enum text | `not_started`, `in_progress`, `completed` |
@@ -35,7 +35,7 @@ New fields through migration:
 
 ### CreatorProfile
 
-The existing table is reconciled by a new migration; legacy columns remain readable during one compatibility release.
+Migration 045 rebuilds the shared table with only the v2 profile columns while preserving each profile row.
 
 | Field | Type | Rules |
 |---|---|---|
@@ -49,11 +49,11 @@ The existing table is reconciled by a new migration; legacy columns remain reada
 | `confirmation_state` | enum text | `provisional`, `confirmed`, `needs_review` |
 | `confirmed_at` | datetime nullable | set by explicit user confirmation |
 
-Legacy rubric weights and hotspot preference are not used by v2 opportunity generation.
+V1 rubric weights, hotspot preferences, and recommendation-mode columns are removed.
 
 ### PlatformAccount
 
-Reuse `platform_accounts`; enforce at most one non-deleted `platform='xhs'` row per owner in MVP. OAuth status fields remain extension points and are not required for manual use.
+The MVP stores only a user-entered Xiaohongshu account reference in v2 settings. V1 platform account/token tables are removed; OAuth is outside this contract.
 
 ## Historical Content Import
 
@@ -285,17 +285,12 @@ Reconcile existing table to generic targets:
 
 ## Migration Sequence
 
-Proposed migrations:
+Implemented foundation and cleanup migrations:
 
-1. `009_user_product_mode.sql`: user mode, timezone, weekly goal, onboarding state, consent.
-2. `010_starter_domain.sql`: assessment, candidates, sprint.
-3. `011_opportunities.sql`: opportunities and source references JSON.
-4. `012_content_projects.sql`: projects, state events, briefs, interview data.
-5. `013_materials_v2.sql`: material extensions and project links while preserving assets.
-6. `014_content_versions.sql`: versions and draft recovery.
-7. `015_publish_review_v2.sql`: checks, publish records, snapshots, reviews, learned insights.
-8. `016_ai_traces_feedback_v2.sql`: AI traces and generic feedback compatibility fields.
-9. `017_creator_profile_v2.sql`: history import/imported note tables, profile reconciliation, and indexes.
+1. `012_content_projects.sql` and `014_content_versions.sql`: content projects and immutable versions.
+2. `018`-`041`: publish hypotheses, calibration, intent actions, evidence, creator learning, opportunities, privacy, and state-event evolution.
+3. `042_growth_onboarding.sql` and `043_first_party_opportunities.sql`: growth profile/import and first-party opportunity sources.
+4. `044_repair_opportunity_sources.sql`: source-reference repair.
+5. `045_drop_legacy_v1_tables.sql`: migrate asset data to `materials`, rebuild `creator_profiles` as v2-only, and drop v1-only business tables.
 
-Legacy tables remain during one compatibility release. No migration copies old recommendation, title, viral, publish-suggestion, or prediction rows into the new domain.
-
+Historical SQL files remain immutable for upgrades. No old recommendation, title, viral, publish-suggestion, or prediction row is copied into the v2 domain.

@@ -4,7 +4,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, Query
 
-from app.api.v1.deps import get_current_user, get_db
+from app.api.deps import get_current_user, get_db
 from app.core.database import Database
 from app.models.common import ApiResponse
 from app.services.content_genome import ContentGenomeService
