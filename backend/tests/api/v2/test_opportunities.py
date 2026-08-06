@@ -309,19 +309,6 @@ async def test_generate_and_list_first_party_opportunities(client, test_db):
         {"opportunity": rejected_item["id"]},
     )
     assert "与本周计划不符" in event["payload_json"]
-    feedback = await test_db.fetch_all(
-        "SELECT source_id,feedback_type,reason FROM user_feedback "
-        "WHERE user_id=:owner AND source_type='opportunity'",
-        {"owner": "u1"},
-    )
-    assert {
-        (row["source_id"], row["feedback_type"], row["reason"]) for row in feedback
-    } == {
-        (item["id"], "adopt", None),
-        (evergreen["id"], "save", "稍后补充素材"),
-        (evergreen["id"], "adopt", None),
-        (rejected_item["id"], "reject", "与本周计划不符"),
-    }
 
 
 @pytest.mark.asyncio

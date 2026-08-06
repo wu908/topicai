@@ -52,6 +52,7 @@ def test_llm_client_uses_compatible_endpoint_when_configured(monkeypatch):
     monkeypatch.setenv("LLM_API_KEY", "compatible-test-key")
     monkeypatch.setenv("LLM_MODEL", "writer-model")
     monkeypatch.setenv("LLM_CAPABILITIES", "text,vision")
+    monkeypatch.setenv("VISION_ENABLED", "true")
     _reset_settings()
 
     mock_client = MagicMock()
@@ -60,17 +61,15 @@ def test_llm_client_uses_compatible_endpoint_when_configured(monkeypatch):
 
         client = LLMClient()
 
-    assert client.default_provider == "compatible"
-    assert client.active_provider == "compatible"
-    assert client.providers["compatible"]["model"] == "writer-model"
+    assert client.model == "writer-model"
     assert client.get_capabilities() == {"text", "vision"}
     assert client.is_available("text") is True
     assert client.is_available("vision") is True
-    assert openai_factory.call_args_list[-1].kwargs["base_url"] == "https://llm.example.test/v1"
+    assert openai_factory.call_args.kwargs["base_url"] == "https://llm.example.test/v1"
 
 
 def test_llm_client_reports_unavailable_when_no_model_is_configured(monkeypatch):
-    for key in ("LLM_BASE_URL", "LLM_API_KEY", "LLM_MODEL", "DEEPSEEK_API_KEY", "DASHSCOPE_API_KEY", "ZHIPU_API_KEY"):
+    for key in ("LLM_BASE_URL", "LLM_API_KEY", "LLM_MODEL"):
         monkeypatch.delenv(key, raising=False)
     _reset_settings()
 
@@ -79,7 +78,6 @@ def test_llm_client_reports_unavailable_when_no_model_is_configured(monkeypatch)
 
         client = LLMClient()
 
-    assert client.active_provider == "deepseek"
     assert client.is_available("text") is False
     assert client.is_available("vision") is False
 
@@ -98,3 +96,27 @@ def test_llm_client_reports_missing_vision_capability(monkeypatch):
 
     assert client.is_available("text") is True
     assert client.is_available("vision") is False
+
+
+def test_vision_requires_operator_switch_and_declared_capability(monkeypatch):
+    monkeypatch.setenv("LLM_BASE_URL", "https://llm.example.test/v1")
+    monkeypatch.setenv("LLM_API_KEY", "compatible-test-key")
+    monkeypatch.setenv("LLM_MODEL", "vision-model")
+    monkeypatch.setenv("LLM_CAPABILITIES", "text,vision")
+    monkeypatch.setenv("VISION_ENABLED", "false")
+    _reset_settings()
+
+    with patch("app.core.llm.OpenAI", return_value=MagicMock()):
+        from app.core.llm import LLMClient
+
+        client = LLMClient()
+
+    assert client.is_available("text") is True
+    assert client.is_available("vision") is False
+
+    monkeypatch.setenv("VISION_ENABLED", "true")
+    _reset_settings()
+    with patch("app.core.llm.OpenAI", return_value=MagicMock()):
+        client = LLMClient()
+
+    assert client.is_available("vision") is True

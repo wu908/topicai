@@ -1,13 +1,13 @@
 ﻿# Quickstart Validation: TopicAI Content Project MVP
 
-This guide defines the release validation expected after Spec-008 implementation. It is not a claim that the current copied code already provides these routes.
+This guide defines the release validation for the implemented v2-only product.
 
 ## 1. Prerequisites
 
 - Docker Desktop with Compose v2.
 - Node.js and pnpm only for non-Docker frontend checks.
 - Python 3.11 or 3.12 only for non-Docker backend checks.
-- A writable checkout at `G:\codex_project\no_1_project\mvp`.
+- The canonical checkout at `G:\codex_project\topicAI\mvp`.
 - Optional OpenAI-compatible endpoint. The complete manual flow must work without one.
 
 ## 2. Configure
@@ -25,7 +25,6 @@ LLM_API_KEY=
 LLM_MODEL=
 LLM_TIMEOUT_SECONDS=30
 LLM_CAPABILITIES=text
-CONTENT_PROJECT_V2_ENABLED=true
 AI_ENABLED=true
 VISION_ENABLED=false
 ```
@@ -36,44 +35,38 @@ Rules:
 - `LLM_CAPABILITIES` is comma-separated: `text` or `text,vision`.
 - No `DEEPSEEK_API_KEY`, `DASHSCOPE_API_KEY`, `ZHIPU_API_KEY`, `TIANAPI_KEY`, or Firecrawl key is required by the v2 runtime.
 
-## 3. Baseline Before Implementation
+## 3. Local Quality Gates
 
-Run inside the writable copy and record results in the implementation PR/task log:
+Run in PowerShell:
 
 ```powershell
-cd G:\codex_project\no_1_project\mvp\backend
+cd G:\codex_project\topicAI\mvp\backend
 python -m pytest -q
 python -m pytest --cov=app --cov-fail-under=80
 
-cd G:\codex_project\no_1_project\mvp
+cd G:\codex_project\topicAI\mvp
 pnpm install --frozen-lockfile
 pnpm --dir frontend test
 pnpm --dir frontend build
 ```
 
-Expected baseline handling:
-
-- Reproduce and classify the source run's one integration assertion failure.
-- Permission-related temp DB/storage/coverage failures must disappear in the writable copy or be fixed before feature work.
-- Record exact passing counts and coverage; do not rely on historical README claims.
+Record exact passing counts and coverage; do not rely on historical README claims.
 
 ## 4. Docker Start
 
-After implementation:
+Use the repository's `$windows-wsl-docker-validation` workflow and an isolated Compose project:
 
 ```powershell
-cd G:\codex_project\no_1_project\mvp
-docker compose down -v
-docker compose up --build -d
-docker compose ps
+wsl -d Ubuntu -u root -- bash -lc "systemctl start docker && docker info >/dev/null && printf '__DOCKER_READY__\\n'"
+wsl -d Ubuntu -- bash -lc "cd /mnt/g/codex_project/topicAI/mvp && docker compose config && docker compose -p topicai-v2-final up --build -d --wait && docker compose -p topicai-v2-final ps"
 ```
 
 Expected:
 
-- Backend becomes healthy at `http://localhost:8000/api/v1/health`.
+- Backend becomes healthy at `http://localhost:8000/api/v2/health`.
 - v2 schema is visible in the API docs and includes `/api/v2/projects`.
 - Frontend opens at `http://localhost`.
-- Fresh volumes apply migrations 000-017 exactly once.
+- Fresh volumes apply the migration chain through 045 exactly once.
 - Restarting Compose preserves created users/projects.
 
 ## 5. Manual No-AI Smoke
@@ -128,13 +121,13 @@ Expected:
 ## 8. Automated Release Gates
 
 ```powershell
-cd G:\codex_project\no_1_project\mvp\backend
+cd G:\codex_project\topicAI\mvp\backend
 python -m pytest --cov=app --cov-fail-under=80
 ruff check app tests
 mypy app
 bandit -r app
 
-cd G:\codex_project\no_1_project\mvp
+cd G:\codex_project\topicAI\mvp
 pnpm --dir frontend test -- --coverage
 pnpm --dir frontend lint
 pnpm --dir frontend build
@@ -154,7 +147,7 @@ Required scenarios:
 
 ## 9. Source-Integrity Scan
 
-The new v2 code must produce no matches for prohibited runtime concepts except explicit legacy/deprecation tests or documentation:
+The v2 runtime must produce no matches for prohibited source/provider concepts:
 
 ```powershell
 rg -n "llm_simulation|estimated_heat|composite_score|ctr_estimate|viral_probability|TianAPI|BilibiliSource|PreloadedDataSource" backend/app/api/v2 backend/app/services frontend/src/features frontend/src/services/api/v2
@@ -172,7 +165,7 @@ rg -n "锟|鈥|鎴|鐨|鍐|绔" frontend/src specs/008-content-project-mvp
 
 Release candidate is ready when:
 
-- Constitution v2.0.0 gates pass.
+- Constitution v3.0.0 gates pass.
 - Spec checklist remains 16/16.
 - API contract, data model, implementation, and frontend types agree.
 - Fresh Docker startup and restart persistence succeed.

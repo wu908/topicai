@@ -5,7 +5,7 @@ const email = `intent-loop-${runId}@test.com`;
 const password = 'Intent-loop-pw-123';
 
 test.beforeAll(async ({ request }) => {
-  const response = await request.post('http://127.0.0.1:8765/api/v1/auth/register', {
+  const response = await request.post('http://127.0.0.1:8765/api/v2/auth/register', {
     data: { email, username: `intent${runId}`, password },
   });
   expect([201, 409]).toContain(response.status());
@@ -60,6 +60,10 @@ test.describe('intent-driven MVP', () => {
     await expect(page.getByRole('heading', { name: '候选内容已经准备好' })).toBeVisible({ timeout: 15_000 });
     await page.getByRole('button', { name: '确认候选内容并进入发布准备' }).click();
 
+    await expect(page.getByLabel('读者可持续关注的过程或变化')).toBeVisible({ timeout: 15_000 });
+    await page.getByLabel('读者可持续关注的过程或变化').fill('下一篇继续记录这次调整带来的真实变化');
+    await page.getByRole('button', { name: '锁定发布意图', exact: true }).click();
+
     await expect(page.getByRole('heading', { name: '发布后，把笔记链接留在这里' }).first()).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText('系统不会替你发布。记录真实发布时间后，AI 才能安排复盘。').first()).toBeVisible();
     await expect(page.getByRole('button', { name: '确认已发布' })).toBeVisible();
@@ -80,7 +84,8 @@ test.describe('intent-driven MVP', () => {
     await page.getByLabel('小红书笔记链接').fill('https://www.xiaohongshu.com/explore/e2e-growth-loop');
     await page.getByRole('button', { name: '确认已发布' }).click();
 
-    await expect(page.getByRole('heading', { name: '回填这篇内容的真实表现' }).first()).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByLabel('数据时间')).toBeVisible({ timeout: 15_000 });
+    await page.getByLabel('收藏').fill('8');
     await page.getByLabel('评论').fill('12');
     await page.getByLabel('新增关注').fill('4');
     await page.getByRole('button', { name: '保存数据快照' }).click();

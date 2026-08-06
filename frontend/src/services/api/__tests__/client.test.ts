@@ -36,9 +36,7 @@ describe('apiClient', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const calledUrl = fetchMock.mock.calls[0][0];
-    // Should end with /api/v1/accounts, NOT have /api/v1 twice.
-    expect(calledUrl).toMatch(/\/api\/v1\/accounts$/);
-    expect(calledUrl).not.toContain('/api/v1/api/v1');
+    expect(calledUrl).toMatch(/\/api\/v2\/accounts$/);
   });
 
   it('attaches Authorization header when access_token is present', async () => {
@@ -82,7 +80,7 @@ describe('apiClient', () => {
     const r = await apiClient.get('/accounts');
 
     expect(fetchMock).toHaveBeenCalledTimes(3);
-    expect(fetchMock.mock.calls[1][0]).toContain('/auth/refresh');
+    expect(fetchMock.mock.calls[1][0]).toContain('/api/v2/auth/refresh');
     expect(fetchMock.mock.calls[2][0]).toContain('/accounts');
     expect(fetchMock.mock.calls[2][1].headers.Authorization).toBe('Bearer new-jwt');
     expect(localStorage.getItem('access_token')).toBe('new-jwt');

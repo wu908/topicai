@@ -6,7 +6,7 @@ import PageContainer from '@/components/layout/PageContainer';
 import { getTodayWorkspace, respondToAction } from '@/services/api/v2/projects';
 import type { IntentAction, TodayWorkspace } from '@/types/contracts/v2/content';
 import { extractErrorMessage } from '@/utils/error';
-import { useAuth } from '@/hooks/useAuth';
+import { useAuthStore } from '@/store/authStore';
 import './HomePage.css';
 
 const intentLabels = {
@@ -92,7 +92,8 @@ const safeInternalPath = (path: string | undefined, fallback = '/content') => {
 
 export default function HomePage() {
   const navigate = useNavigate();
-  const { user, fetchCurrentUser } = useAuth();
+  const user = useAuthStore((state) => state.user);
+  const fetchCurrentUser = useAuthStore((state) => state.fetchCurrentUser);
   const [data, setData] = useState<TodayWorkspace | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);

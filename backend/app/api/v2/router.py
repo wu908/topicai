@@ -3,6 +3,7 @@
 from fastapi import APIRouter
 
 from app.api.v2.account_data import router as account_data_router
+from app.api.v2.auth import router as auth_router
 from app.api.v2.calibration import router as calibration_router
 from app.api.v2.candidate_review import router as candidate_review_router
 from app.api.v2.content_genome import router as content_genome_router
@@ -18,6 +19,7 @@ from app.api.v2.starter import router as starter_router
 from app.models.common import ApiResponse
 
 api_v2_router = APIRouter()
+api_v2_router.include_router(auth_router)
 api_v2_router.include_router(projects_router)
 api_v2_router.include_router(calibration_router)
 api_v2_router.include_router(intent_actions_router)

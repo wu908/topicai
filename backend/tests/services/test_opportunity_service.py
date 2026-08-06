@@ -129,16 +129,15 @@ async def test_generate_uses_first_party_history_without_rejected_profile_attrib
         "UPDATE imported_notes SET tags_json='[\"storage\"]' WHERE owner_user_id='u1'"
     )
     await test_db.insert(
-        "assets",
+        "materials",
         {
             "id": "material-1",
-            "owner_id": "u1",
-            "filename": "搬家前后收纳对比.pdf",
+            "owner_user_id": "u1",
+            "name": "搬家前后收纳对比.pdf",
             "mime_type": "application/pdf",
-            "type": "document",
+            "kind": "document",
             "size": 128,
-            "url": "/api/v1/assets/material-1/download",
-            "used_count": 0,
+            "source_url": "/materials",
             "created_at": "2026-07-31T00:00:00Z",
             "updated_at": "2026-07-31T00:00:00Z",
         },
@@ -180,7 +179,7 @@ async def test_generate_uses_first_party_history_without_rejected_profile_attrib
     } == set(history_source)
     assert generated[0]["dimensions"]["creator_fit"] == "strong"
     assert generated[0]["dimensions"]["material_readiness"] == "ready"
-    assert generated[2]["source_ref"] == "asset:material-1"
+    assert generated[2]["source_ref"] == "material:material-1"
     assert generated[2]["dimensions"]["audience_fit"] == "unknown"
     assert generated[2]["dimensions"]["creator_fit"] == "unknown"
     assert generated[2]["dimensions"]["material_readiness"] == "partial"

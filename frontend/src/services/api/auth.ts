@@ -12,7 +12,7 @@ import type {
   RefreshTokenRequest,
   RefreshTokenResponse,
   User,
-} from '@/types/api';
+} from '@/types/auth';
 
 /** Register a new user */
 export async function register(data: RegisterRequest): Promise<ApiResponse<RegisterResponse>> {

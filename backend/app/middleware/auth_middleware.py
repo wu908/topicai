@@ -1,4 +1,4 @@
-"""JWT Authentication Middleware for TopicAI v4.0.
+"""JWT authentication middleware for the v2 API.
 
 Parses the Authorization Bearer token on every request and injects
 request.state.user_id if the token is valid. Does NOT reject requests
@@ -15,11 +15,10 @@ logger = logging.getLogger(__name__)
 
 # Public paths that never need a token (skip overhead)
 _PUBLIC_PATHS = {
-    "/api/v1/health",
-    "/api/v1/health/llm",
-    "/api/v1/auth/register",
-    "/api/v1/auth/login",
-    "/api/v1/auth/refresh",
+    "/api/v2/health",
+    "/api/v2/auth/register",
+    "/api/v2/auth/login",
+    "/api/v2/auth/refresh",
     "/docs",
     "/redoc",
     "/openapi.json",

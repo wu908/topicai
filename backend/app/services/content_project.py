@@ -344,15 +344,15 @@ class ContentProjectService:
                         ),
                         {"id": trace_id, "owner": owner_user_id},
                     )
-                for asset_id in screenshot_ids:
+                for material_id in screenshot_ids:
                     await session.execute(
                         text(
-                            "DELETE FROM assets WHERE id=:id AND owner_id=:owner "
+                            "DELETE FROM materials WHERE id=:id AND owner_user_id=:owner "
                             "AND NOT EXISTS (SELECT 1 FROM performance_snapshots_v2 "
                             "WHERE screenshot_material_id=:id) "
-                            "AND NOT EXISTS (SELECT 1 FROM asset_usages WHERE asset_id=:id)"
+                            "AND NOT EXISTS (SELECT 1 FROM material_usages WHERE material_id=:id)"
                         ),
-                        {"id": asset_id, "owner": owner_user_id},
+                        {"id": material_id, "owner": owner_user_id},
                     )
                 return deleted.rowcount == 1
 

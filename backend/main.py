@@ -1,11 +1,11 @@
-"""TopicAI v4.0 "Air Pro" — FastAPI Application Entry Point.
+"""TopicAI ContentProject API application entry point.
 
 Creates and configures the FastAPI application with:
 - CORS middleware
 - JWT authentication
 - Rate limiting middleware
 - Global exception handler
-- API v1 router
+- API v2 router
 - Lifespan management (startup/shutdown)
 """
 
@@ -16,7 +16,6 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.v1.router import api_v1_router
 from app.api.v2.router import api_v2_router
 from app.core.exceptions import setup_exception_handlers
 from app.middleware.auth_middleware import JWTAuthMiddleware
@@ -169,8 +168,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title=settings.app_name,
         version=settings.app_version,
-        description="TopicAI — AI驱动的短视频创作选题助手，提供热点选题推荐、病毒性分析、标题优化、"
-        "内容风险评估和发布建议等创作全链路智能服务。",
+        description="TopicAI 内容项目工作台",
         contact={
             "name": "TopicAI Team",
             "email": "support@topicai.com",
@@ -181,14 +179,7 @@ def create_app() -> FastAPI:
         openapi_tags=[
             {"name": "Health", "description": "健康检查与系统状态"},
             {"name": "Authentication", "description": "用户注册、登录与 Token 管理"},
-            {"name": "Profiles", "description": "创作画像创建与管理"},
-            {"name": "Topics", "description": "选题推荐、刷新与解释"},
-            {"name": "Viral", "description": "内容病毒性分析与拆解"},
-            {"name": "Ideas", "description": "创意点子的可行性评估与深化"},
-            {"name": "Titles", "description": "标题优化与变体生成"},
-            {"name": "Tracks", "description": "赛道健康度诊断"},
-            {"name": "Publish", "description": "最佳发布时间建议"},
-            {"name": "Feedback", "description": "用户反馈提交与分析"},
+            {"name": "ContentProject v2", "description": "内容项目主流程"},
         ],
         docs_url="/docs",
         redoc_url="/redoc",
@@ -216,7 +207,6 @@ def create_app() -> FastAPI:
     setup_exception_handlers(app)
 
     # ==================== API Routes ====================
-    app.include_router(api_v1_router, prefix="/api/v1")
     app.include_router(api_v2_router, prefix="/api/v2", tags=["ContentProject v2"])
 
     return app

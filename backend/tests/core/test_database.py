@@ -10,7 +10,7 @@ Tests cover:
 """
 
 import asyncio
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 import pytest
 
@@ -76,29 +76,11 @@ class TestDatabaseInitialization:
             "schema_migrations",
             "users",
             "creator_profiles",
-            "topic_recommendations",
-            "viral_analyses",
-            "idea_boosters",
-            "title_optimizations",
-            "track_diagnoses",
-            # feedback_records / feedback_analyses intentionally omitted —
-            # retired by migration 007 (T201-T204). Production writes
-            # user_feedback (002).
-            "effect_reviews",
-            "content_risks",
-            "publish_suggestions",
-            "user_events",
-            "llm_call_logs",
-            "upgrade_signals",
-            "assets",
-            "asset_tags",
-            "asset_tag_links",
-            "asset_usages",
-            "platform_accounts",
-            "team_members",
-            "user_feedback",
-            "risk_keywords",
-            "platform_tokens",
+            "content_projects",
+            "content_versions",
+            "ai_traces_v2",
+            "action_events",
+            "content_opportunities",
         }
 
         missing = expected_tables - actual
@@ -254,76 +236,19 @@ class TestForeignKeyConstraints:
 
         with pytest.raises((sqlalchemy.exc.IntegrityError, Exception)):
             await db.insert(
-                "topic_recommendations",
+                "materials",
                 {
-                    "id": "tr-1",
-                    "user_id": "nonexistent-user",
-                    "topics": "[]",
-                    "recommendation_mode": "hotspot_fusion",
-                    "data_source_used": "tianapi",
+                    "id": "material-1",
+                    "owner_user_id": "nonexistent-user",
+                    "name": "evidence.pdf",
+                    "mime_type": "application/pdf",
+                    "kind": "document",
+                    "size": 1,
+                    "source_url": "/materials",
                     "created_at": now,
+                    "updated_at": now,
                 },
             )
-
-        await db.close()
-
-
-class TestExpiryFields:
-    """TC02-08: 90-day expiry field storage."""
-
-    @pytest.mark.asyncio
-    async def test_expiry_field_stored_as_iso8601(self):
-        """Given record with expiry, When stored and retrieved,
-        Then ISO 8601 format preserved."""
-        from app.core.database import Database
-
-        db = Database("sqlite+aiosqlite:///:memory:")
-        await db.init_db()
-
-        now = utc_now()
-        future = (datetime.now(UTC) + timedelta(days=90)).isoformat().replace("+00:00", "Z")
-
-        # First create user for FK
-        await db.insert(
-            "users",
-            {
-                "id": "expiry-user",
-                "email": "expiry@example.com",
-                "username": "expiryuser",
-                "password_hash": "hash",
-                "ai_calls_today": 0,
-                "ai_calls_reset_at": now,
-                "created_at": now,
-                "last_login": now,
-            },
-        )
-
-        await db.insert(
-            "viral_analyses",
-            {
-                "id": "va-expiry",
-                "user_id": "expiry-user",
-                "input_type": "text",
-                "input_text": "test content",
-                "input_text_expires_at": future,
-                "viral_score": 0.5,
-                "structural_analysis": "{}",
-                "attributions": "[]",
-                "transferable_template": "",
-                "rewrite_suggestions": "",
-                "risk_warnings": "[]",
-                "confidence": 0.8,
-                "data_source": "test",
-                "created_at": now,
-            },
-        )
-
-        row = await db.fetch_one(
-            "SELECT input_text_expires_at FROM viral_analyses WHERE id = :id",
-            {"id": "va-expiry"},
-        )
-        assert row is not None
-        assert row["input_text_expires_at"] == future
 
         await db.close()
 

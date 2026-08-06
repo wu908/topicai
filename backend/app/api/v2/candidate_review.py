@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Depends, Response
 
-from app.api.v1.deps import get_current_user, get_db
+from app.api.deps import get_current_user, get_db
 from app.core.database import Database
 from app.models.common import ApiResponse
 from app.models.v2.candidate_review import (

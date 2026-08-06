@@ -76,13 +76,6 @@ class CreatorProfileV2Service:
                 {
                     "id": str(uuid.uuid4()),
                     "user_id": owner_user_id,
-                    "track": niche or "待确认",
-                    "content_formats": json.dumps(["图文"], ensure_ascii=False),
-                    "production_complexity": "medium",
-                    "content_depth": "moderate",
-                    "hotspot_preference": "selective",
-                    "recommendation_mode": "evergreen_deep",
-                    "rubric_weights": "{}",
                     "niche": niche,
                     "target_audience": "",
                     "growth_goal": "stable_publish",
@@ -184,7 +177,7 @@ class CreatorProfileV2Service:
         }
         timestamp = now()
         result = await self.db.execute(
-            "UPDATE creator_profiles SET track=:niche,niche=:niche,"
+            "UPDATE creator_profiles SET niche=:niche,"
             "target_audience=:audience,growth_goal=:goal,content_pillars_json=:pillars,"
             "voice_traits_json=:voice,avoid_traits_json=:avoid,confirmation_state=:state,"
             "confirmed_at=:confirmed_at,profile_attributes_json=:attributes,version=version+1,"
@@ -238,7 +231,7 @@ class CreatorProfileV2Service:
                 first_seen.setdefault(value, note_index)
                 refs.setdefault(value, []).append(f"imported_note:{note['id']}")
         ordered = sorted(counts, key=lambda value: (-counts[value], first_seen[value]))[:5]
-        fallback = str(row.get("track") or "") if row else ""
+        fallback = str(row.get("niche") or "") if row else ""
         niche = ordered[0] if ordered else fallback
 
         def inferred(value: str, evidence: list[str]) -> dict[str, Any]:
@@ -342,8 +335,6 @@ class CreatorProfileV2Service:
         ]
         result["history_note_count"] = int(payload.get("history_note_count", 0))
         for field in (
-            "content_formats",
-            "rubric_weights",
             "content_pillars_json",
             "voice_traits_json",
             "avoid_traits_json",

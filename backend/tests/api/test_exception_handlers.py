@@ -30,7 +30,7 @@ async def test_value_error_not_found_returns_404(client):
     """A service raising ValueError('X not found') must surface as 404."""
     from fastapi import FastAPI
 
-    from app.api.v1.deps import get_current_user, get_db
+    from app.api.deps import get_current_user, get_db
     from app.core.exceptions import setup_exception_handlers
 
     app = FastAPI()
@@ -60,7 +60,7 @@ async def test_value_error_not_found_returns_404(client):
 async def test_value_error_last_admin_returns_422(client):
     from fastapi import FastAPI
 
-    from app.api.v1.deps import get_current_user, get_db
+    from app.api.deps import get_current_user, get_db
     from app.core.exceptions import setup_exception_handlers
 
     app = FastAPI()
@@ -87,7 +87,7 @@ async def test_value_error_last_admin_returns_422(client):
 async def test_value_error_already_exists_returns_422(client):
     from fastapi import FastAPI
 
-    from app.api.v1.deps import get_current_user, get_db
+    from app.api.deps import get_current_user, get_db
     from app.core.exceptions import setup_exception_handlers
 
     app = FastAPI()
@@ -114,7 +114,7 @@ async def test_value_error_already_exists_returns_422(client):
 async def test_value_error_other_returns_400(client):
     from fastapi import FastAPI
 
-    from app.api.v1.deps import get_current_user, get_db
+    from app.api.deps import get_current_user, get_db
     from app.core.exceptions import setup_exception_handlers
 
     app = FastAPI()

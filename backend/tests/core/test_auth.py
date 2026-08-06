@@ -211,111 +211,6 @@ class TestJWTIssuerAudience:
             auth.verify_token(token)
 
 
-class TestRateLimiter:
-    """TC05-10/11/12: Rate limiting."""
-
-    def test_first_call_succeeds(self):
-        """Given new user, When first AI call, Then returns remaining quota."""
-        from app.core.rate_limiter import RateLimiter
-
-        limiter = RateLimiter(max_calls=20)
-        result = limiter.check_and_increment("new-user")
-        assert result["remaining"] == 19
-        assert result["used"] == 1
-
-    def test_20_calls_succeed(self, monkeypatch):
-        """Given user, When making 20 calls, Then all succeed."""
-        from app.core.rate_limiter import RateLimiter
-
-        limiter = RateLimiter(max_calls=20)
-        for i in range(20):
-            result = limiter.check_and_increment("test-user")
-            assert result["remaining"] == 19 - i
-
-    def test_21st_call_raises_exception(self):
-        """Given user with 20 calls, When 21st call, Then RateLimitException."""
-        from app.core.exceptions import RateLimitException
-        from app.core.rate_limiter import RateLimiter
-
-        limiter = RateLimiter(max_calls=20)
-        for _ in range(20):
-            limiter.check_and_increment("test-user-2")
-
-        with pytest.raises(RateLimitException):
-            limiter.check_and_increment("test-user-2")
-
-    def test_get_remaining_without_incrementing(self):
-        """Given user with calls, When get_remaining, Then count unchanged."""
-        from app.core.rate_limiter import RateLimiter
-
-        limiter = RateLimiter(max_calls=20)
-        limiter.check_and_increment("user-a")
-        limiter.check_and_increment("user-a")
-
-        remaining = limiter.get_remaining("user-a")
-        assert remaining["used"] == 2
-        assert remaining["remaining"] == 18
-
-        # Check again — should not have incremented
-        remaining2 = limiter.get_remaining("user-a")
-        assert remaining2["used"] == 2
-
-    def test_different_users_independent(self):
-        """Given two users, When each makes calls, Then counts independent."""
-        from app.core.rate_limiter import RateLimiter
-
-        limiter = RateLimiter(max_calls=20)
-        limiter.check_and_increment("user-1")
-        limiter.check_and_increment("user-1")
-        limiter.check_and_increment("user-2")
-
-        r1 = limiter.get_remaining("user-1")
-        r2 = limiter.get_remaining("user-2")
-        assert r1["used"] == 2
-        assert r2["used"] == 1
-
-    def test_reset_user(self):
-        """Given user with calls, When reset_user, Then count back to 0."""
-        from app.core.rate_limiter import RateLimiter
-
-        limiter = RateLimiter(max_calls=20)
-        for _ in range(5):
-            limiter.check_and_increment("reset-user")
-
-        limiter.reset_user("reset-user")
-        remaining = limiter.get_remaining("reset-user")
-        assert remaining["used"] == 0
-
-    def test_reset_at_midnight_utc(self):
-        """Given rate limiter, When checking reset_at, Then is UTC midnight."""
-        from app.core.rate_limiter import RateLimiter
-
-        limiter = RateLimiter(max_calls=20)
-        result = limiter.check_and_increment("midnight-user")
-        assert "reset_at" in result
-        assert "T00:00:00" in result["reset_at"] or "Z" in result["reset_at"]
-
-    def test_reset_at_month_end_rolls_over(self, monkeypatch):
-        """Regression: on the last day of a 30-day month, reset_at must roll
-        into the next month instead of raising ValueError(day=31)."""
-        import app.core.rate_limiter as rl
-
-        fixed = datetime(2026, 6, 30, 23, 59, 59, tzinfo=UTC)
-
-        class _FixedDT(datetime):
-            @classmethod
-            def now(cls, tz=None):
-                return fixed
-
-        monkeypatch.setattr(rl, "datetime", _FixedDT)
-
-        from app.core.rate_limiter import RateLimiter
-
-        limiter = RateLimiter(max_calls=20)
-        result = limiter.check_and_increment("month-end-user")
-        assert result["reset_at"] == "2026-07-01T00:00:00Z"
-
-
 class TestExceptions:
     """TC05-15/16/17: Exception handling."""
 
@@ -333,16 +228,16 @@ class TestExceptions:
         from app.core.exceptions import RateLimitException
 
         exc = RateLimitException()
-        assert "今日" in exc.message
+        assert "频繁" in exc.message
         assert exc.status_code == 429
 
     def test_llm_exception_user_friendly(self):
         """Given LLMException, When created, Then has 503 status."""
         from app.core.exceptions import LLMException
 
-        exc = LLMException(provider="deepseek")
+        exc = LLMException(provider="openai_compatible")
         assert exc.status_code == 503
-        assert exc.provider == "deepseek"
+        assert exc.provider == "openai_compatible"
 
     def test_authentication_exception(self):
         """Given AuthenticationException, When created, Then 401 status."""
@@ -357,17 +252,3 @@ class TestExceptions:
 
         exc = UserAlreadyExistsException()
         assert exc.status_code == 409
-
-    def test_validation_exception(self):
-        """Given ValidationException, When created, Then 422 status."""
-        from app.core.exceptions import ValidationException
-
-        exc = ValidationException(details={"field": "error"})
-        assert exc.status_code == 422
-
-    def test_not_found_exception(self):
-        """Given NotFoundException, When created, Then 404 status."""
-        from app.core.exceptions import NotFoundException
-
-        exc = NotFoundException(resource_type="user", resource_id="123")
-        assert exc.status_code == 404

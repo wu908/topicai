@@ -13,7 +13,6 @@ aiosqlite==0.20.0
 
 # LLM / AI
 openai==1.58.1
-zhipuai==2.1.5.20250726
 
 # HTTP Client
 httpx==0.28.1

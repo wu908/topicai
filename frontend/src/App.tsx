@@ -39,8 +39,6 @@ const protectedPage = (page: React.ReactNode) => (
   <LazyRoute><ProtectedRoute>{page}</ProtectedRoute></LazyRoute>
 );
 
-const legacyRedirect = (to: string) => protectedPage(<Navigate to={to} replace />);
-
 export default function App() {
   return (
     <ThemeProvider theme={theme}>
@@ -59,16 +57,6 @@ export default function App() {
             <Route path="/onboarding/directions" element={protectedPage(<StarterPage />)} />
             <Route path="/onboarding/sprint" element={protectedPage(<StarterPage />)} />
             <Route path="/onboarding/growth" element={protectedPage(<GrowthOnboardingPage />)} />
-
-            <Route path="/topics" element={legacyRedirect('/opportunities')} />
-            <Route path="/assets" element={legacyRedirect('/materials')} />
-            <Route path="/profile" element={legacyRedirect('/me')} />
-            {['/writing', '/ideas', '/titles', '/viral', '/publish', '/review'].map((path) => (
-              <Route key={path} path={path} element={legacyRedirect('/content')} />
-            ))}
-            <Route path="/analytics" element={legacyRedirect('/')} />
-            <Route path="/accounts" element={legacyRedirect('/me')} />
-            <Route path="/tracks" element={legacyRedirect('/me')} />
             <Route path="*" element={protectedPage(<NotFoundPage />)} />
           </Routes>
         </BrowserRouter>

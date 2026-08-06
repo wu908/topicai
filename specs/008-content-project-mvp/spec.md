@@ -4,7 +4,7 @@
 
 **Created**: 2026-07-17
 
-**Status**: Ready for planning
+**Status**: Implemented; v2-only cleanup in release validation
 
 **Input**: Rebuild the existing TopicAI product for Xiaohongshu knowledge and experience graphic creators. Reuse proven infrastructure, replace isolated AI tools with a unified content-project lifecycle, support a lightweight starter path and a complete growth-creator path, and validate locally before user research.
 
@@ -190,7 +190,8 @@ As a creator, I can add lightweight text, link, image, and document materials fr
 - **FR-032**: Pages MUST provide loading, empty, partial failure, timeout, stale source, duplicate submission, unsaved change, offline recovery, and insufficient-data states where applicable.
 - **FR-033**: The product MUST provide data export and account deletion covering user-generated content, derived profile data, source excerpts, metrics, feedback, and AI traces.
 - **FR-034**: The MVP MUST remain limited to one user workspace, one primary Xiaohongshu account, and graphic knowledge/experience notes; team, MCN, matrix accounts, live commerce, video editing, and multi-platform publishing are excluded.
-- **FR-035**: Legacy isolated tools for title optimization, viral analysis, writing, publish timing, and analytics MUST redirect into or be represented within a content-project context; they MUST NOT remain independent primary workflows.
+- **FR-035**: Legacy isolated tools, frontend routes, and `/api/v1` endpoints MUST be absent. Requests to removed paths use the standard not-found response and MUST NOT redirect into v2 or create legacy records.
+- **FR-036**: Existing databases MUST upgrade through migration 045 without losing `users`, `creator_profiles`, `schema_migrations`, or v2 aggregate data; audited-empty v1 business tables MUST be removed.
 
 ### Key Entities
 

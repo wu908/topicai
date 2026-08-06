@@ -13,8 +13,8 @@ vi.mock('react-router-dom', async () => {
 });
 vi.mock('@/services/api/v2/projects', () => api);
 const fetchCurrentUserMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
-vi.mock('@/hooks/useAuth', () => ({
-  useAuth: () => ({
+vi.mock('@/store/authStore', () => ({
+  useAuthStore: (selector: (state: unknown) => unknown) => selector({
     user: { username: 'Alice' },
     fetchCurrentUser: fetchCurrentUserMock,
   }),
