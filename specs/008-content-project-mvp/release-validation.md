@@ -16,7 +16,7 @@
 | Patch hygiene | `git diff --check` | Passed |
 | Mypy | `mypy app` | Host interpreter cannot parse NumPy 3.12 stubs; no application diagnostics produced |
 | Bandit | `bandit -r app` | No high-severity findings; existing low/medium controlled dynamic-SQL findings remain |
-| npm audit | `npm audit --audit-level=high` | No high-severity findings; two moderate React Router advisories require breaking v7 upgrade |
+| pnpm audit | `pnpm audit --audit-level high` | No high-severity findings; three moderate React Router advisories remain, and full remediation requires a breaking v7 upgrade |
 
 ## Fresh Docker Validation
 
