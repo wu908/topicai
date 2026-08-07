@@ -95,8 +95,8 @@ export default function GrowthOnboardingPage() {
     const items = parseHistoryInput(method, historyText);
     if (!items.length) throw new Error('请至少提供一条历史内容');
     const result = await importHistory(method, items, makeKey('history-import'));
-    setImportResult(result);
     applyProfile(await getGrowthCreatorProfile());
+    setImportResult(result);
   });
 
   const handleConfirm = () => run(async () => {
