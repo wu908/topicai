@@ -151,6 +151,8 @@ export interface ContentVersion {
   id: string;
   title: string;
   body_text: string;
+  cover_plan: string;
+  image_plan: Array<Record<string, unknown>>;
   version_number: number;
 }
 
@@ -234,6 +236,106 @@ export interface PerformanceSnapshot {
   unavailable_reason?: string | null;
   metrics: PerformanceMetrics;
   supersedes_id?: string | null;
+}
+
+export interface MaterialUsage {
+  id: string;
+  project_id: string;
+  project_title: string;
+  used_at: string;
+}
+
+export interface Material {
+  id: string;
+  title: string;
+  kind: 'text' | 'link' | 'image' | 'document';
+  mime_type: string;
+  size: number;
+  content?: string | null;
+  privacy_level: 'public' | 'private' | 'sensitive';
+  version: number;
+  usages: MaterialUsage[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PublishCheckFinding {
+  id: string;
+  field: 'title' | 'body_text' | 'cover_plan';
+  start: number;
+  end: number;
+  excerpt: string;
+  reason: string;
+  severity: 'low' | 'medium' | 'high';
+  rule_source: string;
+  rule_updated_at: string;
+  status: 'open' | 'acknowledged' | 'resolved';
+}
+
+export interface PublishCheck {
+  id: string;
+  content_version_id: string;
+  status: 'clear' | 'needs_attention' | 'stale';
+  stale: boolean;
+  findings: PublishCheckFinding[];
+  limitations: string[];
+  checked_at: string;
+}
+
+export interface SnapshotExtractionProposal {
+  id: string;
+  material_id: string | null;
+  metrics: PerformanceMetrics;
+  confirmed_by_user: boolean;
+  user_decision: 'pending' | 'confirmed' | 'rejected' | 'edited';
+  decided_at: string | null;
+  snapshot_id: string | null;
+  ai_trace: {
+    capability: 'vision';
+    confidence_label: 'high' | 'medium' | 'low' | 'unavailable';
+    limitations: string[];
+    outcome: 'success' | 'fallback' | 'failed' | 'cancelled';
+  };
+}
+
+export interface UserSettings {
+  weekly_publish_goal: number;
+  timezone: string;
+  content_strategy: string;
+  xiaohongshu_account_reference: string | null;
+  consent: Record<string, unknown>;
+  version: number;
+  ai: {
+    enabled: boolean;
+    configured: boolean;
+    model_identifier: string | null;
+    capabilities: string[];
+    vision_enabled: boolean;
+  };
+}
+
+export interface AccountDataJob {
+  id: string;
+  operation: 'data_export' | 'account_deletion';
+  status: 'running' | 'completed' | 'failed';
+  created_at: string;
+  completed_at: string | null;
+}
+
+export interface OwnerDataExport {
+  job: AccountDataJob;
+  generated_at: string;
+  owner: Record<string, unknown>;
+  entities: Record<string, Array<Record<string, unknown>>>;
+  content_genomes: Array<Record<string, unknown>>;
+  stored_files: Array<{
+    material_id: string;
+    title: string;
+    mime_type: string;
+    size: number;
+    status: 'exported' | 'missing';
+    content_base64: string | null;
+  }>;
 }
 
 export interface BlindReview {
@@ -883,6 +985,8 @@ export interface SnapshotInput {
   result_availability?: 'observed' | 'unavailable';
   unavailable_reason?: string;
   metrics: PerformanceMetrics;
+  screenshot_material_id?: string;
+  snapshot_extraction_id?: string;
   confirmed_by_user: true;
   supersedes_id?: string;
   expected_project_version: number;

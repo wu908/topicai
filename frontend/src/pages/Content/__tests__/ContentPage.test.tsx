@@ -8,8 +8,15 @@ const api = vi.hoisted(() => ({
   createProject: vi.fn(),
   createContentVersion: vi.fn(),
   lockPublishHypothesis: vi.fn(),
+  getLatestPublishCheck: vi.fn(),
+  runPublishCheck: vi.fn(),
+  resolvePublishCheck: vi.fn(),
   recordPublication: vi.fn(),
   appendSnapshot: vi.fn(),
+  createMaterial: vi.fn(),
+  extractSnapshotMetrics: vi.fn(),
+  listMaterials: vi.fn(),
+  addMaterialUsage: vi.fn(),
   createBlindReview: vi.fn(),
   createObservation: vi.fn(),
   transitionObservation: vi.fn(),
@@ -51,6 +58,8 @@ const workspace: CalibrationWorkspace = {
     id: 'v1',
     title: '第一版',
     body_text: '正文',
+    cover_plan: '真实过程封面',
+    image_plan: [],
     version_number: 1,
   },
   publish_hypothesis: {
@@ -128,7 +137,30 @@ describe('ContentPage', () => {
     api.listProjects.mockResolvedValue({ items: [], total: 0 });
     api.getCalibrationWorkspace.mockResolvedValue(workspace);
     api.createProject.mockResolvedValue({ id: 'new-project' });
+    api.getLatestPublishCheck.mockResolvedValue({
+      id: 'publish-check',
+      content_version_id: 'v1',
+      status: 'clear',
+      stale: false,
+      findings: [],
+      limitations: [],
+      checked_at: '2026-07-18T08:00:00Z',
+    });
+    api.runPublishCheck.mockResolvedValue({
+      id: 'publish-check',
+      content_version_id: 'v1',
+      status: 'clear',
+      stale: false,
+      findings: [],
+      limitations: [],
+      checked_at: '2026-07-18T08:00:00Z',
+    });
+    api.resolvePublishCheck.mockResolvedValue({});
     api.recordPublication.mockResolvedValue({ project, record: { id: 'r1' } });
+    api.createMaterial.mockResolvedValue({ id: 'material-1' });
+    api.extractSnapshotMetrics.mockResolvedValue({});
+    api.listMaterials.mockResolvedValue({ items: [], total: 0 });
+    api.addMaterialUsage.mockResolvedValue({});
     api.openHumanGate.mockResolvedValue({
       id: 'publication-gate',
       gate_type: 'publication',
@@ -208,6 +240,36 @@ describe('ContentPage', () => {
         }),
       );
     });
+  });
+
+  it('reuses an existing material from the project drawer', async () => {
+    api.listProjects.mockResolvedValue({ items: [project], total: 1 });
+    api.listMaterials.mockResolvedValue({
+      items: [{
+        id: 'material-1',
+        title: '一次失败复盘',
+        kind: 'text',
+        mime_type: 'text/plain',
+        size: 20,
+        content: '真实经历',
+        privacy_level: 'private',
+        version: 1,
+        usages: [],
+        created_at: '2026-08-06T00:00:00Z',
+        updated_at: '2026-08-06T00:00:00Z',
+      }],
+      total: 1,
+    });
+    renderPage('/content/p1');
+
+    fireEvent.click(await screen.findByRole('button', { name: '项目素材' }));
+    expect(await screen.findByText('一次失败复盘')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '关联到当前项目' }));
+
+    await waitFor(() => expect(api.addMaterialUsage).toHaveBeenCalledWith(
+      'material-1',
+      expect.objectContaining({ project_id: 'p1' }),
+    ));
   });
 
   it('lets the user retry when publication confirmation cannot be prepared', async () => {

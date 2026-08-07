@@ -1,7 +1,7 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { CalibrationWorkspace, ContentIntent } from '@/types/contracts/v2/content';
-import { HypothesisForm, SnapshotForm } from '../StageForms';
+import { HypothesisForm, PublicationForm, SnapshotForm } from '../StageForms';
 
 const workspace: CalibrationWorkspace = {
   project: {
@@ -187,6 +187,8 @@ describe('SnapshotForm', () => {
         busy={false}
         onCommand={onCommand}
         appendSnapshot={appendSnapshot}
+        createMaterial={vi.fn()}
+        extractSnapshotMetrics={vi.fn()}
         makeKey={() => 'unavailable-key'}
       />,
     );
@@ -206,5 +208,237 @@ describe('SnapshotForm', () => {
         expected_project_version: 4,
       }),
     );
+  });
+
+  it('prefills screenshot proposals but requires explicit review before saving', async () => {
+    const appendSnapshot = vi.fn().mockResolvedValue({});
+    const createMaterial = vi.fn().mockResolvedValue({ id: 'material-1' });
+    const extractSnapshotMetrics = vi.fn().mockResolvedValue({
+      id: 'extraction-1',
+      material_id: 'material-1',
+      metrics: { views: 1200, likes: 80, favorites: null },
+      confirmed_by_user: false,
+      ai_trace: { capability: 'vision', limitations: ['待用户确认'] },
+    });
+    const onCommand = vi.fn(async (command: () => Promise<unknown>) => command());
+    const { container } = render(
+      <SnapshotForm
+        workspace={{
+          ...workspace,
+          project: { ...workspace.project, status: 'awaiting_review', version: 4 },
+          publish_record: { id: 'record-1', published_at: '2026-07-20T08:00:00Z' },
+          next_action: 'add_snapshot',
+        }}
+        busy={false}
+        onCommand={onCommand}
+        appendSnapshot={appendSnapshot}
+        createMaterial={createMaterial}
+        extractSnapshotMetrics={extractSnapshotMetrics}
+        makeKey={(prefix) => `${prefix}-key`}
+      />,
+    );
+
+    const input = container.querySelector<HTMLInputElement>('input[type="file"]');
+    expect(input).not.toBeNull();
+    fireEvent.change(input as HTMLInputElement, {
+      target: { files: [new File(['image'], 'metrics.png', { type: 'image/png' })] },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '识别截图数据' }));
+
+    await waitFor(() => expect(screen.getByLabelText('浏览')).toHaveValue(1200));
+    expect(screen.getByLabelText('点赞')).toHaveValue(80);
+    expect(screen.getByRole('button', { name: '保存数据快照' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('checkbox', { name: '我已逐项核对截图识别结果' }));
+    fireEvent.click(screen.getByRole('button', { name: '保存数据快照' }));
+
+    await waitFor(() => expect(appendSnapshot).toHaveBeenCalledWith(
+      'record-1',
+      expect.objectContaining({
+        source: 'screenshot',
+        screenshot_material_id: 'material-1',
+        snapshot_extraction_id: 'extraction-1',
+        metrics: { views: 1200, likes: 80 },
+        confirmed_by_user: true,
+      }),
+    ));
+  });
+});
+
+describe('PublicationForm', () => {
+  const publishWorkspace: CalibrationWorkspace = {
+    ...workspace,
+    project: {
+      ...workspace.project,
+      status: 'ready_to_publish',
+      locked_publish_version_id: 'v1',
+      publish_hypothesis_id: 'hypothesis-1',
+      version: 4,
+    },
+    current_version: {
+      ...workspace.current_version!,
+      cover_plan: '真实步骤封面',
+      image_plan: [{ order: 1, description: '过程图' }],
+    },
+    next_action: 'record_publication',
+    orchestrated_action: {
+      id: 'action-1',
+      project_id: 'p1',
+      action_type: 'record_publication',
+      content_intent: 'solve',
+      title: '确认发布',
+      reason: '记录真实发布',
+      evidence_refs: [],
+      unknown_refs: [],
+      expected_state_change: {},
+      estimated_effort_minutes: 1,
+      automation_level: 'guided',
+      human_gate_type: 'publication',
+      human_gate: {
+        id: 'gate-1',
+        gate_type: 'publication',
+        prompt: '确认发布',
+        payload: {},
+        status: 'pending',
+        version: 1,
+      },
+      fallback_action: { action_type: 'record_publication' },
+      status: 'proposed',
+      version: 1,
+      expires_at: null,
+      last_event: null,
+    },
+  };
+
+  it('blocks publication until every current-version finding is acknowledged', async () => {
+    const finding = {
+      id: 'finding-1', field: 'body_text' as const, start: 2, end: 5, excerpt: '正文',
+      reason: '避免绝对化承诺', severity: 'high' as const,
+      rule_source: 'TopicAI deterministic publish rules', rule_updated_at: '2026-08-01T00:00:00Z',
+      status: 'open' as const,
+    };
+    const runPublishCheck = vi.fn().mockResolvedValue({
+      id: 'check-1', content_version_id: 'v1', status: 'needs_attention', stale: false,
+      findings: [finding], limitations: [], checked_at: '2026-08-06T00:00:00Z',
+    });
+    const resolvePublishCheck = vi.fn().mockResolvedValue({
+      id: 'check-1', content_version_id: 'v1', status: 'clear', stale: false,
+      findings: [{ ...finding, status: 'acknowledged' }], limitations: [], checked_at: '2026-08-06T00:00:00Z',
+    });
+    const getLatestPublishCheck = vi.fn().mockResolvedValue(null);
+    const onCommand = vi.fn(async (command: () => Promise<unknown>) => command());
+    render(
+      <PublicationForm
+        workspace={publishWorkspace}
+        busy={false}
+        onCommand={onCommand}
+        recordPublication={vi.fn()}
+        openHumanGate={vi.fn()}
+        decideHumanGate={vi.fn()}
+        getLatestPublishCheck={getLatestPublishCheck}
+        runPublishCheck={runPublishCheck}
+        resolvePublishCheck={resolvePublishCheck}
+        makeKey={(prefix) => `${prefix}-key`}
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: '确认已发布' })).toBeDisabled();
+    await waitFor(() => expect(getLatestPublishCheck).toHaveBeenCalledWith('p1'));
+    fireEvent.click(screen.getByRole('button', { name: '运行检查' }));
+    expect(await screen.findByText('避免绝对化承诺')).toBeInTheDocument();
+    expect(screen.getByText(/正文第 3–5 字/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '我已了解' }));
+
+    await waitFor(() => expect(screen.getByRole('button', { name: '确认已发布' })).toBeEnabled());
+    expect(resolvePublishCheck).toHaveBeenCalledWith(
+      'check-1',
+      expect.objectContaining({ findings: { 'finding-1': 'acknowledged' } }),
+    );
+  });
+
+  it('copies and downloads publication artifacts independently', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    const context = {
+      fillStyle: '',
+      font: '',
+      textBaseline: '',
+      measureText: vi.fn((value: string) => ({ width: value.length * 20 })),
+      fillRect: vi.fn(),
+      fillText: vi.fn(),
+    };
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(context as unknown as CanvasRenderingContext2D);
+    vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation((callback) => {
+      callback(new Blob(['png'], { type: 'image/png' }));
+    });
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:artifact') });
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() });
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+    render(
+      <PublicationForm
+        workspace={publishWorkspace}
+        busy={false}
+        onCommand={vi.fn()}
+        recordPublication={vi.fn()}
+        openHumanGate={vi.fn()}
+        decideHumanGate={vi.fn()}
+        getLatestPublishCheck={vi.fn().mockResolvedValue(null)}
+        runPublishCheck={vi.fn()}
+        resolvePublishCheck={vi.fn()}
+        makeKey={(prefix) => `${prefix}-key`}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '复制正文' }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('正文'));
+    fireEvent.click(screen.getByRole('button', { name: '下载正文' }));
+    fireEvent.click(screen.getByRole('button', { name: '导出配图 PNG' }));
+    await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(URL.createObjectURL).mock.calls[1][0]).toEqual(
+      expect.objectContaining({ type: 'image/png' }),
+    );
+  });
+
+  it('retries only the failed publication artifact', async () => {
+    const context = {
+      fillStyle: '',
+      font: '',
+      textBaseline: '',
+      measureText: vi.fn((value: string) => ({ width: value.length * 20 })),
+      fillRect: vi.fn(),
+      fillText: vi.fn(),
+    };
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(context as unknown as CanvasRenderingContext2D);
+    vi.spyOn(HTMLCanvasElement.prototype, 'toBlob')
+      .mockImplementationOnce((callback) => callback(null))
+      .mockImplementationOnce((callback) => callback(new Blob(['png'], { type: 'image/png' })));
+    const createObjectURL = vi.fn()
+      .mockReturnValueOnce('blob:body')
+      .mockReturnValueOnce('blob:images');
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectURL });
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() });
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+    render(
+      <PublicationForm
+        workspace={publishWorkspace}
+        busy={false}
+        onCommand={vi.fn()}
+        recordPublication={vi.fn()}
+        openHumanGate={vi.fn()}
+        decideHumanGate={vi.fn()}
+        getLatestPublishCheck={vi.fn().mockResolvedValue(null)}
+        runPublishCheck={vi.fn()}
+        resolvePublishCheck={vi.fn()}
+        makeKey={(prefix) => `${prefix}-key`}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '下载正文' }));
+    expect(screen.getByRole('button', { name: '正文已下载' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '导出配图 PNG' }));
+    expect(await screen.findByText('配图下载失败，请单独重试。')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '导出配图 PNG' }));
+    expect(await screen.findByRole('button', { name: '配图已导出' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '正文已下载' })).toBeInTheDocument();
+    expect(createObjectURL).toHaveBeenCalledTimes(2);
   });
 });

@@ -18,9 +18,11 @@ class AITraceService:
                 "INSERT INTO ai_traces_v2 (id,owner_user_id,task_type,input_refs_json,"
                 "evidence_refs_json,policy_version,model_identifier,capability,"
                 "visibility_boundary_json,source_snapshot_ids_json,contamination_check_json,"
-                "calibration_state,limitations_json,output_ref,generated_at) VALUES "
+                "calibration_state,limitations_json,output_ref,generated_at,confidence_label,"
+                "outcome,user_decision) VALUES "
                 "(:id,:owner,:task_type,:inputs,:evidence,:policy,:model,:capability,"
-                ":boundary,:snapshots,:contamination,:state,:limitations,:output,:generated)"
+                ":boundary,:snapshots,:contamination,:state,:limitations,:output,:generated,"
+                ":confidence,:outcome,:decision)"
             ),
             {
                 "id": trace.id,
@@ -38,5 +40,8 @@ class AITraceService:
                 "limitations": json.dumps(trace.limitations, ensure_ascii=False),
                 "output": trace.output_ref,
                 "generated": trace.generated_at,
+                "confidence": trace.confidence_label,
+                "outcome": trace.outcome,
+                "decision": trace.user_decision,
             },
         )

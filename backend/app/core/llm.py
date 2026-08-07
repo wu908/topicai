@@ -52,10 +52,17 @@ class LLMClient:
         max_tokens: int | None = None,
         **kwargs: Any,
     ) -> str:
-        from app.core.exceptions import LLMException, LLMTimeoutException
+        from app.core.exceptions import (
+            AICapabilityMissingException,
+            AINotConfiguredException,
+            LLMException,
+            LLMTimeoutException,
+        )
 
-        if not self.is_available("text"):
-            raise LLMException("LLM is not configured", provider="openai_compatible")
+        if not self.settings.ai_enabled or self.client is None:
+            raise AINotConfiguredException()
+        if "text" not in self.capabilities:
+            raise AICapabilityMissingException("text")
 
         messages = []
         if system_prompt:
@@ -112,10 +119,16 @@ class LLMClient:
         raise AssertionError("unreachable")
 
     def vision_generate(self, image_url: str, prompt: str) -> str:
-        from app.core.exceptions import LLMException
+        from app.core.exceptions import (
+            AICapabilityMissingException,
+            AINotConfiguredException,
+            LLMException,
+        )
 
-        if not self.is_available("vision"):
-            raise LLMException("Vision is not enabled", provider="openai_compatible")
+        if not self.settings.ai_enabled or self.client is None:
+            raise AINotConfiguredException()
+        if not self.settings.vision_enabled or "vision" not in self.capabilities:
+            raise AICapabilityMissingException("vision")
         try:
             response = self.client.chat.completions.create(
                 model=self.model,

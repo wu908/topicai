@@ -1,11 +1,16 @@
 """Small local object store used by v2 materials and account deletion."""
 
+import os
+import shutil
 from pathlib import Path
 
 
 class LocalObjectStorage:
     def __init__(self, root: str | Path | None = None):
-        self.root = Path(root or Path(__file__).resolve().parents[2] / "data" / "objects").resolve()
+        configured = root or os.getenv("OBJECT_STORAGE_ROOT")
+        self.root = Path(
+            configured or Path(__file__).resolve().parents[2] / "data" / "objects"
+        ).resolve()
 
     def _resolve(self, path: str) -> Path:
         candidate = (self.root / path).resolve()
@@ -32,3 +37,31 @@ class LocalObjectStorage:
         target = self._resolve(path)
         if target.is_file():
             target.unlink()
+
+    async def quarantine_owner(self, owner_id: str, token: str) -> bool:
+        if any(
+            value in {"", ".", ".."} or Path(value).name != value
+            for value in (owner_id, token)
+        ):
+            raise ValueError("storage quarantine requires safe path segments")
+        source = self._resolve(owner_id)
+        if not source.is_dir():
+            return False
+        target = self._resolve(str(Path(".deleting") / token / owner_id))
+        target.parent.mkdir(parents=True, exist_ok=True)
+        source.replace(target)
+        return True
+
+    async def restore_owner(self, owner_id: str, token: str) -> None:
+        source = self._resolve(str(Path(".deleting") / token / owner_id))
+        if not source.exists():
+            return
+        target = self._resolve(owner_id)
+        if target.exists():
+            raise FileExistsError(f"cannot restore storage for owner {owner_id}")
+        source.replace(target)
+
+    async def purge_quarantine(self, token: str) -> None:
+        target = self._resolve(str(Path(".deleting") / token))
+        if target.exists():
+            shutil.rmtree(target)

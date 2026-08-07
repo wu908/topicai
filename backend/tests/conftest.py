@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 
 @pytest.fixture(autouse=True)
-def override_test_env(monkeypatch):
+def override_test_env(monkeypatch, tmp_path):
     monkeypatch.setenv("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
     monkeypatch.setenv("LLM_BASE_URL", "")
     monkeypatch.setenv("LLM_API_KEY", "")
@@ -20,6 +20,7 @@ def override_test_env(monkeypatch):
     monkeypatch.setenv("SENTRY_DSN", "")
     monkeypatch.setenv("JWT_SECRET_KEY", "test-secret-key-for-testing-only")
     monkeypatch.setenv("ENVIRONMENT", "test")
+    monkeypatch.setenv("OBJECT_STORAGE_ROOT", str(tmp_path / "objects"))
 
 
 @pytest_asyncio.fixture

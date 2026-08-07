@@ -1,6 +1,7 @@
 """Service contracts for manual publication and judgment calibration."""
 
 import asyncio
+import base64
 import json
 
 import pytest
@@ -39,7 +40,9 @@ from app.models.v2.evidence import (
     EvidenceRevocation,
 )
 from app.models.v2.intent_actions import HumanGateDecision
+from app.models.v2.material import MaterialCreate
 from app.models.v2.publish_hypothesis import PublishHypothesisLock
+from app.models.v2.snapshot_extraction import SnapshotExtractionCreate
 from app.services.benchmark_sample import BenchmarkSampleService
 from app.services.blind_review import BlindReviewService
 from app.services.calibration_workspace import CalibrationWorkspaceService
@@ -51,11 +54,13 @@ from app.services.creator_state import CreatorStateService
 from app.services.evidence import EvidenceService
 from app.services.intent_actions import HumanGateService
 from app.services.intent_orchestrator import IntentOrchestratorService
+from app.services.material import MaterialService
 from app.services.observation import ObservationService
 from app.services.observation_window import ObservationWindowService
 from app.services.performance_snapshot import PerformanceSnapshotService
 from app.services.publication import PublicationService
 from app.services.publish_hypothesis import PublishHypothesisService
+from app.services.snapshot_extraction import SnapshotExtractionService
 
 
 @pytest_asyncio.fixture
@@ -211,6 +216,78 @@ async def _published_with_unavailable_result(db, *, suffix="unavailable"):
         ),
     )
     return snapshot["project"], publication["record"], snapshot["snapshot"]
+
+
+class _SnapshotVisionLLM:
+    model = "vision-test-model"
+
+    def is_available(self, capability="text"):
+        return capability == "vision"
+
+    def vision_generate(self, image_url, prompt):
+        return '{"views": 1200, "likes": 80}'
+
+
+@pytest.mark.asyncio
+async def test_confirmed_screenshot_snapshot_records_extraction_decision(seeded_db):
+    project, record, _ = await _published_with_snapshot(
+        seeded_db, suffix="extraction-decision"
+    )
+    material, _ = await MaterialService(seeded_db).create(
+        "u1",
+        MaterialCreate(
+            kind="image",
+            title="Metrics screenshot",
+            content_base64=base64.b64encode(b"fake-png").decode(),
+            mime_type="image/png",
+            privacy_level="sensitive",
+            idempotency_key="extraction-decision-material",
+        ),
+    )
+    extraction, _ = await SnapshotExtractionService(
+        seeded_db, llm=_SnapshotVisionLLM()
+    ).extract(
+        "u1",
+        SnapshotExtractionCreate(
+            material_id=material["id"],
+            idempotency_key="extraction-decision-proposal",
+        ),
+    )
+
+    saved, _ = await PerformanceSnapshotService(seeded_db).append(
+        "u1",
+        record["id"],
+        PerformanceSnapshotCreate(
+            captured_at="2026-07-22T08:00:00Z",
+            source="screenshot",
+            metrics={"views": 1200, "likes": 81},
+            screenshot_material_id=material["id"],
+            snapshot_extraction_id=extraction["id"],
+            confirmed_by_user=True,
+            expected_project_version=project["version"],
+            idempotency_key="extraction-decision-snapshot",
+        ),
+    )
+
+    decision = await seeded_db.fetch_one(
+        "SELECT se.user_decision,se.snapshot_id,at.user_decision AS trace_decision "
+        "FROM snapshot_extractions_v2 se JOIN ai_traces_v2 at ON at.id=se.ai_trace_id "
+        "WHERE se.id=:id",
+        {"id": extraction["id"]},
+    )
+    assert dict(decision) == {
+        "user_decision": "edited",
+        "snapshot_id": saved["snapshot"]["id"],
+        "trace_decision": "edited",
+    }
+
+    assert await ContentProjectService(seeded_db).delete("u1", project["id"])
+    retained = await SnapshotExtractionService(
+        seeded_db, llm=_SnapshotVisionLLM()
+    ).get("u1", extraction["id"])
+    assert retained["material_id"] is None
+    assert retained["snapshot_id"] is None
+    assert retained["user_decision"] == "edited"
 
 
 @pytest.mark.asyncio

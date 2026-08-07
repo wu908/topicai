@@ -69,6 +69,30 @@ class PerformanceSnapshotService:
                 if not body.confirmed_by_user:
                     raise ValueError("performance snapshot requires user confirmation")
 
+                extraction = None
+                if body.snapshot_extraction_id:
+                    extraction = (
+                        await session.execute(
+                            text(
+                                "SELECT id,material_id,metrics_json,ai_trace_id,user_decision FROM "
+                                "snapshot_extractions_v2 WHERE id=:id "
+                                "AND owner_user_id=:owner"
+                            ),
+                            {
+                                "id": body.snapshot_extraction_id,
+                                "owner": owner_user_id,
+                            },
+                        )
+                    ).mappings().first()
+                    if extraction is None:
+                        raise ValueError("snapshot extraction not found")
+                    if extraction["material_id"] != body.screenshot_material_id:
+                        raise ValueError(
+                            "snapshot extraction does not match the screenshot material"
+                        )
+                    if extraction["user_decision"] != "pending":
+                        raise ValueError("snapshot extraction was already decided")
+
                 if body.supersedes_id:
                     superseded = (
                         await session.execute(
@@ -118,6 +142,41 @@ class PerformanceSnapshotService:
                         "now": timestamp,
                     },
                 )
+                if extraction:
+                    proposed_metrics = {
+                        key: value
+                        for key, value in json.loads(extraction["metrics_json"]).items()
+                        if value is not None
+                    }
+                    decision = (
+                        "confirmed"
+                        if proposed_metrics
+                        == body.metrics.model_dump(exclude_none=True)
+                        else "edited"
+                    )
+                    await session.execute(
+                        text(
+                            "UPDATE snapshot_extractions_v2 SET user_decision=:decision,"
+                            "decided_at=:now,snapshot_id=:snapshot WHERE id=:id"
+                        ),
+                        {
+                            "decision": decision,
+                            "now": timestamp,
+                            "snapshot": snapshot_id,
+                            "id": extraction["id"],
+                        },
+                    )
+                    await session.execute(
+                        text(
+                            "UPDATE ai_traces_v2 SET user_decision=:decision "
+                            "WHERE id=:id AND owner_user_id=:owner"
+                        ),
+                        {
+                            "decision": decision,
+                            "id": extraction["ai_trace_id"],
+                            "owner": owner_user_id,
+                        },
+                    )
                 if project["status"] == "published":
                     await ProjectStateService.apply(
                         session,

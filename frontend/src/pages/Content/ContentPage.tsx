@@ -6,13 +6,22 @@ import {
   Button,
   CircularProgress,
   Chip,
+  Divider,
+  Drawer,
   MenuItem,
   Paper,
   Stack,
   TextField,
   Typography,
 } from '@mui/material';
-import { Add, ArrowForward, CheckCircleOutline, ScienceOutlined } from '@mui/icons-material';
+import {
+  Add,
+  ArrowForward,
+  CheckCircleOutline,
+  FolderOpenOutlined,
+  LinkOutlined,
+  ScienceOutlined,
+} from '@mui/icons-material';
 import { extractErrorMessage } from '@/utils/error';
 import {
   appendSnapshot,
@@ -24,9 +33,12 @@ import {
   confirmProjectIntent,
   classifyRetrospectiveIntent,
   getCalibrationWorkspace,
+  getLatestPublishCheck,
   listProjects,
   lockPublishHypothesis,
   recordPublication,
+  runPublishCheck,
+  resolvePublishCheck,
   respondToAction,
   openHumanGate,
   decideHumanGate,
@@ -45,6 +57,10 @@ import {
   revokeCreatorSeries,
   proposeSeriesExtension,
   decideContentOpportunity,
+  createMaterial,
+  extractSnapshotMetrics,
+  listMaterials,
+  addMaterialUsage,
 } from '@/services/api/v2/projects';
 import type {
   CalibrationWorkspace,
@@ -63,6 +79,7 @@ import type {
   CreatorViewpoint,
   CreatorSeries,
   ContentOpportunity,
+  Material,
 } from '@/types/contracts/v2/content';
 import {
   BlindReviewAction,
@@ -97,6 +114,8 @@ export default function ContentPage() {
   const navigate = useNavigate();
   const [projects, setProjects] = useState<ContentProject[]>([]);
   const [workspace, setWorkspace] = useState<CalibrationWorkspace | null>(null);
+  const [materials, setMaterials] = useState<Material[]>([]);
+  const [materialsOpen, setMaterialsOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -107,6 +126,7 @@ export default function ContentPage() {
       Promise.all([
         listProjects(),
         projectId ? getCalibrationWorkspace(projectId) : Promise.resolve(null),
+        projectId ? listMaterials() : Promise.resolve({ items: [], total: 0 }),
       ]),
     [projectId],
   );
@@ -115,9 +135,10 @@ export default function ContentPage() {
     setLoading(true);
     setError(null);
     try {
-      const [projectList, currentWorkspace] = await fetchPageData();
+      const [projectList, currentWorkspace, materialList] = await fetchPageData();
       setProjects(projectList.items);
       setWorkspace(currentWorkspace);
+      setMaterials(materialList.items);
     } catch (err) {
       setError(extractErrorMessage(err, '内容项目加载失败'));
     } finally {
@@ -128,10 +149,11 @@ export default function ContentPage() {
   useEffect(() => {
     let active = true;
     void fetchPageData()
-      .then(([projectList, currentWorkspace]) => {
+      .then(([projectList, currentWorkspace, materialList]) => {
         if (!active) return;
         setProjects(projectList.items);
         setWorkspace(currentWorkspace);
+        setMaterials(materialList.items);
       })
       .catch((err: unknown) => {
         if (active) setError(extractErrorMessage(err, '内容项目加载失败'));
@@ -151,12 +173,14 @@ export default function ContentPage() {
       try {
         await command();
         if (projectId) {
-          const [projectList, currentWorkspace] = await Promise.all([
+          const [projectList, currentWorkspace, materialList] = await Promise.all([
             listProjects(),
             getCalibrationWorkspace(projectId),
+            listMaterials(),
           ]);
           setProjects(projectList.items);
           setWorkspace(currentWorkspace);
+          setMaterials(materialList.items);
         } else {
           const projectList = await listProjects();
           setProjects(projectList.items);
@@ -271,6 +295,27 @@ export default function ContentPage() {
   return (
     <div className="content-page content-workspace-page">
       {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
+      <Box display="flex" justifyContent="flex-end" mb={1}>
+        <Button
+          variant="outlined"
+          startIcon={<FolderOpenOutlined />}
+          onClick={() => setMaterialsOpen(true)}
+        >
+          项目素材
+        </Button>
+      </Box>
+      <ProjectMaterialsDrawer
+        open={materialsOpen}
+        busy={busy}
+        projectId={workspace.project.id}
+        materials={materials}
+        onClose={() => setMaterialsOpen(false)}
+        onManage={() => navigate('/materials')}
+        onLink={(material) => void runCommand(() => addMaterialUsage(material.id, {
+          project_id: workspace.project.id,
+          idempotency_key: makeKey(`project-material-${material.id}`),
+        }))}
+      />
       <ProjectWorkspace
         key={workspace.current_version?.id ?? `project-${workspace.project.id}`}
         workspace={workspace}
@@ -407,6 +452,76 @@ export default function ContentPage() {
         onOpenOpportunityProject={(nextProjectId) => navigate(`/content/${nextProjectId}`)}
       />
     </div>
+  );
+}
+
+function ProjectMaterialsDrawer({
+  open,
+  busy,
+  projectId,
+  materials,
+  onClose,
+  onManage,
+  onLink,
+}: {
+  open: boolean;
+  busy: boolean;
+  projectId: string;
+  materials: Material[];
+  onClose: () => void;
+  onManage: () => void;
+  onLink: (material: Material) => void;
+}) {
+  return (
+    <Drawer
+      anchor="right"
+      open={open}
+      onClose={onClose}
+      PaperProps={{ sx: { width: { xs: '100%', sm: 420 }, maxWidth: '100%' } }}
+    >
+      <Box p={3} display="flex" flexDirection="column" gap={2}>
+        <Box display="flex" justifyContent="space-between" alignItems="center" gap={2}>
+          <div>
+            <Typography component="h2" variant="h6">项目素材</Typography>
+            <Typography variant="body2" color="text.secondary">复用已有经历、链接、图片和文档</Typography>
+          </div>
+          <Button onClick={onManage}>管理全部</Button>
+        </Box>
+        <Divider />
+        {materials.length ? materials.map((material) => {
+          const linked = material.usages.some((usage) => usage.project_id === projectId);
+          return (
+            <Box key={material.id} py={1} display="flex" flexDirection="column" gap={1}>
+              <Box display="flex" justifyContent="space-between" alignItems="flex-start" gap={1}>
+                <Typography component="h3" variant="subtitle1">{material.title}</Typography>
+                <Chip size="small" label={material.privacy_level} />
+              </Box>
+              {material.content ? (
+                <Typography variant="body2" color="text.secondary">{material.content}</Typography>
+              ) : null}
+              <Typography variant="caption" color="text.secondary">
+                {material.usages.length
+                  ? `已用于 ${material.usages.map((usage) => usage.project_title).join('、')}`
+                  : '尚未关联项目'}
+              </Typography>
+              <Button
+                size="small"
+                startIcon={<LinkOutlined />}
+                disabled={busy || linked}
+                onClick={() => onLink(material)}
+              >
+                {linked ? '已关联当前项目' : '关联到当前项目'}
+              </Button>
+              <Divider />
+            </Box>
+          );
+        }) : (
+          <Alert severity="info" action={<Button onClick={onManage}>添加素材</Button>}>
+            还没有可复用素材
+          </Alert>
+        )}
+      </Box>
+    </Drawer>
   );
 }
 
@@ -866,7 +981,7 @@ function StageAction({
     case 'lock_hypothesis':
       return <HypothesisForm {...common} lockHypothesis={lockPublishHypothesis} />;
     case 'record_publication':
-      return <PublicationForm {...common} recordPublication={recordPublication} openHumanGate={openHumanGate} decideHumanGate={decideHumanGate} />;
+      return <PublicationForm {...common} recordPublication={recordPublication} openHumanGate={openHumanGate} decideHumanGate={decideHumanGate} getLatestPublishCheck={getLatestPublishCheck} runPublishCheck={runPublishCheck} resolvePublishCheck={resolvePublishCheck} />;
     case 'await_observation_window': {
       const publishedAt = workspace.publish_record?.published_at;
       const days = workspace.publish_hypothesis?.observation_window_days;
@@ -881,18 +996,18 @@ function StageAction({
               {deadline ? <>预计结束时间：<time>{deadline}</time>。到期后会自动提醒你回填实际表现；已有数据时也可以提前开始复盘。</> : '到期后会自动提醒你回填实际表现；已有数据时也可以提前开始复盘。'}
             </Alert>
           </Paper>
-          <SnapshotForm {...common} appendSnapshot={appendSnapshot} />
+          <SnapshotForm {...common} appendSnapshot={appendSnapshot} createMaterial={createMaterial} extractSnapshotMetrics={extractSnapshotMetrics} />
         </Stack>
       );
     }
     case 'add_snapshot':
-      return <SnapshotForm {...common} appendSnapshot={appendSnapshot} />;
+      return <SnapshotForm {...common} appendSnapshot={appendSnapshot} createMaterial={createMaterial} extractSnapshotMetrics={extractSnapshotMetrics} />;
     case 'run_blind_review':
       return <BlindReviewAction {...common} createBlindReview={createBlindReview} />;
     case 'create_observation':
       return <ObservationForm {...common} createObservation={createObservation} />;
     case 'add_comparable_snapshot':
-      return <SnapshotForm {...common} appendSnapshot={appendSnapshot} />;
+      return <SnapshotForm {...common} appendSnapshot={appendSnapshot} createMaterial={createMaterial} extractSnapshotMetrics={extractSnapshotMetrics} />;
     case 'review_calibration_issue':
       return <Alert severity="error">本次校准输入已被污染，不能进入长期经验。</Alert>;
     case 'manage_observations':

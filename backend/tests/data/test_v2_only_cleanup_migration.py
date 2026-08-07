@@ -86,6 +86,12 @@ def test_cleanup_drops_legacy_tables_and_preserves_v2_data(tmp_path):
             "0,'2026-08-01','2026-08-01')"
         )
         conn.execute(
+            "INSERT INTO assets "
+            "(id,owner_id,filename,mime_type,type,size,url,used_count,created_at,updated_at) "
+            "VALUES ('a2','u1','legacy-audio.mp3','audio/mpeg','audio',1,'/materials/audio',"
+            "0,'2026-08-01','2026-08-01')"
+        )
+        conn.execute(
             "INSERT INTO asset_usages (id,asset_id,article_id,used_at) "
             "VALUES ('au1','a1','p1','2026-08-01')"
         )
@@ -106,6 +112,7 @@ def test_cleanup_drops_legacy_tables_and_preserves_v2_data(tmp_path):
         ).fetchone() == ("v2-niche", "v2-audience")
         assert conn.execute("SELECT title FROM content_projects WHERE id='p1'").fetchone()[0] == "kept"
         assert conn.execute("SELECT name FROM materials WHERE id='a1'").fetchone()[0] == "evidence.pdf"
+        assert conn.execute("SELECT kind FROM materials WHERE id='a2'").fetchone()[0] == "document"
         assert conn.execute(
             "SELECT project_id FROM material_usages WHERE id='au1'"
         ).fetchone()[0] == "p1"

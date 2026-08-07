@@ -1,94 +1,93 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
-const envelope = (data: unknown) => ({ code: 200, data, message: 'success', meta: {} });
+const runId = Date.now();
+const email = `starter-flow-${runId}@test.com`;
+const password = 'Starter-flow-pw-123';
 
-const assessment = {
-  id: 'a1', motivation: 'curious', available_hours_per_week: 3,
-  publish_commitment: true, accept_experiment: true,
-  experience_assets: ['从零学会手冲咖啡'], interest_assets: [], skill_assets: [], privacy_limits: [],
-  readiness: 'ready', version: 1, completed_at: null,
-};
-
-const candidate = {
-  id: 'd1', label: '把一段真实经历变成可复用的经验',
-  audience: '正在经历相似阶段、需要真实参照的人',
-  creator_credibility: '你亲自经历过这件事，可以提供过程、选择和限制。',
-  content_supply: ['从零学会手冲咖啡'], production_cost: 'low', similarity_risk: 'unknown',
-  validation_method: '验证这个方向是否有足够真实素材，并且能在可投入时间内持续完成。',
-  evidence_refs: ['assessment:experience_assets:0'], selection_state: 'proposed', version: 1,
-  first_three_topics: [
-    { title: '开始前的真实状态', content_intent: 'record', audience_change: '看见真实起点', evidence_refs: ['assessment:experience_assets:0'] },
-    { title: '过程中最难的一次选择', content_intent: 'share', audience_change: '理解真实选择', evidence_refs: ['assessment:experience_assets:0'] },
-    { title: '其中可复用的一步', content_intent: 'solve', audience_change: '获得具体动作', evidence_refs: ['assessment:experience_assets:0'] },
-  ],
-};
-
-const projects = candidate.first_three_topics.map((topic, index) => ({
-  id: `p${index + 1}`, title: topic.title, status: 'preparing', primary_goal: 'experiment',
-  target_audience: candidate.audience, content_intent: topic.content_intent, content_format: 'graphic_note',
-  intent_status: 'candidate', audience_change: topic.audience_change, material_requirements: [],
-  expected_responses: [], success_signals: [], automation_level: 'guided', creator_state_version: 1,
-  starter_sprint_id: 's1', current_version_id: null, locked_publish_version_id: null,
-  publish_hypothesis_id: null, calibration_state: 'not_ready', version: 1,
-  updated_at: '2026-07-22T00:00:00Z',
-}));
-
-test('starter reaches three existing content projects without a second workflow', async ({ page }) => {
-  let state: 'assessment' | 'generate' | 'directions' | 'sprint' = 'assessment';
-  await page.addInitScript(() => {
-    localStorage.setItem('access_token', 'starter-e2e-token');
-    localStorage.setItem('refresh_token', 'starter-e2e-refresh');
+test.beforeAll(async ({ request }) => {
+  const response = await request.post('http://127.0.0.1:8765/api/v2/auth/register', {
+    data: { email, username: `starter${runId}`, password },
   });
-  await page.route('**/api/v2/auth/me', (route) => route.fulfill({
-    status: 200,
-    contentType: 'application/json',
-    body: JSON.stringify(envelope({ user: { id: 'u1', username: 'Starter', email: 'starter@test.com' } })),
-  }));
-  await page.route('**/api/v2/starter', async (route) => {
-    if (route.request().method() !== 'GET') return route.fallback();
-    const workspace = state === 'assessment'
-      ? { assessment: null, candidates: [], sprint: null, projects: [], next_step: 'assessment' }
-      : state === 'generate'
-        ? { assessment, candidates: [], sprint: null, projects: [], next_step: 'directions' }
-        : state === 'directions'
-          ? { assessment, candidates: [candidate], sprint: null, projects: [], next_step: 'directions' }
-          : {
-              assessment,
-              candidates: [{ ...candidate, selection_state: 'selected', version: 2 }],
-              sprint: {
-                id: 's1', starts_at: '2026-07-22T00:00:00Z', ends_at: '2026-08-05T00:00:00Z',
-                target_publish_count: 3, published_count: 0, graduation_state: 'active',
-                blocker_reasons: [], next_topics: [], review_summary: null, version: 1,
-              },
-              projects,
-              next_step: 'sprint',
-            };
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(envelope(workspace)) });
-  });
-  await page.route('**/api/v2/starter/assessment', async (route) => {
-    state = 'generate';
-    await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify(envelope({ assessment, next_step: 'directions' })) });
-  });
-  await page.route('**/api/v2/starter/directions:generate', async (route) => {
-    state = 'directions';
-    await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify(envelope({ candidates: [candidate], next_step: 'directions' })) });
-  });
-  await page.route('**/api/v2/starter/directions/d1:select', async (route) => {
-    state = 'sprint';
-    await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify(envelope({})) });
-  });
+  expect([201, 409]).toContain(response.status());
+});
 
+async function login(page: Page) {
+  await page.goto('/login');
+  await page.locator('#login-email').fill(email);
+  await page.locator('#login-password').fill(password);
+  await page.getByRole('button', { name: '登录', exact: true }).click();
+  await page.waitForURL((url) => url.pathname === '/', { timeout: 15_000 });
+}
+
+test('starter publishes the first experiment and completes the sprint review', async ({ page }) => {
+  test.setTimeout(60_000);
+  await login(page);
   await page.goto('/onboarding/assessment');
+
   await expect(page.getByRole('heading', { name: '先盘点你真正能讲的东西' })).toBeVisible();
-  await page.getByLabel('你亲自经历过什么').fill('从零学会手冲咖啡');
+  await page.getByLabel('你亲自经历过什么').fill('从零学会手冲咖啡，并记录每次失败的原因');
+  await page.getByLabel('你愿意持续探索什么').fill('低成本提升家庭咖啡稳定性');
   await page.getByRole('button', { name: '生成实验方向' }).click();
+
   await expect(page.getByRole('heading', { name: '准备三条可测试方向' })).toBeVisible();
   await page.getByRole('button', { name: '查看候选方向' }).click();
-  await expect(page.getByRole('heading', { name: candidate.label })).toBeVisible();
-  await expect(page.getByRole('listitem')).toHaveCount(3);
-  await page.getByRole('button', { name: '选择并创建三篇实验' }).click();
+  await expect(page.getByRole('heading', { name: '选择一条先做 14 天' })).toBeVisible();
+  await expect(page.locator('.starter-direction').first().getByRole('listitem')).toHaveCount(3);
+  await page.locator('.starter-direction').first()
+    .getByRole('button', { name: '选择并创建三篇实验' }).click();
+
+  await expect(page.getByRole('heading', { name: '完成三篇内容实验' })).toBeVisible();
   await expect(page.getByText('0 / 3 已发布')).toBeVisible();
-  await expect(page.getByRole('button', { name: /开始前的真实状态/ })).toBeVisible();
-  await expect(page.getByRole('button', { name: /过程中最难的一次选择/ })).toBeVisible();
-  await expect(page.getByRole('button', { name: /其中可复用的一步/ })).toBeVisible();
+  await expect(page.locator('.starter-project-list').getByRole('button')).toHaveCount(3);
+  await page.locator('.starter-project-list').getByRole('button').first().click();
+
+  await page.waitForURL(/\/content\/[0-9a-f-]+$/, { timeout: 15_000 });
+  await expect(page.getByRole('heading', { name: '这条内容想让读者发生什么变化？' })).toBeVisible();
+  await page.getByRole('button', { name: '确认这个方向' }).click();
+
+  const answer = page.getByLabel('你的回答');
+  await expect(answer).toBeVisible({ timeout: 15_000 });
+  await answer.fill('前三次手冲都不稳定，我逐次记录了水温、研磨度和失败原因。');
+  await page.getByRole('button', { name: '让 AI 准备候选内容' }).click();
+  await expect(page.getByRole('button', { name: '确认并准备候选内容' })).toBeVisible({ timeout: 15_000 });
+  await page.getByRole('button', { name: '确认并准备候选内容' }).click();
+
+  await expect(page.locator('[data-testid="candidate-segment"]').first()).toBeVisible({ timeout: 15_000 });
+  let pending = await page.locator('[data-testid="candidate-segment"][data-status="pending"]').count();
+  while (pending > 0) {
+    await page.locator('[data-testid="candidate-segment"][data-status="pending"]').first()
+      .getByRole('button', { name: '确认保留' }).click();
+    await expect.poll(
+      () => page.locator('[data-testid="candidate-segment"][data-status="pending"]').count(),
+    ).toBeLessThan(pending);
+    pending = await page.locator('[data-testid="candidate-segment"][data-status="pending"]').count();
+  }
+
+  await expect(page.getByRole('heading', { name: '候选内容已经准备好' })).toBeVisible({ timeout: 15_000 });
+  await page.getByRole('button', { name: '确认候选内容并进入发布准备' }).click();
+  await expect(page.getByLabel('读者可持续关注的过程或变化')).toBeVisible({ timeout: 15_000 });
+  await page.getByLabel('读者可持续关注的过程或变化').fill('下一篇继续记录调整研磨度后的真实变化');
+  await page.getByRole('button', { name: '锁定发布意图', exact: true }).click();
+
+  await expect(page.getByLabel('小红书笔记链接')).toBeVisible({ timeout: 15_000 });
+  await page.getByLabel('小红书笔记链接').fill('https://www.xiaohongshu.com/explore/e2e-starter-flow');
+  await page.getByRole('button', { name: '运行检查' }).click();
+  const publishReady = page.getByText('可以发布', { exact: true });
+  const acknowledgements = page.getByRole('button', { name: '我已了解' });
+  await expect(publishReady.or(acknowledgements.first()).first()).toBeVisible({ timeout: 15_000 });
+  while (await acknowledgements.count()) {
+    const openCount = await acknowledgements.count();
+    await acknowledgements.first().click();
+    await expect.poll(() => acknowledgements.count()).toBeLessThan(openCount);
+  }
+  await page.getByRole('button', { name: '确认已发布' }).click();
+  await expect(page.getByLabel('数据时间')).toBeVisible({ timeout: 15_000 });
+
+  await page.goto('/onboarding/assessment');
+  await expect(page.getByText('1 / 3 已发布')).toBeVisible({ timeout: 15_000 });
+  await page.getByLabel('这轮实际发生了什么').fill('完成了第一篇发布，也确认记录真实失败过程可以持续执行。');
+  await page.getByLabel('主要阻碍（最多 3 条）').fill('整理失败记录花费时间');
+  await page.getByLabel('下一轮想测试什么（最多 3 条）').fill('比较不同研磨度的结果');
+  await page.getByRole('button', { name: '完成本轮复盘' }).click();
+  await expect(page.getByText('本轮实验已完成')).toBeVisible({ timeout: 15_000 });
 });

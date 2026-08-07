@@ -34,6 +34,7 @@ class PerformanceSnapshotCreate(StrictModel):
     unavailable_reason: str | None = Field(default=None, max_length=500)
     metrics: PerformanceMetrics = Field(default_factory=PerformanceMetrics)
     screenshot_material_id: str | None = None
+    snapshot_extraction_id: str | None = None
     confirmed_by_user: bool
     supersedes_id: str | None = None
     expected_project_version: int = Field(ge=1)
@@ -53,6 +54,12 @@ class PerformanceSnapshotCreate(StrictModel):
             if not self.unavailable_reason or not self.unavailable_reason.strip():
                 raise ValueError("unavailable results require a reason")
             self.unavailable_reason = self.unavailable_reason.strip()
+        if self.snapshot_extraction_id and (
+            self.source != "screenshot" or not self.screenshot_material_id
+        ):
+            raise ValueError(
+                "snapshot extraction confirmation requires its screenshot material"
+            )
         return self
 
 

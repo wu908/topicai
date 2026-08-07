@@ -15,6 +15,10 @@ from app.models.v2.calibration import (
     PublishRecordCreate,
 )
 from app.models.v2.publish_hypothesis import PublishHypothesisAmendmentCreate
+from app.models.v2.snapshot_extraction import (
+    SnapshotExtractionCreate,
+    SnapshotExtractionView,
+)
 from app.services.benchmark_sample import BenchmarkSampleService
 from app.services.blind_review import BlindReviewService
 from app.services.calibration_workspace import CalibrationWorkspaceService
@@ -22,6 +26,7 @@ from app.services.observation import ObservationService
 from app.services.performance_snapshot import PerformanceSnapshotService
 from app.services.publication import PublicationService
 from app.services.publish_hypothesis import PublishHypothesisService
+from app.services.snapshot_extraction import SnapshotExtractionService
 
 router = APIRouter(tags=["Calibration v2"])
 
@@ -127,6 +132,21 @@ async def append_snapshot(
     result, replayed = await PerformanceSnapshotService(db).append(
         user["id"], publish_record_id, body
     )
+    return _response(response, result, replayed)
+
+
+@router.post(
+    "/snapshots:extract",
+    response_model=ApiResponse[SnapshotExtractionView],
+    status_code=201,
+)
+async def extract_snapshot_metrics(
+    body: SnapshotExtractionCreate,
+    response: Response,
+    user=Depends(get_current_user),
+    db: Database = Depends(get_db),
+):
+    result, replayed = await SnapshotExtractionService(db).extract(user["id"], body)
     return _response(response, result, replayed)
 
 

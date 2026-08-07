@@ -4,6 +4,7 @@ import {
   Box,
   Button,
   Checkbox,
+  Chip,
   FormControlLabel,
   FormGroup,
   MenuItem,
@@ -16,9 +17,12 @@ import {
   Add,
   AssessmentOutlined,
   CheckCircleOutline,
+  ContentCopy,
+  Download,
   EditNoteOutlined,
   InsightsOutlined,
   PublishOutlined,
+  UploadFile,
 } from '@mui/icons-material';
 import type {
   CalibrationWorkspace,
@@ -28,7 +32,11 @@ import type {
   HumanGate,
   HumanGateDecisionInput,
   HypothesisLockInput,
+  Material,
   PerformanceMetrics,
+  PublishCheck,
+  SnapshotExtractionProposal,
+  SnapshotInput,
 } from '@/types/contracts/v2/content';
 
 interface CommandProps {
@@ -70,6 +78,79 @@ const toLocalDateTimeValue = (date: Date) => {
     pad(date.getMinutes()),
   ].join('');
 };
+
+const safeFilename = (value: string) => value.replace(/[\\/:*?"<>|]/g, '-');
+
+function saveBlob(filename: string, blob: Blob) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = safeFilename(filename);
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function saveText(filename: string, content: string) {
+  saveBlob(filename, new Blob([content], { type: 'text/plain;charset=utf-8' }));
+}
+
+function wrapCanvasText(context: CanvasRenderingContext2D, text: string, maxWidth: number) {
+  const lines: string[] = [];
+  for (const paragraph of text.split('\n')) {
+    if (!paragraph) {
+      lines.push('');
+      continue;
+    }
+    let line = '';
+    for (const character of paragraph) {
+      const next = line + character;
+      if (line && context.measureText(next).width > maxWidth) {
+        lines.push(line);
+        line = character;
+      } else {
+        line = next;
+      }
+    }
+    lines.push(line);
+  }
+  return lines;
+}
+
+async function saveImagePlan(filename: string, title: string, content: string) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 1080;
+  let context = canvas.getContext('2d');
+  if (!context) throw new Error('canvas is unavailable');
+  context.font = '32px sans-serif';
+  const lines = wrapCanvasText(context, content, 920);
+  canvas.height = Math.max(720, 220 + lines.length * 52);
+  context = canvas.getContext('2d');
+  if (!context) throw new Error('canvas is unavailable');
+  context.fillStyle = '#ffffff';
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.textBaseline = 'top';
+  context.fillStyle = '#171717';
+  context.font = '600 46px sans-serif';
+  context.fillText(title, 80, 72, 920);
+  context.font = '32px sans-serif';
+  lines.forEach((line, index) => context.fillText(line, 80, 164 + index * 52, 920));
+  const blob = await new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob(
+      (result) => result ? resolve(result) : reject(new Error('image export failed')),
+      'image/png',
+    );
+  });
+  saveBlob(filename, blob);
+}
+
+async function fileBase64(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(',')[1] || '');
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
 
 export function ProjectCreateForm({
   busy,
@@ -456,6 +537,15 @@ interface PublicationFormProps extends WorkspaceFormProps {
   }) => Promise<unknown>;
   openHumanGate: (actionId: string) => Promise<HumanGate>;
   decideHumanGate: (gateId: string, input: HumanGateDecisionInput) => Promise<unknown>;
+  getLatestPublishCheck: (projectId: string) => Promise<PublishCheck | null>;
+  runPublishCheck: (
+    projectId: string,
+    input: { content_version_id: string; idempotency_key: string },
+  ) => Promise<PublishCheck>;
+  resolvePublishCheck: (
+    checkId: string,
+    input: { findings: Record<string, 'acknowledged' | 'resolved'>; idempotency_key: string },
+  ) => Promise<PublishCheck>;
 }
 
 export function PublicationForm({
@@ -465,11 +555,23 @@ export function PublicationForm({
   recordPublication,
   openHumanGate,
   decideHumanGate,
+  getLatestPublishCheck,
+  runPublishCheck,
+  resolvePublishCheck,
   makeKey,
 }: PublicationFormProps) {
   const [url, setUrl] = useState('');
   const [publishedAt, setPublishedAt] = useState(() => toLocalDateTimeValue(new Date()));
+  const [storedCheck, setStoredCheck] = useState<PublishCheck | null>(null);
+  const [checkProjectId, setCheckProjectId] = useState<string | null>(null);
+  const [checkErrorProjectId, setCheckErrorProjectId] = useState<string | null>(null);
+  const [artifactError, setArtifactError] = useState<string | null>(null);
+  const [artifacts, setArtifacts] = useState({ copied: false, body: false, images: false });
   const action = workspace.orchestrated_action;
+  const version = workspace.current_version;
+  const versionId = workspace.project.locked_publish_version_id;
+  const check = checkProjectId === workspace.project.id ? storedCheck : null;
+  const checkError = checkErrorProjectId === workspace.project.id;
   const [gate, setGate] = useState<HumanGate | null>(action?.human_gate ?? null);
   const [gateError, setGateError] = useState(false);
   const [gateAttempt, setGateAttempt] = useState(0);
@@ -483,6 +585,88 @@ export function PublicationForm({
         .catch(() => setGateError(true));
     }
   }, [action, gate, gateAttempt, openHumanGate]);
+
+  useEffect(() => {
+    let active = true;
+    void getLatestPublishCheck(workspace.project.id)
+      .then((latest) => {
+        if (active) {
+          setStoredCheck(latest);
+          setCheckProjectId(workspace.project.id);
+          setCheckErrorProjectId(null);
+        }
+      })
+      .catch(() => {
+        if (active) setCheckErrorProjectId(workspace.project.id);
+      });
+    return () => { active = false; };
+  }, [getLatestPublishCheck, workspace.project.id]);
+
+  const imagePlanText = version ? [
+    version.cover_plan ? `封面方案\n${version.cover_plan}` : '',
+    ...(version.image_plan || []).map((item, index) =>
+      `${String(item.order ?? index + 1)}. ${String(item.description ?? JSON.stringify(item))}`,
+    ),
+  ].filter(Boolean).join('\n\n') : '';
+  const checkReady = Boolean(
+    check
+    && check.status === 'clear'
+    && !check.stale
+    && check.content_version_id === versionId,
+  );
+
+  const runCheck = () => onCommand(async () => {
+    if (!versionId) return;
+    setStoredCheck(await runPublishCheck(workspace.project.id, {
+      content_version_id: versionId,
+      idempotency_key: makeKey('publish-check'),
+    }));
+    setCheckProjectId(workspace.project.id);
+    setCheckErrorProjectId(null);
+  });
+
+  const acknowledge = (findingId: string) => onCommand(async () => {
+    if (!check) return;
+    setStoredCheck(await resolvePublishCheck(check.id, {
+      findings: { [findingId]: 'acknowledged' },
+      idempotency_key: makeKey(`publish-check-${findingId}`),
+    }));
+    setCheckProjectId(workspace.project.id);
+  });
+
+  const copyBody = async () => {
+    if (!version || !navigator.clipboard?.writeText) {
+      setArtifactError('当前浏览器无法使用剪贴板，请下载正文。');
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(version.body_text);
+      setArtifacts((current) => ({ ...current, copied: true }));
+      setArtifactError(null);
+    } catch {
+      setArtifactError('正文复制失败，请重试或下载正文。');
+    }
+  };
+
+  const downloadArtifact = async (kind: 'body' | 'images') => {
+    if (!version) return;
+    try {
+      if (kind === 'body') {
+        saveText(`${workspace.project.title}-正文.txt`, version.body_text);
+      } else {
+        await saveImagePlan(
+          `${workspace.project.title}-配图.png`,
+          workspace.project.title,
+          imagePlanText,
+        );
+      }
+      setArtifacts((current) => ({ ...current, [kind]: true }));
+      setArtifactError(null);
+    } catch {
+      setArtifactError(`${kind === 'body' ? '正文' : '配图'}下载失败，请单独重试。`);
+    }
+  };
+
   return (
     <Paper component="section" variant="outlined" sx={panelSx}>
       <Typography component="h2" variant="h5" mb={2}>
@@ -505,6 +689,45 @@ export function PublicationForm({
         </Alert>
       ) : null}
       <Stack spacing={2}>
+        <Box>
+          <Typography component="h3" variant="subtitle1" fontWeight={600} mb={1}>发布内容</Typography>
+          <Box display="flex" flexWrap="wrap" gap={1}>
+            <Button startIcon={<ContentCopy />} disabled={!version} onClick={() => void copyBody()}>
+              {artifacts.copied ? '正文已复制' : '复制正文'}
+            </Button>
+            <Button startIcon={<Download />} disabled={!version} onClick={() => void downloadArtifact('body')}>
+              {artifacts.body ? '正文已下载' : '下载正文'}
+            </Button>
+            <Button startIcon={<Download />} disabled={!imagePlanText} onClick={() => void downloadArtifact('images')}>
+              {artifacts.images ? '配图已导出' : '导出配图 PNG'}
+            </Button>
+          </Box>
+          {artifactError ? <Alert severity="error" sx={{ mt: 1 }}>{artifactError}</Alert> : null}
+        </Box>
+        <Box>
+          <Box display="flex" alignItems="center" flexWrap="wrap" gap={1} mb={1}>
+            <Typography component="h3" variant="subtitle1" fontWeight={600}>发布前检查</Typography>
+            {check ? <Chip size="small" color={checkReady ? 'success' : 'warning'} label={checkReady ? '可以发布' : check.stale ? '检查已过期' : '需要确认'} /> : null}
+            <Button variant="outlined" disabled={busy || !versionId} onClick={() => void runCheck()}>
+              {check?.stale ? '重新检查' : '运行检查'}
+            </Button>
+          </Box>
+          <Alert severity="info" sx={{ mb: 1 }}>本检查仅提供辅助，不保证平台审核通过。</Alert>
+          {checkError ? <Alert severity="error" sx={{ mb: 1 }}>无法读取检查结果，请重新运行检查。</Alert> : null}
+          {check?.findings.map((finding) => (
+            <Box key={finding.id} py={1.5} borderBottom="1px solid var(--v3-border)">
+              <Box display="flex" alignItems="center" flexWrap="wrap" gap={1}>
+                <Chip size="small" color={finding.severity === 'high' ? 'error' : finding.severity === 'medium' ? 'warning' : 'default'} label={{ low: '低', medium: '中', high: '高' }[finding.severity]} />
+                <Typography variant="body2" fontWeight={600}>{({ title: '标题', body_text: '正文', cover_plan: '封面方案' } as const)[finding.field]}第 {finding.start + 1}–{finding.end} 字</Typography>
+                <Typography variant="body2">“{finding.excerpt}”</Typography>
+              </Box>
+              <Typography variant="body2" mt={0.5}>{finding.reason}</Typography>
+              <Typography variant="caption" color="text.secondary">规则来源：{finding.rule_source} · 更新于 {new Date(finding.rule_updated_at).toLocaleDateString()}</Typography>
+              {finding.status === 'open' ? <Box mt={0.5}><Button size="small" disabled={busy} onClick={() => void acknowledge(finding.id)}>我已了解</Button></Box> : <Chip size="small" color="success" variant="outlined" label={finding.status === 'resolved' ? '已解决' : '已确认'} sx={{ mt: 0.5 }} />}
+            </Box>
+          ))}
+          {check && !check.findings.length ? <Alert severity="success">未发现需要处理的风险项。</Alert> : null}
+        </Box>
         <TextField
           label="小红书笔记链接"
           inputProps={{ 'aria-label': '小红书笔记链接' }}
@@ -525,9 +748,8 @@ export function PublicationForm({
           <Button
             variant="contained"
             startIcon={<PublishOutlined />}
-            disabled={busy || !publishedAt || !workspace.project.locked_publish_version_id || !gate}
+            disabled={busy || !publishedAt || !versionId || !gate || !checkReady}
             onClick={() => {
-              const versionId = workspace.project.locked_publish_version_id;
               if (!versionId) return;
               if (!gate) return;
               void onCommand(async () => {
@@ -559,16 +781,20 @@ export function PublicationForm({
 }
 
 interface SnapshotFormProps extends WorkspaceFormProps {
-  appendSnapshot: (recordId: string, input: {
-    captured_at: string;
-    source: 'manual';
-    result_availability?: 'observed' | 'unavailable';
-    unavailable_reason?: string;
-    metrics: PerformanceMetrics;
-    confirmed_by_user: true;
-    expected_project_version: number;
+  appendSnapshot: (recordId: string, input: SnapshotInput) => Promise<unknown>;
+  createMaterial: (input: {
+    kind: Material['kind'];
+    title: string;
+    content_base64?: string;
+    mime_type?: string;
+    privacy_level: Material['privacy_level'];
+    project_id?: string;
     idempotency_key: string;
-  }) => Promise<unknown>;
+  }) => Promise<Material>;
+  extractSnapshotMetrics: (input: {
+    material_id: string;
+    idempotency_key: string;
+  }) => Promise<SnapshotExtractionProposal>;
 }
 
 const metricFields = [
@@ -585,14 +811,49 @@ export function SnapshotForm({
   busy,
   onCommand,
   appendSnapshot,
+  createMaterial,
+  extractSnapshotMetrics,
   makeKey,
 }: SnapshotFormProps) {
   const [capturedAt, setCapturedAt] = useState(() => toLocalDateTimeValue(new Date()));
   const [values, setValues] = useState<Record<string, string>>({});
   const [unavailable, setUnavailable] = useState(false);
   const [unavailableReason, setUnavailableReason] = useState('');
+  const [screenshot, setScreenshot] = useState<File | null>(null);
+  const [screenshotMaterialId, setScreenshotMaterialId] = useState<string | null>(null);
+  const [proposal, setProposal] = useState<SnapshotExtractionProposal | null>(null);
+  const [proposalConfirmed, setProposalConfirmed] = useState(false);
   const record = workspace.publish_record;
   const hasMetric = Object.values(values).some((value) => value !== '');
+
+  const extractScreenshot = () => onCommand(async () => {
+    if (!screenshot) return;
+    let materialId = screenshotMaterialId;
+    if (!materialId) {
+      const material = await createMaterial({
+        kind: 'image',
+        title: `表现数据截图 ${capturedAt.replace('T', ' ')}`,
+        content_base64: await fileBase64(screenshot),
+        mime_type: screenshot.type || 'application/octet-stream',
+        privacy_level: 'sensitive',
+        project_id: workspace.project.id,
+        idempotency_key: makeKey('snapshot-screenshot'),
+      });
+      materialId = material.id;
+      setScreenshotMaterialId(material.id);
+    }
+    const next = await extractSnapshotMetrics({
+      material_id: materialId,
+      idempotency_key: makeKey('snapshot-extraction'),
+    });
+    setProposal(next);
+    setProposalConfirmed(false);
+    setValues(Object.fromEntries(
+      Object.entries(next.metrics)
+        .filter(([, value]) => value !== null && value !== undefined)
+        .map(([key, value]) => [key, String(value)]),
+    ));
+  });
 
   return (
     <Paper component="section" variant="outlined" sx={panelSx}>
@@ -619,7 +880,11 @@ export function SnapshotForm({
               checked={unavailable}
               onChange={(_, checked) => {
                 setUnavailable(checked);
-                if (checked) setValues({});
+                if (checked) {
+                  setValues({});
+                  setProposal(null);
+                  setProposalConfirmed(false);
+                }
               }}
             />
           }
@@ -636,20 +901,45 @@ export function SnapshotForm({
             helperText="例如平台已不再展示、内容已删除或账号权限不足。暂时拿不到时请稍后再试。"
           />
         ) : (
-          <Box className="content-metric-grid">
-            {metricFields.map(([key, label]) => (
-              <TextField
-                key={key}
-                label={label}
-                value={values[key] ?? ''}
-                onChange={(e) =>
-                  setValues((current) => ({ ...current, [key]: e.target.value }))
-                }
-                type="number"
-                inputProps={{ min: 0, 'aria-label': label }}
+          <>
+            <Box display="flex" flexWrap="wrap" gap={1} alignItems="center">
+              <Button component="label" variant="outlined" startIcon={<UploadFile />} disabled={busy}>
+                {screenshot?.name || '选择数据截图'}
+                <input hidden type="file" accept="image/*" onChange={(event) => {
+                  setScreenshot(event.target.files?.[0] || null);
+                  setScreenshotMaterialId(null);
+                  setProposal(null);
+                  setProposalConfirmed(false);
+                }} />
+              </Button>
+              <Button disabled={busy || !screenshot} onClick={() => void extractScreenshot()}>识别截图数据</Button>
+            </Box>
+            {proposal ? (
+              <Alert severity="warning">
+                识别结果只是待确认草稿，不会自动保存。请逐项核对并修改错误数字。
+              </Alert>
+            ) : null}
+            <Box className="content-metric-grid">
+              {metricFields.map(([key, label]) => (
+                <TextField
+                  key={key}
+                  label={label}
+                  value={values[key] ?? ''}
+                  onChange={(e) =>
+                    setValues((current) => ({ ...current, [key]: e.target.value }))
+                  }
+                  type="number"
+                  inputProps={{ min: 0, 'aria-label': label }}
+                />
+              ))}
+            </Box>
+            {proposal ? (
+              <FormControlLabel
+                label="我已逐项核对截图识别结果"
+                control={<Checkbox checked={proposalConfirmed} onChange={(_, checked) => setProposalConfirmed(checked)} />}
               />
-            ))}
-          </Box>
+            ) : null}
+          </>
         )}
         <Box>
           <Button
@@ -658,6 +948,7 @@ export function SnapshotForm({
             disabled={
               busy || !record || !capturedAt
               || (unavailable ? !unavailableReason.trim() : !hasMetric)
+              || Boolean(proposal && !proposalConfirmed)
             }
             onClick={() => {
               if (!record) return;
@@ -669,12 +960,18 @@ export function SnapshotForm({
               void onCommand(() =>
                 appendSnapshot(record.id, {
                   captured_at: new Date(capturedAt).toISOString(),
-                  source: 'manual',
+                  source: proposal ? 'screenshot' : 'manual',
                   result_availability: unavailable ? 'unavailable' : 'observed',
                   ...(unavailable
                     ? { unavailable_reason: unavailableReason.trim() }
                     : {}),
                   metrics: unavailable ? {} : metrics,
+                  ...(proposal && screenshotMaterialId
+                    ? {
+                        screenshot_material_id: screenshotMaterialId,
+                        snapshot_extraction_id: proposal.id,
+                      }
+                    : {}),
                   confirmed_by_user: true,
                   expected_project_version: workspace.project.version,
                   idempotency_key: makeKey('snapshot'),

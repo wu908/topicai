@@ -744,6 +744,83 @@ def _post_step_036_creator_series_scope(conn: sqlite3.Connection) -> None:
     _backfill_creator_series_scope(conn)
 
 
+def _post_step_048_release_audit_fixes(conn: sqlite3.Connection) -> None:
+    columns = {
+        row[1]: row
+        for row in conn.execute("PRAGMA table_info(snapshot_extractions_v2)")
+    }
+    foreign_keys = {
+        (row[3], row[6])
+        for row in conn.execute("PRAGMA foreign_key_list(snapshot_extractions_v2)")
+    }
+    if (
+        columns.get("material_id", (None, None, None, 1))[3] == 0
+        and ("material_id", "SET NULL") in foreign_keys
+        and ("snapshot_id", "SET NULL") in foreign_keys
+    ):
+        return
+
+    conn.commit()
+    conn.execute("PRAGMA foreign_keys=OFF")
+    try:
+        conn.execute("BEGIN")
+        conn.execute("DROP TABLE IF EXISTS snapshot_extractions_v2_release_new")
+        conn.execute(
+            """
+            CREATE TABLE snapshot_extractions_v2_release_new (
+                id TEXT PRIMARY KEY,
+                owner_user_id TEXT NOT NULL,
+                material_id TEXT,
+                metrics_json TEXT NOT NULL,
+                ai_trace_id TEXT NOT NULL,
+                idempotency_key TEXT NOT NULL,
+                request_hash TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                user_decision TEXT NOT NULL DEFAULT 'pending'
+                    CHECK (user_decision IN ('pending','confirmed','rejected','edited')),
+                decided_at TEXT,
+                snapshot_id TEXT,
+                UNIQUE(owner_user_id, idempotency_key),
+                FOREIGN KEY (owner_user_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY (material_id) REFERENCES materials(id) ON DELETE SET NULL,
+                FOREIGN KEY (ai_trace_id) REFERENCES ai_traces_v2(id),
+                FOREIGN KEY (snapshot_id) REFERENCES performance_snapshots_v2(id)
+                    ON DELETE SET NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO snapshot_extractions_v2_release_new (
+                id,owner_user_id,material_id,metrics_json,ai_trace_id,idempotency_key,
+                request_hash,created_at,user_decision,decided_at,snapshot_id
+            ) SELECT id,owner_user_id,material_id,metrics_json,ai_trace_id,idempotency_key,
+                request_hash,created_at,user_decision,decided_at,snapshot_id
+            FROM snapshot_extractions_v2
+            """
+        )
+        conn.execute("DROP TABLE snapshot_extractions_v2")
+        conn.execute(
+            "ALTER TABLE snapshot_extractions_v2_release_new "
+            "RENAME TO snapshot_extractions_v2"
+        )
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_snapshot_extractions_snapshot "
+            "ON snapshot_extractions_v2(snapshot_id) WHERE snapshot_id IS NOT NULL"
+        )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.execute("PRAGMA foreign_keys=ON")
+    violations = conn.execute("PRAGMA foreign_key_check").fetchall()
+    if violations:
+        raise sqlite3.IntegrityError(
+            f"snapshot extraction migration broke foreign keys: {violations}"
+        )
+
+
 #: Migration stem -> post-step callable. Add an entry only when a
 #: migration needs Python-driven back-fill that pure SQL cannot express.
 MIGRATION_POST_STEPS: dict[str, PostStep] = {
@@ -754,6 +831,7 @@ MIGRATION_POST_STEPS: dict[str, PostStep] = {
     "036_creator_series_scope": _post_step_036_creator_series_scope,
     "038_scope_learning_action": _post_step_038_scope_learning_action,
     "039_observation_window_action": _post_step_039_observation_window_action,
+    "048_release_audit_fixes": _post_step_048_release_audit_fixes,
 }
 
 
@@ -903,6 +981,78 @@ def apply(
                     sql = _replace_marked_expression(
                         sql, "source_refs_json", "source_refs_json"
                     )
+                conn.executescript(sql)
+            elif version == "046_release_contract_gaps":
+                _ensure_columns(
+                    conn,
+                    "users",
+                    [
+                        ("xiaohongshu_account_reference", "TEXT"),
+                        (
+                            "settings_version",
+                            "INTEGER NOT NULL DEFAULT 1 CHECK (settings_version >= 1)",
+                        ),
+                    ],
+                )
+                _ensure_columns(
+                    conn,
+                    "materials",
+                    [
+                        ("content_text", "TEXT"),
+                        ("storage_path", "TEXT"),
+                        (
+                            "privacy_level",
+                            "TEXT NOT NULL DEFAULT 'private' CHECK "
+                            "(privacy_level IN ('public','private','sensitive'))",
+                        ),
+                        (
+                            "version",
+                            "INTEGER NOT NULL DEFAULT 1 CHECK (version >= 1)",
+                        ),
+                        ("idempotency_key", "TEXT"),
+                        ("request_hash", "TEXT"),
+                    ],
+                )
+                conn.executescript(sql)
+            elif version == "048_release_audit_fixes":
+                _ensure_columns(conn, "users", [("credentials_revoked_at", "TEXT")])
+                _ensure_columns(
+                    conn,
+                    "ai_traces_v2",
+                    [
+                        (
+                            "user_decision",
+                            "TEXT NOT NULL DEFAULT 'pending' CHECK "
+                            "(user_decision IN ('pending','confirmed','rejected','edited'))",
+                        ),
+                        (
+                            "confidence_label",
+                            "TEXT NOT NULL DEFAULT 'low' CHECK "
+                            "(confidence_label IN ('high','medium','low','unavailable'))",
+                        ),
+                        (
+                            "outcome",
+                            "TEXT NOT NULL DEFAULT 'success' CHECK "
+                            "(outcome IN ('success','fallback','failed','cancelled'))",
+                        ),
+                    ],
+                )
+                _ensure_columns(
+                    conn,
+                    "snapshot_extractions_v2",
+                    [
+                        (
+                            "user_decision",
+                            "TEXT NOT NULL DEFAULT 'pending' CHECK "
+                            "(user_decision IN ('pending','confirmed','rejected','edited'))",
+                        ),
+                        ("decided_at", "TEXT"),
+                        (
+                            "snapshot_id",
+                            "TEXT REFERENCES performance_snapshots_v2(id)",
+                        ),
+                    ],
+                )
                 conn.executescript(sql)
             else:
                 conn.executescript(sql)

@@ -5,6 +5,8 @@ from fastapi import APIRouter, Depends, Response
 from app.api.deps import get_current_user, get_db
 from app.core.database import Database
 from app.models.common import ApiResponse
+from app.models.v2.account_data import AccountDataJob, OwnerDataExport
+from app.models.v2.action_domain import HumanGate
 from app.models.v2.intent_actions import AccountGateRequest, HumanGateType
 from app.services.account_data import AccountDataService
 from app.services.intent_actions import HumanGateService
@@ -12,7 +14,11 @@ from app.services.intent_actions import HumanGateService
 router = APIRouter(prefix="/account", tags=["Account data v2"])
 
 
-@router.post("/data-export:request", status_code=201)
+@router.post(
+    "/data-export:request",
+    response_model=ApiResponse[HumanGate],
+    status_code=201,
+)
 async def request_data_export(
     body: AccountGateRequest,
     response: Response,
@@ -30,7 +36,7 @@ async def request_data_export(
     )
 
 
-@router.get("/data-export")
+@router.get("/data-export", response_model=ApiResponse[OwnerDataExport])
 async def export_account_data(
     gate_id: str,
     user=Depends(get_current_user),
@@ -39,7 +45,11 @@ async def export_account_data(
     return ApiResponse(data=await AccountDataService(db).export(user["id"], gate_id))
 
 
-@router.post("/deletion:request", status_code=201)
+@router.post(
+    "/deletion:request",
+    response_model=ApiResponse[HumanGate],
+    status_code=201,
+)
 async def request_account_deletion(
     body: AccountGateRequest,
     response: Response,
@@ -57,11 +67,11 @@ async def request_account_deletion(
     )
 
 
-@router.delete("", status_code=204)
+@router.delete("", response_model=ApiResponse[AccountDataJob], status_code=202)
 async def delete_account(
     gate_id: str,
     user=Depends(get_current_user),
     db: Database = Depends(get_db),
 ):
-    await AccountDataService(db).delete_account(user["id"], gate_id)
-    return Response(status_code=204)
+    job = await AccountDataService(db).delete_account(user["id"], gate_id)
+    return ApiResponse(code=202, data=job)

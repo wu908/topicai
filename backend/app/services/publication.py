@@ -6,9 +6,15 @@ from typing import Any
 
 from sqlalchemy import text
 
-from app.core.exceptions import IdempotencyConflictException, VersionConflictException
+from app.core.exceptions import (
+    IdempotencyConflictException,
+    PublishCheckBlockedException,
+    VersionConflictException,
+)
 from app.models.v2.calibration import PublishRecordCreate
+from app.models.v2.publish_check import PublishCheckCreate
 from app.services.project_state import ProjectStateService
+from app.services.publish_check import PublishCheckService
 from app.services.v2_utils import now, request_hash
 
 
@@ -22,6 +28,23 @@ class PublicationService:
         digest = request_hash(
             {"project_id": project_id, "body": body.model_dump(mode="json")}
         )
+        check_service = PublishCheckService(self.db)
+        check = await check_service.latest(owner_user_id, project_id)
+        if (
+            check is None
+            or check["content_version_id"] != body.content_version_id
+            or check["stale"]
+        ):
+            check, _ = await check_service.run(
+                owner_user_id,
+                project_id,
+                PublishCheckCreate(
+                    content_version_id=body.content_version_id,
+                    idempotency_key=f"publication-check:{body.idempotency_key}",
+                ),
+            )
+        if check["status"] != "clear":
+            raise PublishCheckBlockedException(check)
         session = await self.db.get_session()
         async with session:
             async with session.begin():
