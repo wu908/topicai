@@ -60,7 +60,10 @@ foreach ($file in $files | Sort-Object FullName -Unique) {
 }
 
 if ($violations.Count -gt 0) {
-    $violations | ForEach-Object { Write-Error $_ }
+    # Write-Error under $ErrorActionPreference="Stop" raises a terminating
+    # error on the first violation, so report via stderr and exit explicitly.
+    $violations | ForEach-Object { [Console]::Error.WriteLine($_) }
+    [Console]::Error.WriteLine("Found $($violations.Count) UTF-8/mojibake violation(s).")
     exit 1
 }
 

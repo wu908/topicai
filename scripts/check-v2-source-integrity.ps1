@@ -40,7 +40,10 @@ foreach ($relativeRoot in $sourceRoots) {
 }
 
 if ($violations.Count -gt 0) {
-    $violations | ForEach-Object { Write-Error $_ }
+    # Write-Error under $ErrorActionPreference="Stop" raises a terminating
+    # error on the first violation, so report via stderr and exit explicitly.
+    $violations | ForEach-Object { [Console]::Error.WriteLine($_) }
+    [Console]::Error.WriteLine("V2 source-integrity scan failed with $($violations.Count) violation(s).")
     exit 1
 }
 

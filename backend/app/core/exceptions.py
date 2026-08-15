@@ -1,11 +1,14 @@
 """Application exceptions and FastAPI error envelopes."""
 
+import logging
 from typing import TYPE_CHECKING
 
 from app.core.utils import utc_now
 
 if TYPE_CHECKING:
     from fastapi import FastAPI
+
+logger = logging.getLogger(__name__)
 
 
 class AppException(Exception):
@@ -203,6 +206,8 @@ def setup_exception_handlers(app: "FastAPI") -> None:
 
     @app.exception_handler(ValueError)
     async def value_error_handler(request: Request, exc: ValueError):
+        from config.settings import get_settings
+
         message = str(exc)
         lowered = message.lower()
         if "not found" in lowered:
@@ -211,6 +216,13 @@ def setup_exception_handlers(app: "FastAPI") -> None:
             status = 422
         else:
             status = 400
+        # Keyword-classified messages are deliberate domain signals and part
+        # of the API contract; anything else may originate deep inside a
+        # third-party library (paths, SQL fragments, field values) and must
+        # not be echoed to clients in production.
+        if status == 400 and get_settings().is_production:
+            logger.warning("Unhandled ValueError surfaced to client", exc_info=exc)
+            message = "请求参数无效"
         return JSONResponse(
             status_code=status,
             content={

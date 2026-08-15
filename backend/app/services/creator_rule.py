@@ -427,17 +427,40 @@ class CreatorRuleService:
         session = await self.db.get_session()
         async with session:
             async with session.begin():
+                # Every write keeps the owner/rule predicates even though the
+                # earlier reads are already owner-scoped; a deactivated rule
+                # has no active version to retire.
+                if rule["active_version_id"]:
+                    await session.execute(
+                        text(
+                            "UPDATE creator_rule_versions SET status='retired' "
+                            "WHERE id=:id AND rule_id=:rule AND owner_user_id=:owner"
+                        ),
+                        {
+                            "id": rule["active_version_id"],
+                            "rule": rule_id,
+                            "owner": owner,
+                        },
+                    )
                 await session.execute(
-                    text("UPDATE creator_rule_versions SET status='retired' WHERE id=:id"),
-                    {"id": rule["active_version_id"]},
+                    text(
+                        "UPDATE creator_rule_versions SET status='active',confirmed_at=:now "
+                        "WHERE id=:id AND rule_id=:rule AND owner_user_id=:owner"
+                    ),
+                    {"id": target["id"], "rule": rule_id, "owner": owner, "now": timestamp},
                 )
                 await session.execute(
-                    text("UPDATE creator_rule_versions SET status='active',confirmed_at=:now WHERE id=:id"),
-                    {"id": target["id"], "now": timestamp},
-                )
-                await session.execute(
-                    text("UPDATE creator_rules SET active_version_id=:version,version=version+1,updated_at=:now WHERE id=:rule"),
-                    {"version": target["id"], "rule": rule_id, "now": timestamp},
+                    text(
+                        "UPDATE creator_rules SET active_version_id=:version,"
+                        "version=version+1,updated_at=:now "
+                        "WHERE id=:rule AND owner_user_id=:owner"
+                    ),
+                    {
+                        "version": target["id"],
+                        "rule": rule_id,
+                        "owner": owner,
+                        "now": timestamp,
+                    },
                 )
                 await self._event(
                     session,

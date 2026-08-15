@@ -1,3 +1,7 @@
+# NOTE: Docker only reads the .dockerignore at the build-context root. The
+# compose builds use ./backend and ./frontend as contexts, so the effective
+# rules live in backend/.dockerignore and frontend/.dockerignore. This file
+# only applies to builds whose context is the repository root itself.
 __pycache__/
 *.pyc
 *.pyo

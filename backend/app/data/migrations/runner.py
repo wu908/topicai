@@ -182,6 +182,83 @@ def _post_step_003_effect_reviews(conn: sqlite3.Connection) -> None:
     )
 
 
+#: Indexes and experiment-context triggers that the 030 rebuild recreates.
+#: Kept as individual statements (not one executescript blob) so they can
+#: run inside the rebuild's explicit transaction — executescript would
+#: implicitly COMMIT the pending transaction first.
+_ACTION_LIFECYCLE_DEPENDENCY_STATEMENTS: tuple[str, ...] = (
+    "CREATE UNIQUE INDEX uq_next_best_actions_owner_idempotency "
+    "ON next_best_actions(owner_user_id, idempotency_key)",
+    "CREATE INDEX idx_next_best_actions_owner_status "
+    "ON next_best_actions(owner_user_id, status, updated_at DESC)",
+    "CREATE INDEX idx_next_best_actions_project_status "
+    "ON next_best_actions(project_id, status, updated_at DESC)",
+    "CREATE UNIQUE INDEX uq_action_events_owner_idempotency "
+    "ON action_events(owner_user_id, idempotency_key)",
+    "CREATE INDEX idx_action_events_action_created "
+    "ON action_events(action_id, created_at)",
+    "CREATE INDEX idx_action_events_metrics_window "
+    "ON action_events(owner_user_id, created_at, experiment_id, cohort, event_type)",
+    """
+    CREATE TRIGGER trg_next_best_actions_experiment_context
+    AFTER INSERT ON next_best_actions
+    WHEN NEW.experiment_id IS NULL
+    BEGIN
+        UPDATE next_best_actions
+        SET experiment_id = (
+                SELECT experiment_id FROM experiment_assignments
+                WHERE owner_user_id=NEW.owner_user_id AND status='active'
+                ORDER BY activated_at DESC, assigned_at DESC LIMIT 1
+            ),
+            cohort = (
+                SELECT cohort FROM experiment_assignments
+                WHERE owner_user_id=NEW.owner_user_id AND status='active'
+                ORDER BY activated_at DESC, assigned_at DESC LIMIT 1
+            )
+        WHERE id=NEW.id;
+    END
+    """,
+    """
+    CREATE TRIGGER trg_action_events_experiment_context
+    AFTER INSERT ON action_events
+    BEGIN
+        UPDATE action_events
+        SET experiment_id = COALESCE(
+                NEW.experiment_id,
+                (SELECT experiment_id FROM next_best_actions WHERE id=NEW.action_id),
+                (SELECT experiment_id FROM experiment_assignments
+                 WHERE owner_user_id=NEW.owner_user_id AND status='active'
+                 ORDER BY activated_at DESC, assigned_at DESC LIMIT 1)
+            ),
+            cohort = COALESCE(
+                NEW.cohort,
+                (SELECT cohort FROM next_best_actions WHERE id=NEW.action_id),
+                (SELECT cohort FROM experiment_assignments
+                 WHERE owner_user_id=NEW.owner_user_id AND status='active'
+                 ORDER BY activated_at DESC, assigned_at DESC LIMIT 1)
+            ),
+            ai_trace_id = COALESCE(
+                NEW.ai_trace_id,
+                (SELECT ai_trace_id FROM next_best_actions WHERE id=NEW.action_id)
+            ),
+            model_version = COALESCE(
+                NEW.model_version,
+                (SELECT model_identifier FROM ai_traces_v2 WHERE id=(
+                    SELECT ai_trace_id FROM next_best_actions WHERE id=NEW.action_id
+                ))
+            ),
+            prompt_version = COALESCE(
+                NEW.prompt_version,
+                (SELECT policy_version FROM ai_traces_v2 WHERE id=(
+                    SELECT ai_trace_id FROM next_best_actions WHERE id=NEW.action_id
+                ))
+            )
+        WHERE id=NEW.id;
+    END
+    """,
+)
+
+
 def _post_step_030_action_lifecycle(conn: sqlite3.Connection) -> None:
     """Expand action status constraints for databases created before phase 16."""
     action_sql_row = conn.execute(
@@ -221,6 +298,13 @@ def _post_step_030_action_lifecycle(conn: sqlite3.Connection) -> None:
     conn.commit()
     conn.execute("PRAGMA foreign_keys=OFF")
     try:
+        # One explicit transaction for the whole rebuild (the 048 pattern):
+        # a crash between CREATE/INSERT/DROP/RENAME rolls back as one unit,
+        # and the DROP-IF-EXISTS pre-clean keeps a retry after a previous
+        # crash from dying on "table already exists".
+        conn.execute("BEGIN")
+        conn.execute("DROP TABLE IF EXISTS next_best_actions_lifecycle_new")
+        conn.execute("DROP TABLE IF EXISTS action_events_lifecycle_new")
         conn.execute("DROP TRIGGER IF EXISTS trg_next_best_actions_experiment_context")
         conn.execute("DROP TRIGGER IF EXISTS trg_action_events_experiment_context")
         for table, replacement_sql in (
@@ -240,76 +324,15 @@ def _post_step_030_action_lifecycle(conn: sqlite3.Connection) -> None:
             conn.execute(f"DROP TABLE {table}")
             conn.execute(f"ALTER TABLE {new_table} RENAME TO {table}")
 
-        conn.executescript(
-            """
-            CREATE UNIQUE INDEX uq_next_best_actions_owner_idempotency
-                ON next_best_actions(owner_user_id, idempotency_key);
-            CREATE INDEX idx_next_best_actions_owner_status
-                ON next_best_actions(owner_user_id, status, updated_at DESC);
-            CREATE INDEX idx_next_best_actions_project_status
-                ON next_best_actions(project_id, status, updated_at DESC);
-            CREATE UNIQUE INDEX uq_action_events_owner_idempotency
-                ON action_events(owner_user_id, idempotency_key);
-            CREATE INDEX idx_action_events_action_created
-                ON action_events(action_id, created_at);
-            CREATE INDEX idx_action_events_metrics_window
-                ON action_events(owner_user_id, created_at, experiment_id, cohort, event_type);
-            CREATE TRIGGER trg_next_best_actions_experiment_context
-            AFTER INSERT ON next_best_actions
-            WHEN NEW.experiment_id IS NULL
-            BEGIN
-                UPDATE next_best_actions
-                SET experiment_id = (
-                        SELECT experiment_id FROM experiment_assignments
-                        WHERE owner_user_id=NEW.owner_user_id AND status='active'
-                        ORDER BY activated_at DESC, assigned_at DESC LIMIT 1
-                    ),
-                    cohort = (
-                        SELECT cohort FROM experiment_assignments
-                        WHERE owner_user_id=NEW.owner_user_id AND status='active'
-                        ORDER BY activated_at DESC, assigned_at DESC LIMIT 1
-                    )
-                WHERE id=NEW.id;
-            END;
-            CREATE TRIGGER trg_action_events_experiment_context
-            AFTER INSERT ON action_events
-            BEGIN
-                UPDATE action_events
-                SET experiment_id = COALESCE(
-                        NEW.experiment_id,
-                        (SELECT experiment_id FROM next_best_actions WHERE id=NEW.action_id),
-                        (SELECT experiment_id FROM experiment_assignments
-                         WHERE owner_user_id=NEW.owner_user_id AND status='active'
-                         ORDER BY activated_at DESC, assigned_at DESC LIMIT 1)
-                    ),
-                    cohort = COALESCE(
-                        NEW.cohort,
-                        (SELECT cohort FROM next_best_actions WHERE id=NEW.action_id),
-                        (SELECT cohort FROM experiment_assignments
-                         WHERE owner_user_id=NEW.owner_user_id AND status='active'
-                         ORDER BY activated_at DESC, assigned_at DESC LIMIT 1)
-                    ),
-                    ai_trace_id = COALESCE(
-                        NEW.ai_trace_id,
-                        (SELECT ai_trace_id FROM next_best_actions WHERE id=NEW.action_id)
-                    ),
-                    model_version = COALESCE(
-                        NEW.model_version,
-                        (SELECT model_identifier FROM ai_traces_v2 WHERE id=(
-                            SELECT ai_trace_id FROM next_best_actions WHERE id=NEW.action_id
-                        ))
-                    ),
-                    prompt_version = COALESCE(
-                        NEW.prompt_version,
-                        (SELECT policy_version FROM ai_traces_v2 WHERE id=(
-                            SELECT ai_trace_id FROM next_best_actions WHERE id=NEW.action_id
-                        ))
-                    )
-                WHERE id=NEW.id;
-            END;
-            """
-        )
+        # executescript would implicitly COMMIT the open transaction first,
+        # so the indexes and triggers are created statement-by-statement
+        # inside the same transaction as the rebuild.
+        for statement in _ACTION_LIFECYCLE_DEPENDENCY_STATEMENTS:
+            conn.execute(statement)
         conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
     finally:
         conn.execute("PRAGMA foreign_keys=ON")
     violations = conn.execute("PRAGMA foreign_key_check").fetchall()
@@ -459,6 +482,11 @@ def _expand_intent_action_types(
         conn.commit()
         conn.execute("PRAGMA foreign_keys=OFF")
         try:
+            # Atomic rebuild (the 048 pattern): one explicit transaction,
+            # pre-clean of any *_new table a crashed run may have left
+            # behind, rollback on any failure.
+            conn.execute("BEGIN")
+            conn.execute("DROP TABLE IF EXISTS next_best_actions_intent_new")
             conn.execute("DROP TRIGGER IF EXISTS trg_next_best_actions_experiment_context")
             conn.execute("DROP TRIGGER IF EXISTS trg_action_events_experiment_context")
             conn.execute(replacement_sql)
@@ -476,6 +504,9 @@ def _expand_intent_action_types(
                 "ALTER TABLE next_best_actions_intent_new RENAME TO next_best_actions"
             )
             conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
         finally:
             conn.execute("PRAGMA foreign_keys=ON")
 
@@ -591,6 +622,9 @@ def _post_step_034_intent_model(conn: sqlite3.Connection) -> None:
     conn.commit()
     conn.execute("PRAGMA foreign_keys=OFF")
     try:
+        # Atomic rebuild (the 048 pattern).
+        conn.execute("BEGIN")
+        conn.execute("DROP TABLE IF EXISTS content_projects_intent_new")
         conn.execute(_INTENT_MODEL_CONTENT_PROJECTS_SQL)
         # Copy every existing column verbatim; the two new columns default NULL.
         old_columns = [
@@ -616,6 +650,9 @@ def _post_step_034_intent_model(conn: sqlite3.Connection) -> None:
             "WHERE idempotency_key IS NOT NULL"
         )
         conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
     finally:
         conn.execute("PRAGMA foreign_keys=ON")
     violations = conn.execute("PRAGMA foreign_key_check").fetchall()
@@ -713,6 +750,9 @@ def _post_step_036_creator_series_scope(conn: sqlite3.Connection) -> None:
     conn.commit()
     conn.execute("PRAGMA foreign_keys=OFF")
     try:
+        # Atomic rebuild (the 048 pattern).
+        conn.execute("BEGIN")
+        conn.execute("DROP TABLE IF EXISTS creator_series_scope_new")
         conn.execute(_CREATOR_SERIES_SCOPE_SQL)
         columns = [
             item[1]
@@ -734,6 +774,9 @@ def _post_step_036_creator_series_scope(conn: sqlite3.Connection) -> None:
             "ON creator_series(owner_user_id, status, updated_at DESC)"
         )
         conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
     finally:
         conn.execute("PRAGMA foreign_keys=ON")
     violations = conn.execute("PRAGMA foreign_key_check").fetchall()

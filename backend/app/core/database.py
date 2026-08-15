@@ -6,6 +6,7 @@ All database operations go through this module — no raw SQL elsewhere.
 
 import asyncio
 import logging
+import re
 import sqlite3
 from typing import Any
 
@@ -17,6 +18,19 @@ from sqlalchemy.ext.asyncio import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Whitelist pattern for SQL identifiers (table/column names).
+# Only plain alphanumeric + underscore names are allowed — no dots,
+# semicolons, spaces, or other special characters.  This prevents
+# SQL injection via the ``table`` parameter of insert/update/delete.
+_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def _validate_identifier(name: str, label: str = "identifier") -> str:
+    """Raise ``ValueError`` if *name* is not a safe SQL identifier."""
+    if not _IDENTIFIER_RE.match(name):
+        raise ValueError(f"invalid {label}: {name!r}")
+    return name
 
 # ==================== Schema (retired in T104) ====================
 # The SQL_SCHEMA big-string that lived here has been removed: schema
@@ -627,9 +641,10 @@ class Database:
         """Insert a row into a table.
 
         Args:
-            table: Table name.
+            table: Table name (validated against identifier whitelist).
             data: Column-value mapping.
         """
+        _validate_identifier(table, "table name")
         columns = ", ".join(data.keys())
         placeholders = ", ".join([f":{k}" for k in data.keys()])
         query = f"INSERT INTO {table} ({columns}) VALUES ({placeholders})"
@@ -646,13 +661,14 @@ class Database:
         """Update rows in a table.
 
         Args:
-            table: Table name.
+            table: Table name (validated against identifier whitelist).
             data: Column-value mapping for SET clause.
             where: Column-value mapping for WHERE clause.
 
         Returns:
             Number of rows affected.
         """
+        _validate_identifier(table, "table name")
         set_clause = ", ".join([f"{k} = :set_{k}" for k in data.keys()])
         where_clause = " AND ".join(
             [f"{k} = :where_{k}" for k in where.keys()]
@@ -676,12 +692,13 @@ class Database:
         """Delete rows from a table.
 
         Args:
-            table: Table name.
+            table: Table name (validated against identifier whitelist).
             where: Column-value mapping for WHERE clause.
 
         Returns:
             Number of rows deleted.
         """
+        _validate_identifier(table, "table name")
         where_clause = " AND ".join(
             [f"{k} = :{k}" for k in where.keys()]
         )

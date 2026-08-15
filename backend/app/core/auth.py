@@ -251,7 +251,9 @@ class AuthManager:
         user_id = str(uuid.uuid4())
         now = datetime.now(UTC)
         reset_at = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        reset_at = reset_at.replace(day=reset_at.day + 1)
+        # timedelta (not replace(day=...)) so the next-midnight rollover is
+        # valid on the last day of a month; replace() would raise ValueError.
+        reset_at = reset_at + timedelta(days=1)
 
         password_hash = self.hash_password(password)
 

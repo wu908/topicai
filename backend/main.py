@@ -185,7 +185,10 @@ def create_app() -> FastAPI:
         redoc_url="/redoc",
         openapi_url="/openapi.json",
         lifespan=lifespan,
-        debug=settings.debug,
+        # DEBUG defaults to True for local development, so never take it at
+        # face value in production: Starlette's debug mode returns full
+        # tracebacks to clients.
+        debug=settings.debug and not settings.is_production,
     )
 
     # ==================== CORS Middleware ====================

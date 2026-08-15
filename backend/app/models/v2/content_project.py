@@ -3,7 +3,7 @@
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.models.v2.intent_actions import ContentIntent
 
@@ -18,6 +18,11 @@ class ProjectStatus(StrEnum):
     SETTLED = "settled"
 
 
+# States a project may be created in. Every other movement must go through
+# ``ProjectTransition`` with its reason + expected-version checks.
+_ENTRY_STATES = frozenset({ProjectStatus.INBOX, ProjectStatus.PREPARING})
+
+
 class ContentProjectCreate(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     primary_goal: Literal["stable_publish", "follower_growth", "experiment"] = "stable_publish"
@@ -30,6 +35,17 @@ class ContentProjectCreate(BaseModel):
     opportunity_id: str | None = None
     starter_sprint_id: str | None = None
     idempotency_key: str = Field(min_length=1, max_length=200)
+
+    @field_validator("status")
+    @classmethod
+    def _restrict_to_entry_states(cls, value: ProjectStatus) -> ProjectStatus:
+        """Reject non-entry states so creation cannot bypass the
+        ``ProjectTransition`` state machine (e.g. creating a project that
+        is already ``published``/``settled``)."""
+        if value not in _ENTRY_STATES:
+            allowed = ", ".join(sorted(state.value for state in _ENTRY_STATES))
+            raise ValueError(f"projects can only be created in an entry state ({allowed})")
+        return value
 
 
 class ProjectTransition(BaseModel):
