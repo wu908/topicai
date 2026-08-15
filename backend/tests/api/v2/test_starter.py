@@ -36,6 +36,13 @@ async def test_starter_api_hands_three_projects_to_existing_action_protocol(clie
     assert generated.status_code == 201
     candidates = generated.json()["data"]["candidates"]
     assert len(candidates) <= 3
+    # 同一批候选共享 created_at，列表顺序必须稳定保留插入（证据）顺序，
+    # 不能退化成随机 UUID 排序；前端“第一个方向卡”依赖这个顺序。
+    assert [item["direction_key"] for item in candidates] == [
+        "experience_assets:0",
+        "skill_assets:1",
+        "interest_assets:2",
+    ]
 
     selected = await client.post(
         f"/api/v2/starter/directions/{candidates[0]['id']}:select",

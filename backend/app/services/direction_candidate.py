@@ -187,7 +187,9 @@ class DirectionCandidateService:
     ) -> list[dict[str, Any]]:
         rows = await self.db.fetch_all(
             "SELECT * FROM starter_direction_candidates WHERE owner_user_id=:owner "
-            "AND assessment_id=:assessment ORDER BY created_at,id",
+            # 同一批候选共享 created_at，用随机 UUID 兜底会让列表顺序随 id
+            # 字典序漂移；rowid 保留插入顺序，即生成时的证据顺序。
+            "AND assessment_id=:assessment ORDER BY created_at,rowid",
             {"owner": owner_user_id, "assessment": assessment_id},
         )
         return [self._normalize(row) for row in rows]
