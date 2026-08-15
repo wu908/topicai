@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   Alert,
@@ -121,6 +121,13 @@ export default function ContentPage() {
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
 
+  // 审计 e54a2643 medium：load/runCommand 在 await 后无条件 setState，
+  // 卸载或新请求发起后旧响应会覆盖新数据。用递增令牌丢弃过期响应。
+  const requestTokenRef = useRef(0);
+  useEffect(() => () => {
+    requestTokenRef.current = -1;
+  }, []);
+
   const fetchPageData = useCallback(
     () =>
       Promise.all([
@@ -132,19 +139,33 @@ export default function ContentPage() {
   );
 
   const load = useCallback(async () => {
+    const token = (requestTokenRef.current += 1);
     setLoading(true);
     setError(null);
     try {
       const [projectList, currentWorkspace, materialList] = await fetchPageData();
+      if (requestTokenRef.current !== token) return;
       setProjects(projectList.items);
       setWorkspace(currentWorkspace);
       setMaterials(materialList.items);
     } catch (err) {
+      if (requestTokenRef.current !== token) return;
       setError(extractErrorMessage(err, '内容项目加载失败'));
     } finally {
-      setLoading(false);
+      if (requestTokenRef.current === token) setLoading(false);
     }
   }, [fetchPageData]);
+
+  // 审计 e54a2643 batch C：projectId 变化时先重置加载/错误/工作台状态，
+  // 否则切换项目期间会短暂展示上一个项目的工作台。用渲染期重置模式，
+  // 不在 effect 里直接 setState（同 ProjectWorkspace 的 baseKey 先例）。
+  const [prevProjectId, setPrevProjectId] = useState(projectId);
+  if (prevProjectId !== projectId) {
+    setPrevProjectId(projectId);
+    setLoading(true);
+    setError(null);
+    setWorkspace(null);
+  }
 
   useEffect(() => {
     let active = true;
@@ -168,27 +189,33 @@ export default function ContentPage() {
 
   const runCommand = useCallback(
     async (command: () => Promise<unknown>) => {
+      const token = (requestTokenRef.current += 1);
       setBusy(true);
       setError(null);
       try {
         await command();
+        if (requestTokenRef.current !== token) return;
         if (projectId) {
           const [projectList, currentWorkspace, materialList] = await Promise.all([
             listProjects(),
             getCalibrationWorkspace(projectId),
             listMaterials(),
           ]);
+          if (requestTokenRef.current !== token) return;
           setProjects(projectList.items);
           setWorkspace(currentWorkspace);
           setMaterials(materialList.items);
         } else {
           const projectList = await listProjects();
+          if (requestTokenRef.current !== token) return;
           setProjects(projectList.items);
         }
       } catch (err) {
-        setError(extractErrorMessage(err, '操作失败，请保留当前内容后重试'));
+        if (requestTokenRef.current === token) {
+          setError(extractErrorMessage(err, '操作失败，请保留当前内容后重试'));
+        }
       } finally {
-        setBusy(false);
+        if (requestTokenRef.current === token) setBusy(false);
       }
     },
     [projectId],
@@ -535,7 +562,9 @@ const intentCopy: Record<ContentIntent, { label: string; audience: string; mater
 // 就显示“未分类”，不能兜底成某个具体意图。
 function projectIntentLabel(project: ContentProject): string {
   const intent = project.content_intent ?? project.retrospective_intent;
-  return intent ? `${intentCopy[intent].label}内容` : '未分类内容';
+  // 审计 e54a2643 medium：服务端可能返回未知意图值，无守卫索引会崩溃。
+  const copy = intent ? intentCopy[intent] : undefined;
+  return copy ? `${copy.label}内容` : '未分类内容';
 }
 
 function IntentActionPanel({
@@ -549,8 +578,10 @@ function IntentActionPanel({
   busy: boolean;
   runCommand: (command: () => Promise<unknown>) => Promise<void>;
 }) {
+  // 未知意图值同时规整到已知集合，避免 MUI select 报 out-of-range。
+  const initialIntent = workspace.project.content_intent || workspace.project.retrospective_intent || 'solve';
   const [intent, setIntent] = useState<ContentIntent>(
-    workspace.project.content_intent || workspace.project.retrospective_intent || 'solve',
+    initialIntent in intentCopy ? initialIntent : 'solve',
   );
   const [audienceChange, setAudienceChange] = useState(workspace.project.audience_change || '');
   const [answer, setAnswer] = useState('');
@@ -566,7 +597,9 @@ function IntentActionPanel({
     }
   }, [action.action_type, action.id, gate, workspace.candidate_review?.can_lock, workspace.next_action]);
 
-  const copy = intentCopy[intent];
+  // 审计 e54a2643 medium：服务端可能返回未知意图值，回退到默认意图文案，
+  // 避免无守卫索引崩溃。
+  const copy = intentCopy[intent] ?? intentCopy.solve;
   // ADR 0002: 已发布的历史内容只能回溯分类。发布意图保持为空，
   // 因此这里必须拦在普通意图确认表单之前。
   const needsRetrospective = action.action_type === 'confirm_intent'
@@ -602,9 +635,11 @@ function IntentActionPanel({
             <MenuItem value="record">记录：留下过程和变化</MenuItem>
           </TextField>
           <Alert severity="info">{copy.audience}</Alert>
-          <TextField label="希望读者发生的变化" value={audienceChange || copy.audience} onChange={(event) => setAudienceChange(event.target.value)} multiline minRows={2} />
+          {/* 审计 e54a2643 medium：默认文案只能作为占位提示，写进值里会让
+              输入框行为不一致；copy.audience 恒非空，原禁用条件里的判断是死代码。 */}
+          <TextField label="希望读者发生的变化" value={audienceChange} placeholder={copy.audience} onChange={(event) => setAudienceChange(event.target.value)} multiline minRows={2} />
           <div className="intent-materials"><strong>后面会收集</strong><span>{copy.materials.join(' · ')}</span><strong>发布后观察</strong><span>{copy.signals.join(' · ')}</span></div>
-          <Button variant="contained" startIcon={<CheckCircleOutline />} disabled={busy || !audienceChange.trim() && !copy.audience} onClick={() => void runCommand(() => confirmProjectIntent(workspace.project.id, { content_intent: intent, audience_change: audienceChange.trim() || copy.audience, material_requirements: copy.materials, expected_responses: copy.responses, success_signals: copy.signals, expected_project_version: workspace.project.version, idempotency_key: `intent-${workspace.project.id}-${workspace.project.version}` }))}>确认这个方向</Button>
+          <Button variant="contained" startIcon={<CheckCircleOutline />} disabled={busy} onClick={() => void runCommand(() => confirmProjectIntent(workspace.project.id, { content_intent: intent, audience_change: audienceChange.trim() || copy.audience, material_requirements: copy.materials, expected_responses: copy.responses, success_signals: copy.signals, expected_project_version: workspace.project.version, idempotency_key: `intent-${workspace.project.id}-${workspace.project.version}` }))}>确认这个方向</Button>
         </Stack>
       </Paper>
     );
@@ -720,9 +755,19 @@ function LearningConfirmationPanel({
   busy: boolean;
   runCommand: (command: () => Promise<unknown>) => Promise<void>;
 }) {
-  const [selectedFollowUp, setSelectedFollowUp] = useState(
-    plan?.follow_up_options?.[0]?.action ?? '',
-  );
+  const followUpOptions = plan?.follow_up_options ?? [];
+  const firstFollowUp = followUpOptions[0]?.action ?? '';
+  const [selectedFollowUp, setSelectedFollowUp] = useState<string>(firstFollowUp);
+  // 审计 e54a2643 medium：惰性初始化只在挂载时执行。命令后刷新不重挂载面板，
+  // 选项集合变化后旧选值会掉出选项列表（MUI out-of-range），
+  // 用渲染期同步把它修正到新的首个选项。
+  if (
+    firstFollowUp
+    && (!selectedFollowUp
+      || !followUpOptions.some((option) => option.action === selectedFollowUp))
+  ) {
+    setSelectedFollowUp(firstFollowUp);
+  }
   if (!plan) {
     return <Alert severity="warning">这次复盘还没有生成可确认的意图计划，请先刷新数据。</Alert>;
   }
@@ -1011,6 +1056,10 @@ function StageAction({
     case 'review_calibration_issue':
       return <Alert severity="error">本次校准输入已被污染，不能进入长期经验。</Alert>;
     case 'manage_observations':
+      return null;
+    default:
+      // 审计 e54a2643 medium：未知 next_action 时显式返回 null，
+      // 而不是依赖 switch 穿透返回 undefined。
       return null;
   }
 }

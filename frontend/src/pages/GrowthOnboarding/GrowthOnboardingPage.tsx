@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Alert,
@@ -47,30 +47,45 @@ export default function GrowthOnboardingPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Audit e54a2643: the import idempotency key must be stable per payload —
+  // a retry after a transient failure reuses the same key so the server can
+  // de-duplicate; it rotates when the payload changes or after success.
+  const importKeyRef = useRef<{ signature: string; key: string } | null>(null);
 
+  // Audit e54a2643: 后端可能省略空的属性列表，applyProfile 必须逐字段兜底。
   const applyProfile = useCallback((next: GrowthCreatorProfile) => {
     setProfile(next);
-    setNiche(next.attributes.niche.value);
-    setAudience(next.attributes.target_audience.value);
-    setGrowthGoal((next.attributes.growth_goal.value || 'stable_publish') as typeof growthGoal);
-    setPillars(next.attributes.content_pillars.map((item) => item.value).join('\n'));
-    setVoiceTraits(next.attributes.voice_traits.map((item) => item.value).join('\n'));
-    setAvoidTraits(next.attributes.avoid_traits.map((item) => item.value).join('\n'));
+    const attributes = next.attributes;
+    setNiche(attributes.niche?.value ?? '');
+    setAudience(attributes.target_audience?.value ?? '');
+    setGrowthGoal((attributes.growth_goal?.value || 'stable_publish') as typeof growthGoal);
+    setPillars((attributes.content_pillars ?? []).map((item) => item.value).join('\n'));
+    setVoiceTraits((attributes.voice_traits ?? []).map((item) => item.value).join('\n'));
+    setAvoidTraits((attributes.avoid_traits ?? []).map((item) => item.value).join('\n'));
+  }, []);
+
+  // Audit e54a2643 medium: 卸载后到达的响应不能再写入状态。
+  const requestTokenRef = useRef(0);
+  useEffect(() => () => {
+    requestTokenRef.current = -1;
   }, []);
 
   const load = useCallback(async () => {
+    const token = (requestTokenRef.current += 1);
     setError(null);
     try {
       const [nextContext, nextProfile] = await Promise.all([
         getOnboardingContext(),
         getGrowthCreatorProfile(),
       ]);
+      if (requestTokenRef.current !== token) return;
       setContext(nextContext);
       applyProfile(nextProfile);
     } catch (err) {
+      if (requestTokenRef.current !== token) return;
       setError(extractErrorMessage(err, '成长 onboarding 加载失败'));
     } finally {
-      setLoading(false);
+      if (requestTokenRef.current === token) setLoading(false);
     }
   }, [applyProfile]);
 
@@ -94,17 +109,23 @@ export default function GrowthOnboardingPage() {
   const handleImport = () => run(async () => {
     const items = parseHistoryInput(method, historyText);
     if (!items.length) throw new Error('请至少提供一条历史内容');
-    const result = await importHistory(method, items, makeKey('history-import'));
+    const signature = `${method}:${historyText}`;
+    if (!importKeyRef.current || importKeyRef.current.signature !== signature) {
+      importKeyRef.current = { signature, key: makeKey('history-import') };
+    }
+    const result = await importHistory(method, items, importKeyRef.current.key);
+    importKeyRef.current = null;
     applyProfile(await getGrowthCreatorProfile());
     setImportResult(result);
   });
 
   const handleConfirm = () => run(async () => {
     if (!profile) return;
-    const contentPillars = splitValues(pillars);
-    const oldPillars = profile.attributes.content_pillars.map((item) => item.value);
+    // Audit e54a2643 medium: 文案承诺内容支柱最多 5 项，提交前截断。
+    const contentPillars = splitValues(pillars, 5);
+    const oldPillars = (profile.attributes.content_pillars ?? []).map((item) => item.value);
     const rejected = [
-      ...(profile.attributes.niche.value && profile.attributes.niche.value !== niche
+      ...(profile.attributes.niche?.value && profile.attributes.niche.value !== niche
         ? [{ field: 'niche' as const, value: profile.attributes.niche.value }]
         : []),
       ...oldPillars
@@ -191,11 +212,11 @@ export default function GrowthOnboardingPage() {
               <TextField label="目标读者" value={audience} onChange={(event) => setAudience(event.target.value)} required multiline minRows={2} />
               <AttributeEvidence label="读者判断" attribute={profile.attributes.target_audience} />
               <TextField label="内容支柱" value={pillars} onChange={(event) => setPillars(event.target.value)} multiline minRows={3} helperText="每行一项，最多 5 项" required />
-              {profile.attributes.content_pillars.map((attribute) => (
+              {(profile.attributes.content_pillars ?? []).map((attribute) => (
                 <AttributeEvidence key={attribute.value} label={attribute.value} attribute={attribute} />
               ))}
               <TextField label="表达特点" value={voiceTraits} onChange={(event) => setVoiceTraits(event.target.value)} multiline minRows={2} helperText="每行一项" />
-              {profile.attributes.voice_traits.map((attribute) => (
+              {(profile.attributes.voice_traits ?? []).map((attribute) => (
                 <AttributeEvidence key={attribute.value} label={attribute.value} attribute={attribute} />
               ))}
               <TextField label="明确避免" value={avoidTraits} onChange={(event) => setAvoidTraits(event.target.value)} multiline minRows={2} helperText="每行一项" />
@@ -215,7 +236,8 @@ export default function GrowthOnboardingPage() {
 
 function AttributeEvidence({ label, attribute }: { label: string; attribute: ProfileAttribute }) {
   const confidence = { low: '低置信', medium: '中置信', high: '高置信' }[attribute.confidence] ?? '低置信';
-  const status = { provisional: '暂定', confirmed: '已确认', rejected: '已拒绝' }[attribute.status];
+  // Audit e54a2643 medium: 未知 status 回退到“暂定”，不渲染 undefined。
+  const status = { provisional: '暂定', confirmed: '已确认', rejected: '已拒绝' }[attribute.status] ?? '暂定';
   return (
     <div className="growth-evidence">
       <span>{label}</span>
@@ -232,8 +254,8 @@ function limitationLabel(value: string): string {
   return value;
 }
 
-function splitValues(value: string): string[] {
-  return [...new Set(value.split(/[\n,]/).map((item) => item.trim()).filter(Boolean))].slice(0, 10);
+function splitValues(value: string, limit = 10): string[] {
+  return [...new Set(value.split(/[\n,]/).map((item) => item.trim()).filter(Boolean))].slice(0, limit);
 }
 
 function parseHistoryInput(method: ImportMethod, value: string): HistoryNoteInput[] {

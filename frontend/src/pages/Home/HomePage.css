@@ -15,8 +15,7 @@
 
 .today-action-topline,
 .today-action-controls,
-.today-action-meta,
-.today-state-row {
+.today-action-meta {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -44,12 +43,22 @@
   letter-spacing: 0;
 }
 
-.today-action-reason {
+.today-action-reason,
+.today-action-outcome {
   max-width: 680px;
   margin: 0;
   color: var(--v3-text-sec);
   font-size: 15px;
   line-height: 1.75;
+}
+
+.today-action-outcome {
+  margin-top: 12px;
+}
+
+.today-reject-form {
+  max-width: 680px;
+  margin-top: 18px;
 }
 
 .today-action-meta {

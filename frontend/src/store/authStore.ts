@@ -47,7 +47,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       const response = await authApi.login({ email, password });
       // Backend returns ApiResponse<LoginResponse>: { code, data: { access_token, refresh_token, user }, message }
-      const { access_token, refresh_token, user } = response.data;
+      // Validate the envelope shape first — an error envelope (data null)
+      // must fail loudly, not persist "undefined" tokens.
+      const payload = response?.data;
+      if (!payload?.access_token || !payload?.refresh_token || !payload?.user) {
+        throw new Error('登录响应格式异常，请重试');
+      }
+      const { access_token, refresh_token, user } = payload;
       safeSet('access_token', access_token);
       safeSet('refresh_token', refresh_token);
       set({ user, isAuthenticated: true, isLoading: false });
@@ -62,8 +68,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const response = await authApi.register({ email, username, password });
-      // Backend returns tokens directly in registration response
-      const { access_token, refresh_token, user } = response.data;
+      // Backend returns tokens directly in registration response; validate
+      // the envelope before trusting it.
+      const payload = response?.data;
+      if (!payload?.access_token || !payload?.refresh_token || !payload?.user) {
+        throw new Error('注册响应格式异常，请重试');
+      }
+      const { access_token, refresh_token, user } = payload;
       safeSet('access_token', access_token);
       safeSet('refresh_token', refresh_token);
       const userObj: User = {
@@ -97,7 +108,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
     try {
       const response = await authApi.refreshToken({ refresh_token: refreshTokenValue });
-      safeSet('access_token', response.data.access_token);
+      // Validate the envelope before trusting it — a malformed refresh must
+      // not persist an "undefined"/empty token.
+      const token = response?.data?.access_token;
+      if (typeof token !== 'string' || !token) {
+        get().logout();
+        return;
+      }
+      safeSet('access_token', token);
     } catch {
       get().logout();
     }
@@ -111,7 +129,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const user = response.data?.user ?? null;
       set({ user, isAuthenticated: true, isLoading: false });
     } catch {
-      set({ isLoading: false });
+      // A failed /auth/me must not leave the store claiming authenticated
+      // with a null user — drop back to the logged-out state.
+      set({ user: null, isAuthenticated: false, isLoading: false });
     }
   },
 

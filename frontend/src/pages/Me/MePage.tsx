@@ -32,6 +32,8 @@ const AUTO_PREPARE_CAPABILITIES = [
   { key: 'confirm_learning', label: '经验确认' },
 ] as const;
 const REQUIRED_ACCEPTED = 3;
+// Audit e54a2643 medium: 删除确认文本单点定义，守卫、提示与展示共用。
+const DELETION_CONFIRMATION_TEXT = '永久删除';
 const makeKey = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
 function saveJson(data: unknown) {
@@ -49,7 +51,9 @@ export default function MePage() {
   const [state, setState] = useState<CreatorState | null>(null);
   const [settings, setSettings] = useState<UserSettings | null>(null);
   const [projectCount, setProjectCount] = useState(0);
-  const [weeklyGoal, setWeeklyGoal] = useState(1);
+  // Audit e54a2643: null models a cleared field — Number('') === NaN used to
+  // pass the 1..7 guard and post weekly_publish_goal null.
+  const [weeklyGoal, setWeeklyGoal] = useState<number | null>(1);
   const [contentStrategy, setContentStrategy] = useState('');
   const [accountReference, setAccountReference] = useState('');
   const [exportGate, setExportGate] = useState<HumanGate | null>(null);
@@ -60,6 +64,10 @@ export default function MePage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const aiAvailable = Boolean(settings?.ai.enabled && settings.ai.configured);
+  // Number.isInteger 在 lib 里不是类型守卫，用局部守卫收窄 number | null。
+  const isWholeGoal = (value: number | null): value is number =>
+    value !== null && Number.isInteger(value);
+  const goalValid = isWholeGoal(weeklyGoal) && weeklyGoal >= 1 && weeklyGoal <= 7;
 
   const applySettings = useCallback((next: UserSettings) => {
     setSettings(next);
@@ -69,6 +77,7 @@ export default function MePage() {
   }, []);
 
   const load = useCallback(async () => {
+    setLoading(true);
     setError(null);
     try {
       const [creatorState, projects, userSettings] = await Promise.all([
@@ -106,8 +115,11 @@ export default function MePage() {
 
   const saveSettings = () => run(async () => {
     if (!settings) return;
+    const goal = weeklyGoal;
+    // Button is disabled for invalid input; this is the narrowing guard.
+    if (!isWholeGoal(goal)) return;
     const next = await updateUserSettings({
-      weekly_publish_goal: weeklyGoal,
+      weekly_publish_goal: goal,
       content_strategy: contentStrategy.trim(),
       xiaohongshu_account_reference: accountReference.trim(),
       consent: settings.consent,
@@ -134,11 +146,14 @@ export default function MePage() {
   });
 
   const prepareDeletion = () => run(async () => {
+    // Audit e54a2643 medium: 打开删除确认时清空残留输入，
+    // 避免上次的文本直接通过确认守卫。
+    setDeletionConfirmation('');
     setDeletionGate(await requestAccountDeletion(makeKey('account-deletion')));
   });
 
   const confirmDeletion = () => run(async () => {
-    if (!deletionGate || deletionConfirmation !== '永久删除') return;
+    if (!deletionGate || deletionConfirmation !== DELETION_CONFIRMATION_TEXT) return;
     await decideHumanGate(deletionGate.id, {
       decision: 'confirm',
       decision_payload: { confirmation_text: deletionConfirmation },
@@ -159,7 +174,7 @@ export default function MePage() {
           <div className="operations-summary">
             <div className="operations-stat"><strong>{projectCount}</strong><span>全部内容项目</span></div>
             <div className="operations-stat"><strong>{state.completed_project_count}</strong><span>已完成发布闭环</span></div>
-            <div className="operations-stat"><strong>{Math.round(state.candidate_acceptance_rate * 100)}%</strong><span>AI 候选确认率</span></div>
+            <div className="operations-stat"><strong>{Math.round((state.candidate_acceptance_rate ?? 0) * 100)}%</strong><span>AI 候选确认率</span></div>
           </div>
           <section className="operations-row">
             <div className="operations-row-header"><div><h2>当前创作目标</h2><p className="operations-row-copy">{state.current_goal || '稳定更新并通过复盘持续涨粉'}</p></div><Chip size="small" label={trustLabels[state.automation_trust_level]} /></div>
@@ -168,11 +183,11 @@ export default function MePage() {
           <section className="operations-row">
             <div className="operations-row-header"><div><h2>创作设置</h2><p className="operations-row-copy">这些设置会用于安排后续内容项目，不包含平台密码或访问令牌。</p></div></div>
             <Stack spacing={2}>
-              <TextField label="每周发布目标" type="number" value={weeklyGoal} inputProps={{ min: 1, max: 7 }} onChange={(event) => setWeeklyGoal(Number(event.target.value))} required />
+              <TextField label="每周发布目标" type="number" value={weeklyGoal ?? ''} inputProps={{ min: 1, max: 7 }} onChange={(event) => setWeeklyGoal(event.target.value === '' ? null : Number(event.target.value))} required />
               <TextField label="内容策略" value={contentStrategy} onChange={(event) => setContentStrategy(event.target.value)} multiline minRows={2} required />
               <TextField label="小红书账号备注" value={accountReference} onChange={(event) => setAccountReference(event.target.value)} helperText="仅用于区分账号，不要填写密码或令牌" />
               <div className="operations-row-actions">
-                <Button variant="contained" startIcon={<SaveOutlined />} disabled={busy || weeklyGoal < 1 || weeklyGoal > 7 || !contentStrategy.trim()} onClick={() => void saveSettings()}>保存设置</Button>
+                <Button variant="contained" startIcon={<SaveOutlined />} disabled={busy || !goalValid || !contentStrategy.trim()} onClick={() => void saveSettings()}>保存设置</Button>
               </div>
             </Stack>
           </section>
@@ -204,9 +219,9 @@ export default function MePage() {
             {exportGate ? <Alert severity="info" action={<Button disabled={busy} onClick={() => void confirmExport()}>确认并下载</Button>}>请确认导出仅属于当前账户的数据。</Alert> : null}
             {deletionGate ? (
               <Stack spacing={2} mt={2}>
-                <Alert severity="error">此操作不可撤销。输入“永久删除”后，账户、项目、素材文件和学习记录都会被删除。</Alert>
-                <TextField label="删除确认" value={deletionConfirmation} onChange={(event) => setDeletionConfirmation(event.target.value)} helperText="请输入：永久删除" />
-                <Button color="error" variant="contained" startIcon={<DeleteOutline />} disabled={busy || deletionConfirmation !== '永久删除'} onClick={() => void confirmDeletion()}>永久删除账户</Button>
+                <Alert severity="error">{`此操作不可撤销。输入“${DELETION_CONFIRMATION_TEXT}”后，账户、项目、素材文件和学习记录都会被删除。`}</Alert>
+                <TextField label="删除确认" value={deletionConfirmation} onChange={(event) => setDeletionConfirmation(event.target.value)} helperText={`请输入：${DELETION_CONFIRMATION_TEXT}`} />
+                <Button color="error" variant="contained" startIcon={<DeleteOutline />} disabled={busy || deletionConfirmation !== DELETION_CONFIRMATION_TEXT} onClick={() => void confirmDeletion()}>永久删除账户</Button>
               </Stack>
             ) : null}
             {!deletionGate ? <div className="operations-row-actions">

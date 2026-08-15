@@ -92,6 +92,19 @@ describe('StarterPage', () => {
     })));
   });
 
+  it('disables assessment submission while weekly hours is not a valid number', async () => {
+    renderPage();
+    expect(await screen.findByRole('heading', { name: '先盘点你真正能讲的东西' })).toBeInTheDocument();
+
+    // Audit e54a2643: clearing the field made Number('') === NaN, which
+    // passed the < 0 / > 40 guards and posted available_hours_per_week null.
+    fireEvent.change(screen.getByLabelText('每周可投入小时'), { target: { value: '' } });
+    expect(screen.getByRole('button', { name: '保存评估' })).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText('每周可投入小时'), { target: { value: '5' } });
+    expect(screen.getByRole('button', { name: '保存评估' })).toBeEnabled();
+  });
+
   it('explains evidence and creates the selected three-project experiment', async () => {
     api.getStarterWorkspace.mockResolvedValue(workspace({ assessment, candidates: [direction], next_step: 'directions' }));
     api.selectStarterDirection.mockResolvedValue(workspace());
@@ -133,5 +146,41 @@ describe('StarterPage', () => {
     expect(await screen.findByText('等待确认内容目的')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /第一篇实验/ }));
     expect(await screen.findByTestId('project-workspace')).toBeInTheDocument();
+  });
+
+  it('reuses the assessment idempotency key on retry and rotates it for a new payload', async () => {
+    api.submitStarterAssessment.mockRejectedValueOnce(new Error('network'));
+    renderPage();
+    expect(await screen.findByRole('heading', { name: '先盘点你真正能讲的东西' })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('你亲自经历过什么'), { target: { value: '第一次独自租房' } });
+
+    // Audit e54a2643 medium: 瞬时失败后的重试必须复用同一把幂等键，
+    // 否则服务端无法去重。
+    fireEvent.click(screen.getByRole('button', { name: '生成实验方向' }));
+    await waitFor(() => expect(api.submitStarterAssessment).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole('button', { name: '生成实验方向' }));
+    await waitFor(() => expect(api.submitStarterAssessment).toHaveBeenCalledTimes(2));
+    const firstKey = api.submitStarterAssessment.mock.calls[0][0].idempotency_key;
+    expect(api.submitStarterAssessment.mock.calls[1][0].idempotency_key).toBe(firstKey);
+
+    // 输入变化后键必须轮换。
+    fireEvent.change(screen.getByLabelText('每周可投入小时'), { target: { value: '5' } });
+    fireEvent.click(screen.getByRole('button', { name: '生成实验方向' }));
+    await waitFor(() => expect(api.submitStarterAssessment).toHaveBeenCalledTimes(3));
+    expect(api.submitStarterAssessment.mock.calls[2][0].idempotency_key).not.toBe(firstKey);
+  });
+
+  it('keeps assessment input when retrying after a failed submission', async () => {
+    api.submitStarterAssessment.mockRejectedValueOnce(new Error('network'));
+    renderPage();
+    expect(await screen.findByRole('heading', { name: '先盘点你真正能讲的东西' })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('你亲自经历过什么'), { target: { value: '第一次独自租房' } });
+    fireEvent.click(screen.getByRole('button', { name: '生成实验方向' }));
+    await waitFor(() => expect(api.submitStarterAssessment).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getByRole('button', { name: '重试' }));
+    await waitFor(() => expect(api.getStarterWorkspace).toHaveBeenCalledTimes(2));
+    // Audit e54a2643 medium: 重试刷新不能把表单卸载重挂，否则输入丢失。
+    expect(screen.getByLabelText('你亲自经历过什么')).toHaveValue('第一次独自租房');
   });
 });

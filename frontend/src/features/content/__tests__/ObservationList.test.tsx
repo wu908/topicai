@@ -101,4 +101,74 @@ describe('ObservationList conflict resolution', () => {
       expect.objectContaining({ audience: '新手创作者' }),
     );
   });
+
+  it('does not leak [object Object] into the scope draft from non-primitive scope values', () => {
+    // Audit e54a2643 medium: scope values are Record<string, unknown>; only
+    // primitives may seed the text inputs.
+    const scopedRule: CreatorRule = {
+      ...rule,
+      active_version: {
+        ...rule.versions[0],
+        scope: { experiment: { nested: true }, audience: ['列表'], format: 'graphic_note' },
+      },
+    };
+    render(
+      <ObservationList
+        observations={[observation]}
+        busy={false}
+        onTransition={vi.fn()}
+        creatorRules={[scopedRule]}
+        onResolveConflict={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '缩小适用范围' }));
+
+    expect(screen.getByLabelText('实验或内容主题')).toHaveValue('');
+    expect(screen.getByLabelText('适用受众')).toHaveValue('');
+    expect(screen.getByLabelText('适用形式')).toHaveValue('graphic_note');
+  });
+
+  it('resolves conflicts against the freshest rule snapshot', () => {
+    // Audit e54a2643 medium: the narrowing dialog captured the rule at open
+    // time; a refresh while the dialog is open must not submit stale scope.
+    const onResolveConflict = vi.fn();
+    const stale: CreatorRule = {
+      ...rule,
+      active_version: { ...rule.versions[0], scope: { experiment: '旧范围' } },
+    };
+    const fresh: CreatorRule = {
+      ...rule,
+      active_version: { ...rule.versions[0], scope: { experiment: '服务端已更新' } },
+    };
+    const { rerender } = render(
+      <ObservationList
+        observations={[observation]}
+        busy={false}
+        onTransition={vi.fn()}
+        creatorRules={[stale]}
+        onResolveConflict={onResolveConflict}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '缩小适用范围' }));
+    rerender(
+      <ObservationList
+        observations={[observation]}
+        busy={false}
+        onTransition={vi.fn()}
+        creatorRules={[fresh]}
+        onResolveConflict={onResolveConflict}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText('适用形式'), { target: { value: 'vlog_plan' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存范围并应用' }));
+
+    expect(onResolveConflict).toHaveBeenCalledWith(
+      fresh,
+      fresh.conflicts[0],
+      'narrow_scope',
+      { experiment: '服务端已更新', format: 'vlog_plan' },
+    );
+  });
 });

@@ -29,7 +29,7 @@ services:
       - LLM_CAPABILITIES=${LLM_CAPABILITIES:-text}
       - AI_ENABLED=${AI_ENABLED:-true}
       - VISION_ENABLED=${VISION_ENABLED:-false}
-      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:?JWT_SECRET_KEY must be set in .env}
       - ENVIRONMENT=${ENVIRONMENT:-production}
       - SENTRY_DSN=${SENTRY_DSN:-}
     healthcheck:

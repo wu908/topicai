@@ -36,12 +36,12 @@
   --color-info: #5AC8FA;
   --color-info-light: #F0F9FF;
 
-  /* Decision */
-  --color-decision-high: #E05535;
-  --color-decision-medium: #FF9500;
-  --color-decision-low: #8E8E93;
-  --color-decision-positive: #34C759;
-  --color-decision-negative: #FF3B30;
+  /* Decision — aliases of the semantic palette so the two cannot drift */
+  --color-decision-high: var(--color-accent);
+  --color-decision-medium: var(--color-warning);
+  --color-decision-low: var(--color-text-tertiary);
+  --color-decision-positive: var(--color-success);
+  --color-decision-negative: var(--color-danger);
 
   /* Typography */
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Noto Sans SC", sans-serif;
@@ -100,6 +100,14 @@
   --duration-normal: 0.25s;
 }
 
+/* Neutralize motion globally for users who prefer reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-fast: 0.01ms;
+    --duration-normal: 0.01ms;
+  }
+}
+
 /* Dark mode tokens (reserved for future) */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -122,10 +130,15 @@
   --v3-bg: #faf9f7;
   --v3-surface: #ffffff;
   --v3-panel-bg: #f3f1ee;
+  --v3-sidebar-bg: rgba(250, 249, 247, 0.98);
 
   /* Borders */
   --v3-border: #e8e5e1;
   --v3-border-light: #f0eeeb;
+  --v3-border-hover: #bbb7b2;
+
+  /* Hover surfaces */
+  --v3-surface-hover: #fcfbfa;
 
   /* Text */
   --v3-text: #1a1a1a;
@@ -157,7 +170,7 @@
   --v3-green-bg-strong: rgba(61, 139, 93, 0.1);
   --v3-amber-bg: rgba(196, 149, 46, 0.08);
   --v3-amber-bg-strong: rgba(196, 149, 46, 0.1);
-  --v3-red-bg: rgba(196, 69, 61, 0.05);
+  --v3-red-bg: rgba(196, 69, 61, 0.08);
   --v3-red-border: rgba(196, 69, 61, 0.2);
 
   /* Neutral overlays */

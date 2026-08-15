@@ -66,6 +66,20 @@ describe('MePage', () => {
     expect(screen.getByText(/发布、公开范围、事实确认和长期经验写入始终由你决定/)).toBeInTheDocument();
   });
 
+  it('disables saving settings when the weekly goal is cleared or out of range', async () => {
+    render(<MemoryRouter><MePage /></MemoryRouter>);
+    await screen.findByRole('heading', { name: '当前创作目标' });
+    const goal = screen.getByRole('spinbutton', { name: '每周发布目标' });
+
+    // Audit e54a2643: Number('') is NaN and NaN < 1 / NaN > 7 are both
+    // false, so the old guard left 保存设置 enabled and posted null.
+    fireEvent.change(goal, { target: { value: '' } });
+    expect(screen.getByRole('button', { name: '保存设置' })).toBeDisabled();
+
+    fireEvent.change(goal, { target: { value: '3' } });
+    expect(screen.getByRole('button', { name: '保存设置' })).toBeEnabled();
+  });
+
   it('does not advertise capabilities until AI is fully configured', async () => {
     getUserSettings.mockResolvedValue({
       ...baseSettings,
@@ -169,5 +183,42 @@ describe('MePage', () => {
       }),
     );
     expect(logout).toHaveBeenCalledOnce();
+  });
+
+  it('shows zero percent when the acceptance rate is missing', async () => {
+    // Audit e54a2643 medium: 后端缺字段时 undefined * 100 渲染成 NaN%。
+    getCreatorState.mockResolvedValue({
+      ...baseState,
+      candidate_acceptance_rate: undefined,
+    });
+    render(<MemoryRouter><MePage /></MemoryRouter>);
+
+    expect(await screen.findByText('0%')).toBeInTheDocument();
+  });
+
+  it('returns to the loading state while retrying a failed load', async () => {
+    getCreatorState.mockRejectedValueOnce(new Error('创作者状态暂时取不到'));
+    render(<MemoryRouter><MePage /></MemoryRouter>);
+    await screen.findByRole('button', { name: '重试' });
+
+    getCreatorState.mockResolvedValue(baseState);
+    fireEvent.click(screen.getByRole('button', { name: '重试' }));
+
+    // Audit e54a2643 medium: 重试期间 load() 未回到 loading 态。
+    expect(screen.getByRole('progressbar')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '当前创作目标' })).toBeInTheDocument();
+  });
+
+  it('opens the deletion gate with an empty confirmation field', async () => {
+    render(<MemoryRouter><MePage /></MemoryRouter>);
+
+    await screen.findByText('个人数据');
+    fireEvent.click(screen.getByRole('button', { name: '删除账户' }));
+
+    const confirmation = await screen.findByLabelText('删除确认');
+    // Audit e54a2643 medium: 重新打开删除确认时必须从空输入开始，
+    // 避免残留文本直接通过确认守卫。
+    expect(confirmation).toHaveValue('');
+    expect(screen.getByRole('button', { name: '永久删除账户' })).toBeDisabled();
   });
 });

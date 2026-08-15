@@ -70,8 +70,8 @@
 
 .content-project-row:hover,
 .content-project-row:focus-visible {
-  border-color: #b8b4ae;
-  background: #fcfbfa;
+  border-color: var(--v3-border-hover);
+  background: var(--v3-surface-hover);
   outline: none;
 }
 
@@ -381,8 +381,8 @@
 .editor-toolbar button:hover,
 .suggestion-actions button:hover,
 .suggestions-refresh:hover {
-  border-color: #bbb7b2;
-  background: #fcfbfa;
+  border-color: var(--v3-border-hover);
+  background: var(--v3-surface-hover);
 }
 
 .workspace-primary-button:hover {
@@ -431,7 +431,7 @@
 
 .workspace-suggestions {
   border-left: 1px solid var(--v3-border);
-  background: #fcfbfa;
+  background: var(--v3-panel-bg);
 }
 
 .outline-intro {
@@ -832,39 +832,7 @@
 
 .viewpoint-propose-button,
 .viewpoint-actions button,
-.viewpoint-revoke-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  min-height: 30px;
-  padding: 0 9px;
-  border: 1px solid var(--v3-border);
-  background: #fff;
-  color: var(--v3-text);
-  font: inherit;
-  font-size: 10px;
-  cursor: pointer;
-}
-
-.series-panel {
-  padding: 16px 0;
-  border-bottom: 1px solid var(--v3-border);
-}
-
-.series-panel-heading {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.series-panel-heading h3 {
-  margin: 5px 0 0;
-  font-size: 13px;
-  line-height: 1.45;
-}
-
+.viewpoint-revoke-button,
 .series-propose-button,
 .series-actions button,
 .series-revoke-button,
@@ -884,6 +852,9 @@
   cursor: pointer;
 }
 
+.viewpoint-propose-button:disabled,
+.viewpoint-actions button:disabled,
+.viewpoint-revoke-button:disabled,
 .series-propose-button:disabled,
 .series-actions button:disabled,
 .series-revoke-button:disabled,
@@ -891,6 +862,24 @@
 .series-open-project-button:disabled {
   cursor: not-allowed;
   opacity: 0.5;
+}
+
+.series-panel {
+  padding: 16px 0;
+  border-bottom: 1px solid var(--v3-border);
+}
+
+.series-panel-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.series-panel-heading h3 {
+  margin: 5px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 .series-source-list {
@@ -929,9 +918,9 @@
   line-height: 1.4;
 }
 
-.series-candidate input,
+.series-candidate input:not([type='checkbox']):not([type='radio']),
 .series-candidate textarea,
-.series-opportunity input,
+.series-opportunity input:not([type='checkbox']):not([type='radio']),
 .series-opportunity select,
 .series-opportunity textarea {
   width: 100%;
@@ -1012,13 +1001,6 @@
   color: var(--v3-text-ter);
 }
 
-.viewpoint-propose-button:disabled,
-.viewpoint-actions button:disabled,
-.viewpoint-revoke-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
-}
-
 .viewpoint-candidate,
 .viewpoint-confirmed {
   margin-top: 12px;
@@ -1046,6 +1028,16 @@
   line-height: 1.6;
   resize: vertical;
   box-sizing: border-box;
+}
+
+.series-candidate input:focus-visible,
+.series-candidate textarea:focus-visible,
+.series-opportunity input:focus-visible,
+.series-opportunity select:focus-visible,
+.series-opportunity textarea:focus-visible,
+.viewpoint-candidate textarea:focus-visible {
+  outline: 2px solid var(--v3-blue);
+  outline-offset: 2px;
 }
 
 .viewpoint-candidate p,
@@ -1191,7 +1183,7 @@
 
   .workspace-suggestions .suggestion-actions {
     grid-column: 2;
-    grid-row: 1 / span 3;
+    grid-row: 1 / -1;
     align-self: center;
   }
 }

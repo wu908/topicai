@@ -172,4 +172,21 @@ describe('apiClient', () => {
     expect(init.method).toBe('POST');
     expect(init.body).toBe(JSON.stringify({ platform: 'wechat_mp', display_name: 'X' }));
   });
+
+  it('classifies auth endpoints from the request URL even when response.url is empty', async () => {
+    // Audit e54a2643 medium: Response objects built in mocks/proxies often
+    // have an empty url. A 401 on /auth/login must still fail fast instead
+    // of attempting a token refresh.
+    localStorage.setItem('refresh_token', 'refresh-jwt');
+
+    const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 401 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { default: apiClient } = await import('../client');
+    await expect(apiClient.post('/auth/login', { email: 'a@b.com', password: 'x' }))
+      .rejects.toThrow('Authentication failed');
+
+    // No refresh attempt: only the original login call was made.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
 });

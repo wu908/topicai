@@ -183,6 +183,37 @@ describe('OpportunitiesPage', () => {
     ));
   });
 
+  // 审计 e54a2643 batch C：非 user_source 机会带 required_action 时只渲染
+  // 一条警告 Alert 而没有任何操作控件（dead-end），用户无法完成核验。
+  // 来源核验表单必须对所有机会类型开放。
+  it('offers source verification for non-user-source opportunities with a required action', async () => {
+    api.listContentOpportunities.mockResolvedValue({
+      items: [{
+        ...historyOpportunity,
+        verification_status: 'pending_verification',
+        required_action: {
+          action_type: 'verify_source',
+          reason: '来源尚未核验',
+          accepted_inputs: ['original_url', 'published_at', 'authoritative_source', 'timeliness'],
+          fallback: 'manual_verification',
+        },
+      }],
+    });
+    render(<MemoryRouter><OpportunitiesPage /></MemoryRouter>);
+
+    expect(await screen.findByText('小空间应该先整理哪里？')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('原始链接'), { target: { value: 'https://example.com/verified' } });
+    fireEvent.change(screen.getByLabelText('发布时间'), { target: { value: '2026-07-31T00:00:00Z' } });
+    fireEvent.change(screen.getByLabelText('权威来源'), { target: { value: '小红书官方' } });
+    fireEvent.click(screen.getByRole('button', { name: '确认来源信息' }));
+
+    await waitFor(() => expect(api.verifyContentOpportunitySource).toHaveBeenCalledWith('o2', expect.objectContaining({
+      verification_status: 'verified',
+      confirmed_by_user: true,
+      expected_opportunity_version: 1,
+    })));
+  });
+
   it('lets the user submit an official inspiration manually', async () => {
     render(<MemoryRouter><OpportunitiesPage /></MemoryRouter>);
 
@@ -208,5 +239,57 @@ describe('OpportunitiesPage', () => {
         expires_at: new Date('2026-08-07T00:00').toISOString(),
       }),
     ));
+  });
+
+  // 审计 e54a2643 security：用户提交的来源 URL 直接进 href，javascript:/data:
+  // 会在点击时在当前源执行。只允许 http/https，其他降级为纯文本。
+  it('does not render user-submitted javascript: or data: URLs as links', async () => {
+    const hostile = {
+      ...historyOpportunity,
+      source_url: 'javascript:alert(document.cookie)',
+      source_refs: [
+        { ...historyOpportunity.source_refs[0], url: 'data:text/html;base64,PHNjcmlwdD4=' },
+      ],
+    };
+    api.listContentOpportunities.mockResolvedValue({ items: [hostile] });
+
+    render(<MemoryRouter><OpportunitiesPage /></MemoryRouter>);
+    expect(await screen.findByText('小空间应该先整理哪里？')).toBeInTheDocument();
+
+    screen.queryAllByRole('link').forEach((anchor) => {
+      expect(anchor.getAttribute('href') ?? '').not.toMatch(/^(javascript|data|vbscript):/i);
+    });
+    // 来源仍然以纯文本形式保留可见，不丢失信息。
+    expect(screen.getByText(/javascript:alert/)).toBeInTheDocument();
+  });
+
+  it('reuses the decision idempotency key when a decision fails and is retried', async () => {
+    api.decideContentOpportunity.mockRejectedValueOnce(new Error('network'));
+    render(<MemoryRouter><OpportunitiesPage /></MemoryRouter>);
+    expect(await screen.findByText('继续记录稳定更新')).toBeInTheDocument();
+
+    // 审计 e54a2643 medium：瞬时失败后的重试必须复用同一把幂等键，
+    // 否则服务端无法去重。
+    fireEvent.click(screen.getByRole('button', { name: '这次不做' }));
+    await waitFor(() => expect(api.decideContentOpportunity).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole('button', { name: '这次不做' }));
+    await waitFor(() => expect(api.decideContentOpportunity).toHaveBeenCalledTimes(2));
+    expect(api.decideContentOpportunity.mock.calls[1][1].idempotency_key)
+      .toBe(api.decideContentOpportunity.mock.calls[0][1].idempotency_key);
+  });
+
+  it('reuses the manual submission idempotency key when saving fails and is retried', async () => {
+    api.createContentOpportunity.mockRejectedValueOnce(new Error('network'));
+    render(<MemoryRouter><OpportunitiesPage /></MemoryRouter>);
+
+    fireEvent.click(await screen.findByRole('button', { name: '手动添加来源' }));
+    fireEvent.change(screen.getByLabelText('关键词或原始内容'), { target: { value: '一个关键词' } });
+
+    fireEvent.click(screen.getByRole('button', { name: '保存并等待核验' }));
+    await waitFor(() => expect(api.createContentOpportunity).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole('button', { name: '保存并等待核验' }));
+    await waitFor(() => expect(api.createContentOpportunity).toHaveBeenCalledTimes(2));
+    expect(api.createContentOpportunity.mock.calls[1][0].idempotency_key)
+      .toBe(api.createContentOpportunity.mock.calls[0][0].idempotency_key);
   });
 });

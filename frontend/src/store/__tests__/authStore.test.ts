@@ -118,6 +118,34 @@ describe('authStore.fetchCurrentUser', () => {
     expect(useAuthStore.getState().isAuthenticated).toBe(false);
   });
 
+  it('rejects malformed refresh responses instead of storing a bad token', async () => {
+    localStorage.setItem('refresh_token', 'refresh');
+    useAuthStore.setState({ isAuthenticated: true });
+    mockedRefreshToken.mockResolvedValue({ code: 200, data: {}, message: 'ok' });
+
+    await useAuthStore.getState().refreshToken();
+
+    // Audit e54a2643 medium: a refresh envelope without access_token must
+    // not persist "undefined" and must drop back to logged-out state.
+    expect(localStorage.getItem('access_token')).toBeNull();
+    expect(useAuthStore.getState().isAuthenticated).toBe(false);
+  });
+
+  it('treats an empty refresh access_token as a rejected refresh', async () => {
+    localStorage.setItem('refresh_token', 'refresh');
+    useAuthStore.setState({ isAuthenticated: true });
+    mockedRefreshToken.mockResolvedValue({
+      code: 200,
+      data: { access_token: '', refresh_token: 'refresh', token_type: 'bearer' },
+      message: 'ok',
+    });
+
+    await useAuthStore.getState().refreshToken();
+
+    expect(localStorage.getItem('access_token')).toBeNull();
+    expect(useAuthStore.getState().isAuthenticated).toBe(false);
+  });
+
   afterEach(() => {
     vi.restoreAllMocks();
   });
@@ -199,5 +227,24 @@ describe('authStore.fetchCurrentUser', () => {
     expect(state.isAuthenticated).toBe(false);
     // user remains at initial null.
     expect(state.user).toBeNull();
+  });
+
+  it('rejects a login envelope with null data instead of storing undefined tokens', async () => {
+    mockedLogin.mockResolvedValue({ code: 200, data: null, message: 'ok' });
+
+    await expect(useAuthStore.getState().login('a@b.com', 'password')).rejects.toThrow();
+    expect(localStorage.getItem('access_token')).toBeNull();
+    expect(useAuthStore.getState().isAuthenticated).toBe(false);
+  });
+
+  it('resets isAuthenticated when fetchCurrentUser fails on a started session', async () => {
+    useAuthStore.setState({ isAuthenticated: true, user });
+    mockedGetCurrentUser.mockRejectedValue(new Error('network'));
+
+    await useAuthStore.getState().fetchCurrentUser();
+
+    // Audit e54a2643: a failed /auth/me must not leave the store claiming
+    // authenticated with a null user.
+    expect(useAuthStore.getState().isAuthenticated).toBe(false);
   });
 });

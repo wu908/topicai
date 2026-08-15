@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { CalibrationWorkspace, ContentIntent } from '@/types/contracts/v2/content';
-import { HypothesisForm, PublicationForm, SnapshotForm } from '../StageForms';
+import { HypothesisForm, PublicationForm, SnapshotForm, VersionForm } from '../StageForms';
 
 const workspace: CalibrationWorkspace = {
   project: {
@@ -53,6 +53,26 @@ const form = (intent: ContentIntent) => (
 );
 
 describe('HypothesisForm', () => {
+  it('reseeds the audience change when the workspace switches projects', () => {
+    // Audit e54a2643 medium: audienceChange was seeded only on mount, so a
+    // mounted form kept the previous project's value after switching.
+    const makeForm = (projectId: string, audienceChange: string) => (
+      <HypothesisForm
+        workspace={{ ...workspace, project: { ...workspace.project, id: projectId, audience_change: audienceChange } }}
+        busy={false}
+        onCommand={vi.fn()}
+        lockHypothesis={vi.fn()}
+        makeKey={() => 'lock-key'}
+      />
+    );
+    const { rerender } = render(makeForm('p1', '读者能开始行动'));
+    fireEvent.change(screen.getByLabelText('预期受众变化'), { target: { value: '我输入的内容' } });
+
+    rerender(makeForm('p2', '新的读者变化'));
+
+    expect(screen.getByLabelText('预期受众变化')).toHaveValue('新的读者变化');
+  });
+
   it('shows only the fields required by the selected content intent', () => {
     const { rerender } = render(form('solve'));
     expect(screen.getByLabelText('读者遇到什么问题')).toBeInTheDocument();
@@ -170,7 +190,59 @@ describe('HypothesisForm', () => {
   });
 });
 
+describe('VersionForm', () => {
+  it('reseeds the title when the workspace switches projects', () => {
+    // Audit e54a2643 medium: title was seeded only on mount.
+    const makeForm = (projectId: string, title: string) => (
+      <VersionForm
+        workspace={{ ...workspace, project: { ...workspace.project, id: projectId, title } }}
+        busy={false}
+        onCommand={vi.fn()}
+        createVersion={vi.fn()}
+        makeKey={() => 'version-key'}
+      />
+    );
+    const { rerender } = render(makeForm('p1', '项目一的标题'));
+    fireEvent.change(screen.getByLabelText('笔记标题'), { target: { value: '我输入的标题' } });
+
+    rerender(makeForm('p2', '项目二的标题'));
+
+    expect(screen.getByLabelText('笔记标题')).toHaveValue('项目二的标题');
+  });
+});
+
 describe('SnapshotForm', () => {
+  it('blocks submission when the captured datetime is invalid', () => {
+    // Audit e54a2643 medium: new Date(capturedAt).toISOString() throws a
+    // RangeError on partially entered datetime-local values.
+    render(
+      <SnapshotForm
+        workspace={{
+          ...workspace,
+          project: { ...workspace.project, status: 'awaiting_review', version: 4 },
+          publish_record: { id: 'record-1', published_at: '2026-07-20T08:00:00Z' },
+          next_action: 'add_snapshot',
+        }}
+        busy={false}
+        onCommand={vi.fn()}
+        appendSnapshot={vi.fn()}
+        createMaterial={vi.fn()}
+        extractSnapshotMetrics={vi.fn()}
+        makeKey={() => 'snapshot-key'}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('checkbox', { name: '最终无法取得这次结果' }));
+    fireEvent.change(screen.getByLabelText('无法取得的原因'), {
+      target: { value: '平台已不再展示这篇内容的数据' },
+    });
+    expect(screen.getByRole('button', { name: '确认结果不可用' })).toBeEnabled();
+
+    fireEvent.change(screen.getByLabelText('数据时间'), { target: { value: 'invalid' } });
+
+    expect(screen.getByRole('button', { name: '确认结果不可用' })).toBeDisabled();
+  });
+
   it('submits an explicitly unavailable result without zero-filled metrics', async () => {
     const appendSnapshot = vi.fn().mockResolvedValue({});
     const onCommand = vi.fn(async (command: () => Promise<unknown>) => {
@@ -261,6 +333,37 @@ describe('SnapshotForm', () => {
         confirmed_by_user: true,
       }),
     ));
+  });
+
+  it('blocks snapshot submission while a metric value is invalid', () => {
+    render(
+      <SnapshotForm
+        workspace={{
+          ...workspace,
+          project: { ...workspace.project, status: 'awaiting_review', version: 4 },
+          publish_record: { id: 'record-1', published_at: '2026-07-20T08:00:00Z' },
+          next_action: 'add_snapshot',
+        }}
+        busy={false}
+        onCommand={vi.fn()}
+        appendSnapshot={vi.fn().mockResolvedValue({})}
+        createMaterial={vi.fn()}
+        extractSnapshotMetrics={vi.fn()}
+        makeKey={() => 'snapshot-key'}
+      />,
+    );
+
+    // Audit e54a2643: Number('') / '-5' / '1e' must not reach the API as
+    // NaN or negative values; the submit button blocks invalid input.
+    const views = screen.getByLabelText('浏览');
+    fireEvent.change(views, { target: { value: '-5' } });
+    expect(screen.getByRole('button', { name: '保存数据快照' })).toBeDisabled();
+
+    fireEvent.change(views, { target: { value: '1e' } });
+    expect(screen.getByRole('button', { name: '保存数据快照' })).toBeDisabled();
+
+    fireEvent.change(views, { target: { value: '12' } });
+    expect(screen.getByRole('button', { name: '保存数据快照' })).toBeEnabled();
   });
 });
 

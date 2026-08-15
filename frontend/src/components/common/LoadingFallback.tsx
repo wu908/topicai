@@ -15,7 +15,8 @@ const LoadingFallback: React.FC = () => {
         minHeight: '60vh',
       }}
     >
-      <CircularProgress />
+      {/* 审计 e54a2643 medium：给进度条一个可访问名称，屏幕阅读器能感知加载状态。 */}
+      <CircularProgress aria-label="页面加载中" />
     </Box>
   );
 };

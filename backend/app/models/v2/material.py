@@ -1,13 +1,20 @@
 """Typed contracts for lightweight personal materials."""
 
+import re
 from typing import Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 
 from app.models.v2.intent_actions import StrictModel
 
 MaterialKind = Literal["text", "link", "image", "document"]
 MaterialPrivacy = Literal["public", "private", "sensitive"]
+
+# Strict ``type/subtype`` token form. The stored value is later echoed as
+# the response ``Content-Type`` at download time, so anything beyond simple
+# tokens (CR/LF, parameters, spaces) is rejected outright.
+_MIME_TOKEN = r"[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]*"
+_MIME_TYPE_PATTERN = re.compile(rf"^{_MIME_TOKEN}/{_MIME_TOKEN}$")
 
 
 class MaterialCreate(StrictModel):
@@ -19,6 +26,13 @@ class MaterialCreate(StrictModel):
     privacy_level: MaterialPrivacy = "private"
     project_id: str | None = Field(default=None, max_length=100)
     idempotency_key: str = Field(min_length=1, max_length=200)
+
+    @field_validator("mime_type")
+    @classmethod
+    def _validate_mime_type(cls, value: str | None) -> str | None:
+        if value is not None and not _MIME_TYPE_PATTERN.match(value):
+            raise ValueError("mime_type must be a valid type/subtype token")
+        return value
 
     @model_validator(mode="after")
     def validate_content(self):

@@ -313,3 +313,70 @@ class TestConcurrentAccess:
         assert 0 <= row["ai_calls_today"] <= 9
 
         await db.close()
+
+
+class TestIdentifierValidation:
+    """SQL injection prevention via identifier whitelist."""
+
+    def test_validate_identifier_accepts_valid_names(self):
+        """Plain alphanumeric + underscore names are accepted."""
+        from app.core.database import _validate_identifier
+
+        assert _validate_identifier("users") == "users"
+        assert _validate_identifier("creator_profiles") == "creator_profiles"
+        assert _validate_identifier("_private") == "_private"
+        assert _validate_identifier("Table123") == "Table123"
+
+    def test_validate_identifier_rejects_injection(self):
+        """Names with SQL special characters are rejected."""
+        from app.core.database import _validate_identifier
+
+        with pytest.raises(ValueError, match="invalid table name"):
+            _validate_identifier("users; DROP TABLE users", "table name")
+        with pytest.raises(ValueError, match="invalid table name"):
+            _validate_identifier("users--comment", "table name")
+        with pytest.raises(ValueError, match="invalid table name"):
+            _validate_identifier("users.other", "table name")
+        with pytest.raises(ValueError, match="invalid table name"):
+            _validate_identifier("users OR 1=1", "table name")
+        with pytest.raises(ValueError, match="invalid table name"):
+            _validate_identifier("", "table name")
+
+    @pytest.mark.asyncio
+    async def test_insert_rejects_malicious_table(self):
+        """insert() raises ValueError before SQL is built."""
+        from app.core.database import Database
+
+        db = Database("sqlite+aiosqlite:///:memory:")
+        await db.init_db()
+
+        with pytest.raises(ValueError, match="invalid table name"):
+            await db.insert("users; DROP TABLE users", {"id": "x"})
+
+        await db.close()
+
+    @pytest.mark.asyncio
+    async def test_update_rejects_malicious_table(self):
+        """update() raises ValueError before SQL is built."""
+        from app.core.database import Database
+
+        db = Database("sqlite+aiosqlite:///:memory:")
+        await db.init_db()
+
+        with pytest.raises(ValueError, match="invalid table name"):
+            await db.update("users OR 1=1", {"x": 1}, {"id": "y"})
+
+        await db.close()
+
+    @pytest.mark.asyncio
+    async def test_delete_rejects_malicious_table(self):
+        """delete() raises ValueError before SQL is built."""
+        from app.core.database import Database
+
+        db = Database("sqlite+aiosqlite:///:memory:")
+        await db.init_db()
+
+        with pytest.raises(ValueError, match="invalid table name"):
+            await db.delete("users--", {"id": "x"})
+
+        await db.close()

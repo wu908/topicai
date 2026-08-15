@@ -226,14 +226,32 @@ export default function ProjectWorkspace({
   const [bodyText, setBodyText] = useState(baseBodyText);
   const [recoveryDraft, setRecoveryDraft] = useState<ProjectDraft | null>(() =>
     readProjectDraft(workspace.project.id, baseVersionId));
-  const [isOnline, setIsOnline] = useState(() => navigator.onLine);
+  // 审计 e54a2643 medium：navigator 不可用的环境（如部分 SSR/测试宿主）
+  // 直接读 onLine 会抛 TypeError，守卫后按在线处理。
+  const [isOnline, setIsOnline] = useState(() =>
+    typeof navigator === 'undefined' ? true : navigator.onLine);
   const [acceptedSuggestions, setAcceptedSuggestions] = useState<string[]>([]);
   const [rejectedSuggestions, setRejectedSuggestions] = useState<string[]>([]);
 
   const hasUnsavedChanges = title !== baseTitle || bodyText !== baseBodyText;
 
+  // 审计 e54a2643 critical：编辑器状态只在挂载时初始化。基线项目/版本变化
+  // （刷新、保存后版本递增、切换项目）时必须重新同步，否则旧文本会被自动
+  // 保存写到新版本键上，甚至覆盖更新的服务端版本。用 React 官方的“props
+  // 变化时在渲染期重置状态”模式：同步重置，不经过 effect。
+  const baseKey = `${workspace.project.id}:${baseVersionId ?? 'none'}`;
+  const [prevBaseKey, setPrevBaseKey] = useState(baseKey);
+  if (prevBaseKey !== baseKey) {
+    setPrevBaseKey(baseKey);
+    setTitle(baseTitle);
+    setBodyText(baseBodyText);
+    setRecoveryDraft(readProjectDraft(workspace.project.id, baseVersionId));
+  }
+
   useEffect(() => {
-    if (recoveryDraft) return undefined;
+    // 审计 e54a2643 batch C：此前存在恢复草稿时整个自动保存被禁用，
+    // 新编辑不会落盘。现在继续写入草稿，仅在有待恢复草稿时跳过清理，
+    // 避免把用户尚未决定的恢复内容删掉。
     const timer = window.setTimeout(() => {
       if (hasUnsavedChanges) {
         writeProjectDraft({
@@ -243,7 +261,7 @@ export default function ProjectWorkspace({
           bodyText,
           savedAt: new Date().toISOString(),
         });
-      } else {
+      } else if (!recoveryDraft) {
         removeProjectDraft(workspace.project.id, baseVersionId);
       }
     }, 250);
@@ -284,10 +302,15 @@ export default function ProjectWorkspace({
   };
 
   const saveVersion = async () => {
-    const saved = await onSaveVersion(title.trim(), bodyText.trim());
-    if (saved) {
-      removeProjectDraft(workspace.project.id, baseVersionId);
-      setRecoveryDraft(null);
+    try {
+      const saved = await onSaveVersion(title.trim(), bodyText.trim());
+      if (saved) {
+        removeProjectDraft(workspace.project.id, baseVersionId);
+        setRecoveryDraft(null);
+      }
+    } catch {
+      // 审计 e54a2643 batch C：保存失败时保留本地草稿，错误提示由调用方
+      // runCommand 展示；不能因为未捕获拒绝丢失编辑内容。
     }
   };
 
@@ -474,7 +497,9 @@ export default function ProjectWorkspace({
             <div className="editor-section-heading">
               <span className="editor-section-number">3.</span>
               <h2>当前内容</h2>
-              <span className="editor-section-meta">已保存</span>
+              {/* 审计 e54a2643 medium：状态标签由 hasUnsavedChanges 驱动，
+                  存在本地未保存修改时不能继续声称“已保存”。 */}
+              <span className="editor-section-meta">{hasUnsavedChanges ? '未保存' : '已保存'}</span>
             </div>
             <input
               className="editor-title-input"

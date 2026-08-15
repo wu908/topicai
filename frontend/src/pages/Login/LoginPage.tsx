@@ -26,7 +26,6 @@ const LoginPage: React.FC = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(true);
 
   const handleSubmit = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault();
@@ -261,7 +260,9 @@ const LoginPage: React.FC = () => {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  minLength={8}
+                  // minLength is a registration policy; applying it to login
+                  // blocks existing shorter passwords from submitting.
+                  minLength={tab === 'register' ? 8 : undefined}
                   style={{
                     height: 42,
                     fontSize: 14,
@@ -302,34 +303,6 @@ const LoginPage: React.FC = () => {
                   {showPassword ? '隐藏' : '显示'}
                 </button>
               </div>
-            </div>
-
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'flex-start',
-                alignItems: 'center',
-                marginBottom: 4,
-              }}
-            >
-              <label
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  fontSize: 12.5,
-                  color: 'var(--v3-text-sec)',
-                  cursor: 'pointer',
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
-                  style={{ accentColor: 'var(--v3-text)' }}
-                />
-                记住我
-              </label>
             </div>
 
             <button

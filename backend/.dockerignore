@@ -1,6 +1,9 @@
 .venv/
 __pycache__/
 *.pyc
+*.pyo
+*.db
+*.db.bak
 .pytest_cache/
 .ci-tmp/
 .mypy_cache/

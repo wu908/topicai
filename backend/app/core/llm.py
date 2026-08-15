@@ -2,6 +2,7 @@
 
 import json
 import logging
+import re
 from typing import Any, TypeVar
 
 from openai import OpenAI
@@ -11,6 +12,12 @@ from config.settings import get_settings
 
 logger = logging.getLogger(__name__)
 T = TypeVar("T")
+
+# Wrapper-tag variants that untrusted text must not be able to emit. Tolerate
+# case differences and internal whitespace so ``</USER_INPUT>`` / ``</user_input >``
+# are neutralized just like the canonical lowercase form.
+_CLOSING_USER_INPUT_TAG = re.compile(r"<\s*/\s*user_input\s*>", re.IGNORECASE)
+_OPENING_USER_INPUT_TAG = re.compile(r"<\s*user_input\s*>", re.IGNORECASE)
 
 
 class LLMClient:
@@ -162,7 +169,12 @@ def _clean_json_response(raw: str) -> str:
 
 
 def wrap_user_input(text: str | None) -> str:
-    """Delimit untrusted text without allowing it to close the wrapper."""
-    safe = (text or "").replace("</user_input>", "&lt;/user_input&gt;")
-    safe = safe.replace("<user_input>", "&lt;user_input&gt;")
+    """Delimit untrusted text without allowing it to close the wrapper.
+
+    Matching is case-insensitive and tolerates internal whitespace, so
+    variants such as ``</USER_INPUT>`` or ``</user_input >`` cannot emit a
+    closing-tag-like sequence and break out of the delimiter.
+    """
+    safe = _CLOSING_USER_INPUT_TAG.sub("&lt;/user_input&gt;", text or "")
+    safe = _OPENING_USER_INPUT_TAG.sub("&lt;user_input&gt;", safe)
     return f"<user_input>{safe}</user_input>"

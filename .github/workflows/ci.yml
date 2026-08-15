@@ -28,10 +28,10 @@ jobs:
       PIP_DISABLE_PIP_VERSION_CHECK: "1"
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
@@ -68,7 +68,7 @@ jobs:
       - name: Upload backend coverage report
         if: always()
         continue-on-error: true
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: backend-coverage
           path: backend/coverage.xml
@@ -86,7 +86,7 @@ jobs:
       AI_ENABLED: "false"
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@v5
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v6
@@ -94,7 +94,7 @@ jobs:
           version: 10
 
       - name: Set up Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@v5
         with:
           node-version: "22"
           cache: pnpm
@@ -116,7 +116,7 @@ jobs:
         run: pnpm --dir frontend build
 
       - name: Set up Python
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
@@ -148,7 +148,7 @@ jobs:
 
       - name: Upload Playwright artifacts
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: frontend-e2e-artifacts
           path: |

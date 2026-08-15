@@ -30,6 +30,7 @@ describe('ErrorBoundary', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
   });
 
   it('renders children when no error is thrown', () => {
@@ -85,5 +86,20 @@ describe('ErrorBoundary', () => {
       fireEvent.click(screen.getByRole('button', { name: '重新加载' }));
     });
     expect(screen.getByText('页面出错了')).toBeInTheDocument();
+  });
+
+  // 审计 e54a2643 medium：原始错误消息可能包含内部实现细节，
+  // 生产环境不应直接展示给用户，只在 DEV 下保留。
+  it('hides raw error messages in production builds', async () => {
+    vi.stubEnv('DEV', false);
+    await act(async () => {
+      render(
+        <ErrorBoundary>
+          <Bomb />
+        </ErrorBoundary>
+      );
+    });
+    expect(screen.getByText('发生了意外错误，请稍后重试')).toBeInTheDocument();
+    expect(screen.queryByText('boom')).not.toBeInTheDocument();
   });
 });

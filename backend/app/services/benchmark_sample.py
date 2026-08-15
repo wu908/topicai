@@ -225,9 +225,10 @@ class BenchmarkSampleService:
             successor = (
                 await session.execute(
                     text(
-                        "SELECT id FROM performance_snapshots_v2 WHERE supersedes_id=:id"
+                        "SELECT id FROM performance_snapshots_v2 WHERE supersedes_id=:id "
+                        "AND owner_user_id=:owner"
                     ),
-                    {"id": snapshot_id},
+                    {"id": snapshot_id, "owner": owner_user_id},
                 )
             ).first()
             if successor:

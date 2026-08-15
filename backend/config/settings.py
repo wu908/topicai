@@ -4,8 +4,28 @@ Uses Pydantic BaseSettings for environment variable loading with validation.
 All sensitive values read from .env file or environment variables.
 """
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings
+
+# Canonical environment names, plus the common shorthands that must not be
+# allowed to silently fall through to a non-production value.
+_ENVIRONMENT_ALIASES = {
+    "production": "production",
+    "prod": "production",
+    "development": "development",
+    "dev": "development",
+    "local": "development",
+    "staging": "staging",
+    "stage": "staging",
+    "test": "test",
+    "testing": "test",
+    "ci": "test",
+}
+
+# Only symmetric HMAC algorithms are supported: the app signs with a shared
+# secret (``jwt_secret_key``), so allowing ``none`` or an asymmetric alg here
+# would yield unsigned or incorrectly verified tokens.
+_ALLOWED_JWT_ALGORITHMS = {"HS256", "HS384", "HS512"}
 
 
 class Settings(BaseSettings):
@@ -76,6 +96,36 @@ class Settings(BaseSettings):
         "case_sensitive": False,
         "extra": "ignore",
     }
+
+    @field_validator("environment")
+    @classmethod
+    def _normalize_environment(cls, value: str) -> str:
+        """Normalize ``ENVIRONMENT`` to a canonical name, rejecting typos.
+
+        ``is_production`` gates the JWT-secret strength check in
+        ``backend/main.py``. An unrecognized value such as ``producton``
+        would make that gate fail *open*, so an invalid environment must
+        fail loudly at startup instead of degrading silently.
+        """
+        normalized = value.strip().lower()
+        if normalized not in _ENVIRONMENT_ALIASES:
+            allowed = ", ".join(sorted(set(_ENVIRONMENT_ALIASES)))
+            raise ValueError(
+                f"ENVIRONMENT must be one of: {allowed} (got {value!r})"
+            )
+        return _ENVIRONMENT_ALIASES[normalized]
+
+    @field_validator("jwt_algorithm")
+    @classmethod
+    def _validate_jwt_algorithm(cls, value: str) -> str:
+        """Reject algorithms this app cannot safely verify (e.g. ``none``)."""
+        normalized = value.strip().upper()
+        if normalized not in _ALLOWED_JWT_ALGORITHMS:
+            allowed = ", ".join(sorted(_ALLOWED_JWT_ALGORITHMS))
+            raise ValueError(
+                f"JWT_ALGORITHM must be one of: {allowed} (got {value!r})"
+            )
+        return normalized
 
     @property
     def is_production(self) -> bool:

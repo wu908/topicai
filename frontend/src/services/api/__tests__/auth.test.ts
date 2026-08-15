@@ -5,7 +5,7 @@ vi.mock('../client', () => ({
 }));
 
 import apiClient from '../client';
-import { getCurrentUser, login, refreshToken, register } from '../auth';
+import { getCurrentUser, login, register } from '../auth';
 
 describe('v2 auth API', () => {
   beforeEach(() => {
@@ -18,12 +18,13 @@ describe('v2 auth API', () => {
   it('maps every auth operation to /api/v2 through the shared client', async () => {
     await register({ email: 'a@b.com', username: 'Alice', password: 'password' });
     await login({ email: 'a@b.com', password: 'password' });
-    await refreshToken({ refresh_token: 'refresh' });
     await getCurrentUser();
 
+    // refreshToken intentionally bypasses apiClient (see auth.ts): it must
+    // not attach the stale access token; its fetch behavior is covered in
+    // audit-batch5-client-auth.test.tsx.
     expect(apiClient.post).toHaveBeenNthCalledWith(1, '/auth/register', expect.any(Object));
     expect(apiClient.post).toHaveBeenNthCalledWith(2, '/auth/login', expect.any(Object));
-    expect(apiClient.post).toHaveBeenNthCalledWith(3, '/auth/refresh', { refresh_token: 'refresh' });
     expect(apiClient.get).toHaveBeenCalledWith('/auth/me');
   });
 });

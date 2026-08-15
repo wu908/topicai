@@ -22,12 +22,12 @@ export interface HistoryImportResult {
   id: string;
   success_count: number;
   failure_count: number;
-  item_results: Array<{
-    index: number;
-    status: 'imported' | 'duplicate' | 'failed';
-    note_id?: string;
-    error?: string;
-  }>;
+  /** Discriminated union: each status pins its own payload fields. */
+  item_results: Array<
+    | { index: number; status: 'imported'; note_id: string }
+    | { index: number; status: 'duplicate'; note_id?: string }
+    | { index: number; status: 'failed'; error: string }
+  >;
 }
 
 export interface ProfileAttribute {
@@ -51,8 +51,15 @@ export interface GrowthCreatorProfile {
     voice_traits: ProfileAttribute[];
     avoid_traits: ProfileAttribute[];
   };
-  rejected_attributes: Array<ProfileAttribute & { field: string }>;
+  rejected_attributes: Array<ProfileAttribute & { field: RejectableProfileField }>;
 }
+
+export type RejectableProfileField =
+  | 'niche'
+  | 'target_audience'
+  | 'growth_goal'
+  | 'content_pillar'
+  | 'voice_trait';
 
 export interface GrowthCreatorProfileUpdate {
   niche: string;
@@ -61,7 +68,7 @@ export interface GrowthCreatorProfileUpdate {
   content_pillars: string[];
   voice_traits: string[];
   avoid_traits: string[];
-  rejected: Array<{ field: 'niche' | 'target_audience' | 'growth_goal' | 'content_pillar' | 'voice_trait'; value: string }>;
+  rejected: Array<{ field: RejectableProfileField; value: string }>;
   confirm: boolean;
   expected_version: number;
 }

@@ -12,6 +12,24 @@ class LocalObjectStorage:
             configured or Path(__file__).resolve().parents[2] / "data" / "objects"
         ).resolve()
 
+    @staticmethod
+    def _require_safe_segments(*values: str) -> None:
+        """Reject anything that is not a single, literal path segment.
+
+        Empty strings, ``.``/``..``, dot-prefixed names and any value
+        containing a separator are refused. Without this guard a
+        caller-supplied ``token``/``owner_id`` can collapse a derived path
+        back onto an ancestor directory (e.g. ``.deleting/..`` resolves to
+        the storage root itself, which still passes the containment check
+        in :meth:`_resolve`), or collide with the reserved quarantine
+        namespace: an owner id of ``.deleting`` would write into the
+        quarantine tree and ``quarantine_owner`` would relocate the whole
+        namespace, including other owners' pending-deletion data.
+        """
+        for value in values:
+            if not value or value.startswith(".") or Path(value).name != value:
+                raise ValueError("storage path must use single, literal path segments")
+
     def _resolve(self, path: str) -> Path:
         candidate = (self.root / path).resolve()
         try:
@@ -21,8 +39,7 @@ class LocalObjectStorage:
         return candidate
 
     async def put(self, owner_id: str, filename: str, data: bytes) -> str:
-        if any(value in {"", ".", ".."} or Path(value).name != value for value in (owner_id, filename)):
-            raise ValueError("storage path must use a single owner and filename segment")
+        self._require_safe_segments(owner_id, filename)
         relative = Path(owner_id) / filename
         target = self._resolve(str(relative))
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -39,11 +56,7 @@ class LocalObjectStorage:
             target.unlink()
 
     async def quarantine_owner(self, owner_id: str, token: str) -> bool:
-        if any(
-            value in {"", ".", ".."} or Path(value).name != value
-            for value in (owner_id, token)
-        ):
-            raise ValueError("storage quarantine requires safe path segments")
+        self._require_safe_segments(owner_id, token)
         source = self._resolve(owner_id)
         if not source.is_dir():
             return False
@@ -53,6 +66,7 @@ class LocalObjectStorage:
         return True
 
     async def restore_owner(self, owner_id: str, token: str) -> None:
+        self._require_safe_segments(owner_id, token)
         source = self._resolve(str(Path(".deleting") / token / owner_id))
         if not source.exists():
             return
@@ -62,6 +76,7 @@ class LocalObjectStorage:
         source.replace(target)
 
     async def purge_quarantine(self, token: str) -> None:
+        self._require_safe_segments(token)
         target = self._resolve(str(Path(".deleting") / token))
         if target.exists():
             shutil.rmtree(target)

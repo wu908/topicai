@@ -1,12 +1,13 @@
 import { expect, it, vi } from 'vitest';
 
-const createApiClient = vi.hoisted(() => vi.fn(() => ({ get: vi.fn(), post: vi.fn() })));
+const baseClient = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }));
 
-vi.mock('@/services/api/client', () => ({ createApiClient }));
+vi.mock('@/services/api/client', () => ({ default: baseClient }));
 
 import v2Client from '../client';
 
-it('creates the shared client at the v2 API boundary', () => {
-  expect(createApiClient).toHaveBeenCalledWith('/api/v2');
-  expect(v2Client).toBe(createApiClient.mock.results[0].value);
+it('re-exports the shared base client instead of building a second singleton', () => {
+  // Audit e54a2643 medium: two independent singletons built from the same
+  // factory would diverge on any client-level state; share one instance.
+  expect(v2Client).toBe(baseClient);
 });

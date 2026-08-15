@@ -24,13 +24,17 @@ const LazyRoute = ({ children }: { children: React.ReactNode }) => (
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const isLoading = useAuthStore((state) => state.isLoading);
   const user = useAuthStore((state) => state.user);
   const fetchCurrentUser = useAuthStore((state) => state.fetchCurrentUser);
 
   React.useEffect(() => {
-    if (isAuthenticated && !user) void fetchCurrentUser().catch(() => undefined);
+    if (isAuthenticated && !user) void Promise.resolve(fetchCurrentUser()).catch(() => undefined);
   }, [fetchCurrentUser, isAuthenticated, user]);
 
+  // Wait for session hydration before deciding — otherwise a verified user
+  // flashes the login redirect / empty shell for a moment.
+  if (isLoading) return <LoadingFallback />;
   if (!isAuthenticated) return <Navigate to="/login" replace />;
   return <AppLayout>{children}</AppLayout>;
 };
@@ -57,7 +61,9 @@ export default function App() {
             <Route path="/onboarding/directions" element={protectedPage(<StarterPage />)} />
             <Route path="/onboarding/sprint" element={protectedPage(<StarterPage />)} />
             <Route path="/onboarding/growth" element={protectedPage(<GrowthOnboardingPage />)} />
-            <Route path="*" element={protectedPage(<NotFoundPage />)} />
+            {/* 404 stays outside the auth guard: unknown paths should show
+                the not-found page, not redirect unauthenticated visitors. */}
+            <Route path="*" element={<LazyRoute><NotFoundPage /></LazyRoute>} />
           </Routes>
         </BrowserRouter>
       </ErrorBoundary>

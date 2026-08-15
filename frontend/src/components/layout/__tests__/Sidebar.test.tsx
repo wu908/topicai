@@ -68,4 +68,31 @@ describe('Sidebar', () => {
     expect(mockAuthState.logout).toHaveBeenCalledTimes(1);
     expect(screen.getByTestId('current-path')).toHaveTextContent('/login');
   });
+
+  it('still navigates to /login when logout throws', () => {
+    mockAuthState.logout.mockImplementationOnce(() => {
+      throw new Error('storage unavailable');
+    });
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Sidebar />
+        <PathDisplay />
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: '退出登录' }));
+    // Audit e54a2643 medium: a throwing logout must not strand the user.
+    expect(screen.getByTestId('current-path')).toHaveTextContent('/login');
+  });
+
+  // 审计 e54a2643 medium：激活态应由 NavLink 自身的匹配结果驱动，
+  // 手写 isActive 与 NavLink 的 end 语义可能分叉。嵌套路由同样命中父节点。
+  it('marks the matching section active on nested routes', () => {
+    render(
+      <MemoryRouter initialEntries={['/content/p1']}>
+        <Sidebar />
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole('link', { name: '内容' })).toHaveClass('active');
+    expect(screen.getByRole('link', { name: '今日' })).not.toHaveClass('active');
+  });
 });

@@ -26,10 +26,23 @@ export async function login(data: LoginRequest): Promise<ApiResponse<LoginRespon
   return response.data;
 }
 
-/** Refresh the access token */
+/** Refresh the access token.
+ *
+ * Deliberately bypasses apiClient: the refresh call must not attach the
+ * (possibly stale) access token, and a 401 here must surface as a
+ * recoverable error instead of triggering the client's force-logout path.
+ */
 export async function refreshToken(data: RefreshTokenRequest): Promise<ApiResponse<RefreshTokenResponse>> {
-  const response = await apiClient.post<ApiResponse<RefreshTokenResponse>>('/auth/refresh', data);
-  return response.data;
+  const baseUrl = import.meta.env.VITE_API_BASE_URL || '';
+  const response = await fetch(`${baseUrl}/api/v2/auth/refresh`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) {
+    throw new Error(`Token refresh failed with status ${response.status}`);
+  }
+  return response.json();
 }
 
 /** Get current authenticated user */
