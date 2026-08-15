@@ -603,4 +603,122 @@ describe('ContentPage', () => {
     ).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '确认回溯分类' })).not.toBeInTheDocument();
   });
+
+  // 审计 e54a2643 medium：StageAction 的 switch 没有 default 分支，服务端返回
+  // 未知 next_action 时组件返回 undefined，React 直接抛错。必须安全渲染。
+  it('renders safely when the server returns an unknown next_action', async () => {
+    api.listProjects.mockResolvedValue({ items: [project], total: 1 });
+    api.getCalibrationWorkspace.mockResolvedValue({
+      ...workspace,
+      next_action: 'future_stage' as never,
+      orchestrated_action: undefined,
+    });
+    renderPage('/content/p1');
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: '刷新' })).toBeInTheDocument(),
+    );
+  });
+
+  // 审计 e54a2643 medium：intentCopy[intent] 无守卫，服务端返回未知意图时
+  // copy 为 undefined，读取 copy.audience 崩溃。修复后回退默认意图文案，
+  // “希望读者发生的变化”只把默认文案作为占位提示，不写进输入框值。
+  it('renders the intent confirmation safely for an unknown intent value', async () => {
+    const draft = {
+      ...legacyPublishedProject,
+      status: 'preparing' as const,
+      intent_status: 'candidate' as const,
+      content_intent: 'inspire' as never,
+    };
+    api.listProjects.mockResolvedValue({ items: [draft], total: 1 });
+    api.getCalibrationWorkspace.mockResolvedValue(intentActionWorkspace(draft));
+    renderPage('/content/p1');
+
+    expect(
+      await screen.findByRole('heading', { name: '这条内容想让读者发生什么变化？' }),
+    ).toBeInTheDocument();
+    const field = screen.getByLabelText('希望读者发生的变化') as HTMLTextAreaElement;
+    expect(field.value).toBe('');
+    expect(field.placeholder).toBe('读者看完后能开始解决一个具体问题');
+    expect(screen.getByRole('button', { name: '确认这个方向' })).toBeEnabled();
+  });
+
+  // 审计 e54a2643 medium：selectedFollowUp 只在挂载时惰性初始化。命令后
+  // runCommand 刷新不会重挂载面板（不走 loading），若服务端修正了
+  // follow_up_options，选择框会停在已不存在于选项列表的旧值上。
+  it('keeps the follow-up selection valid when options change after a command', async () => {
+    api.listProjects.mockResolvedValue({ items: [project], total: 1 });
+    // gate 直接挂在 action 上，保证 IntentActionPanel 的 key 在刷新前后不变，
+    // 面板不会重挂载——这正是惰性初始化失同步的前提。
+    const confirmLearningAction = {
+      ...workspace.orchestrated_action!,
+      id: 'confirm-learning-action',
+      action_type: 'confirm_learning',
+      human_gate_type: 'long_term_learning',
+      human_gate: {
+        id: 'learning-gate',
+        gate_type: 'long_term_learning',
+        prompt: 'Confirm unknown outcome',
+        payload: {},
+        status: 'pending',
+        version: 1,
+      },
+    };
+    const reviewWithOptions = (options: Array<{ action: string; label: string }>) => ({
+      ...workspace,
+      next_action: 'create_observation',
+      orchestrated_action: confirmLearningAction,
+      latest_blind_review: {
+        id: 'br-late',
+        calibration_state: 'insufficient',
+        contamination_status: 'clean',
+        eligible_for_rule_upgrade: false,
+        comparison: {
+          expected_behavior_comparisons: [],
+          intent_review: {
+            intent: 'solve',
+            intent_label: '解决',
+            sample_count: 1,
+            observed_facts: [],
+            possible_causes: ['结果数据不可用，无法判断发布意图。'],
+            continue_item: '不据此继续。',
+            stop_item: '不据此停止。',
+            experiment_item: '下一篇只改变一个变量。',
+            confirmation_required: true,
+            long_term_write_allowed: false,
+            intent_outcome: 'unknown',
+            result_availability: 'unavailable',
+            follow_up_options: options,
+          },
+        },
+      },
+    });
+    api.getCalibrationWorkspace.mockResolvedValue(reviewWithOptions([
+      { action: 'collect_more_evidence', label: '收集其他证据' },
+      { action: 'repeat_observation', label: '重试观察' },
+    ] as never));
+    renderPage('/content/p1');
+
+    expect(await screen.findByRole('combobox', { name: '下一步' }))
+      .toHaveTextContent('收集其他证据');
+
+    // 命令成功后服务端修正了可选下一步，刷新回来的选项集合变了。
+    api.getCalibrationWorkspace.mockResolvedValue(reviewWithOptions([
+      { action: 'run_bounded_experiment', label: '进行有界实验' },
+      { action: 'repeat_observation', label: '重试观察' },
+    ] as never));
+    fireEvent.click(screen.getByRole('button', { name: '确认未知结果和下一步' }));
+
+    await waitFor(() => expect(api.decideHumanGate).toHaveBeenCalledWith(
+      'learning-gate',
+      expect.objectContaining({
+        decision_payload: expect.objectContaining({ review_follow_up: 'collect_more_evidence' }),
+      }),
+    ));
+    await waitFor(() =>
+      // 选择框不能停在已不存在的旧选项上，必须同步到新的首个选项。
+      expect(screen.getByRole('combobox', { name: '下一步' }))
+        .toHaveTextContent('进行有界实验'),
+    );
+  });
 });

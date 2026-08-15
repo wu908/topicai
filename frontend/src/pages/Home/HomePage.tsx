@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowForward, AutoAwesomeOutlined, Check, Pause } from '@mui/icons-material';
 import { Alert, Button, Chip, CircularProgress, Stack, TextField } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
@@ -103,51 +103,68 @@ export default function HomePage() {
   const [showReject, setShowReject] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
 
+  // 审计 e54a2643 medium：卸载后到达的响应不能再写入状态，
+  // 并发的后发请求不能被先发响应覆盖。
+  const requestTokenRef = useRef(0);
+  useEffect(() => () => {
+    requestTokenRef.current = -1;
+  }, []);
+
   const load = useCallback(async () => {
+    const token = (requestTokenRef.current += 1);
     setLoading(true);
     setError(null);
     try {
       await fetchCurrentUser();
-      setData(await getTodayWorkspace());
+      const next = await getTodayWorkspace();
+      if (requestTokenRef.current !== token) return;
+      setData(next);
     } catch (err) {
+      if (requestTokenRef.current !== token) return;
       setError(extractErrorMessage(err, '今日行动加载失败，请稍后重试'));
     } finally {
-      setLoading(false);
+      if (requestTokenRef.current === token) setLoading(false);
     }
   }, [fetchCurrentUser]);
+
+  // 审计 e54a2643 batch C：暂缓/拒绝成功后静默刷新工作台快照，不闪 loading。
+  const refresh = useCallback(async () => {
+    const token = (requestTokenRef.current += 1);
+    try {
+      const next = await getTodayWorkspace();
+      if (requestTokenRef.current !== token) return;
+      setData(next);
+    } catch {
+      // 刷新失败时保留当前视图，操作本身已成功。
+    }
+  }, []);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(timer);
   }, [load]);
 
-  const startAction = () => {
-    const action = data?.action;
-    if (!action) return;
-    if (action.expected_state_change.source === 'series_opportunity') {
-      navigate('/opportunities');
-      return;
-    }
-    if (action.action_type === 'create_project') {
-      navigate(safeInternalPath(action.fallback_action.path));
-      return;
-    }
-    if (action.project_id) {
-      navigate(`/content/${action.project_id}`);
-      return;
-    }
-    navigate(safeInternalPath(action.fallback_action.path));
+  // 审计 e54a2643 batch C：主按钮与「手动继续」必须解析到同一目的地；
+  // 此前两套逻辑对 create_project 行动会跳到不同页面。
+  const resolveActionPath = (current: IntentAction | null | undefined): string => {
+    if (!current) return '/content';
+    if (current.expected_state_change.source === 'series_opportunity') return '/opportunities';
+    if (current.action_type === 'create_project') return safeInternalPath(current.fallback_action.path);
+    if (current.project_id) return `/content/${current.project_id}`;
+    return safeInternalPath(current.fallback_action.path);
   };
 
-  const actionPath = data?.action?.expected_state_change.source === 'series_opportunity'
-    ? '/opportunities'
-    : data?.action?.project_id
-      ? `/content/${data.action.project_id}`
-      : safeInternalPath(data?.action?.fallback_action.path);
+  const startAction = () => {
+    if (!data?.action) return;
+    navigate(resolveActionPath(data.action));
+  };
+
+  const actionPath = resolveActionPath(data?.action);
 
   const deferAction = async () => {
     if (!data?.action) return;
     setBusy(true);
+    setError(null);
     try {
       await respondToAction(data.action.id, {
         decision: 'defer',
@@ -156,6 +173,7 @@ export default function HomePage() {
         idempotency_key: `today-defer-${data.action.id}-${data.action.version}`,
       });
       setDeferred(true);
+      await refresh();
     } catch (err) {
       setError(extractErrorMessage(err, '暂缓失败，请重试'));
     } finally {
@@ -166,6 +184,7 @@ export default function HomePage() {
   const rejectAction = async () => {
     if (!data?.action || !rejectReason.trim()) return;
     setBusy(true);
+    setError(null);
     try {
       await respondToAction(data.action.id, {
         decision: 'reject',
@@ -175,6 +194,7 @@ export default function HomePage() {
       });
       setRejected(true);
       setShowReject(false);
+      await refresh();
     } catch (err) {
       setError(extractErrorMessage(err, '停止建议失败，请重试'));
     } finally {
@@ -195,7 +215,7 @@ export default function HomePage() {
   const isCancelled = rejected || action?.status === 'cancelled';
   const terminalReason = rejected
     ? rejectReason.trim()
-    : action?.last_event?.payload.reason;
+    : action?.last_event?.payload?.reason;
   return (
     <PageContainer
       title={`你好，${user?.username || '创作者'}`}

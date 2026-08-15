@@ -210,14 +210,23 @@ function CreatorRuleList({
     conflict: CreatorRuleConflict;
   } | null>(null);
   const [scopeDraft, setScopeDraft] = useState({ experiment: '', audience: '', format: '' });
+  // 审计 e54a2643 medium：记录打开对话框时的种子值，提交时只把用户真正
+  // 改动过的字段写入，未触碰的字段保留服务端最新 scope。
+  const [scopeSeed, setScopeSeed] = useState({ experiment: '', audience: '', format: '' });
 
   const openNarrowing = (rule: CreatorRule, conflict: CreatorRuleConflict) => {
     const scope = rule.active_version?.scope ?? {};
-    setScopeDraft({
-      experiment: String(scope.experiment ?? scope.experiment_item ?? ''),
-      audience: String(scope.audience ?? scope.target_audience ?? ''),
-      format: String(scope.format ?? scope.content_format ?? ''),
-    });
+    // 审计 e54a2643 medium：scope 值是 unknown，只把原始类型写入输入框，
+    // 避免 '[object Object]' 被回写进规则范围。
+    const asText = (value: unknown) =>
+      (typeof value === 'string' || typeof value === 'number' ? String(value) : '');
+    const seed = {
+      experiment: asText(scope.experiment ?? scope.experiment_item),
+      audience: asText(scope.audience ?? scope.target_audience),
+      format: asText(scope.format ?? scope.content_format),
+    };
+    setScopeDraft(seed);
+    setScopeSeed(seed);
     setNarrowing({ rule, conflict });
   };
 
@@ -230,11 +239,13 @@ function CreatorRuleList({
         {rules.map((rule) => (
           <Paper key={rule.id} component="article" variant="outlined" sx={{ p: 2, borderRadius: '8px', borderColor: 'var(--v3-border)', boxShadow: 'none' }}>
             <Typography variant="caption" color="text.secondary">{rule.content_intent === 'solve' ? '解决' : rule.content_intent === 'share' ? '分享' : '记录'} · 规则版本 {rule.version}</Typography>
-            {rule.versions.filter((version) => version.status === 'proposed').map((version) => (
+            {/* 审计 e54a2643 batch C：versions/source_observation_ids 在旧响应
+                里可能缺失，防御性兜底避免整个列表渲染崩溃。 */}
+            {(rule.versions ?? []).filter((version) => version.status === 'proposed').map((version) => (
               <Box key={version.id} mt={1.5} sx={{ borderTop: '1px solid var(--v3-border-light)', pt: 1.5 }}>
                 <Typography fontWeight={600}>待确认经验候选</Typography>
                 <Typography variant="body2" mt={0.5}>{version.statement}</Typography>
-                <Typography variant="caption" color="text.secondary">来自 {version.source_observation_ids.length} 条可比较观察</Typography>
+                <Typography variant="caption" color="text.secondary">来自 {(version.source_observation_ids ?? []).length} 条可比较观察</Typography>
                 {version.conflicts?.length ? (
                   <Alert severity="warning" sx={{ mt: 1 }}>
                     发现同一意图下的适用范围冲突，请先比较已有经验。
@@ -253,7 +264,8 @@ function CreatorRuleList({
                 这条经验与同一意图下的另一条经验适用范围重叠。确认前请比较两条规则，避免把不同结论同时用于同一类内容。
                 <Box component="ul" sx={{ m: '6px 0 0', pl: 2.5 }}>
                   {rule.conflicts.map((conflict) => (
-                    <li key={conflict.rule_id}>{conflict.statement}</li>
+                    // 审计 e54a2643 medium：rule_id 不保证唯一，叠加版本 id。
+                    <li key={`${conflict.rule_id}-${conflict.active_version_id}`}>{conflict.statement}</li>
                   ))}
                 </Box>
               </Alert>
@@ -262,7 +274,7 @@ function CreatorRuleList({
               ? rule.conflicts
                   ?.filter((conflict) => conflict.status === 'open')
                   .map((conflict) => (
-                    <Stack key={`resolution-${conflict.rule_id}`} direction={{ xs: 'column', sm: 'row' }} spacing={1} mt={1.5}>
+                    <Stack key={`resolution-${conflict.rule_id}-${conflict.active_version_id}`} direction={{ xs: 'column', sm: 'row' }} spacing={1} mt={1.5}>
                       <Button size="small" variant="outlined" disabled={busy} onClick={() => onResolveConflict(rule, conflict, 'keep_exception')}>
                         保留为例外
                       </Button>
@@ -281,9 +293,9 @@ function CreatorRuleList({
                 <Typography variant="body2" mt={0.5}>{rule.active_version.statement}</Typography>
               </Box>
             ) : null}
-            {onRollbackRule && rule.versions.some((version) => version.status === 'retired') ? (
+            {onRollbackRule && (rule.versions ?? []).some((version) => version.status === 'retired') ? (
               <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} flexWrap="wrap" useFlexGap mt={1.5}>
-                {rule.versions.filter((version) => version.status === 'retired').map((version) => (
+                {(rule.versions ?? []).filter((version) => version.status === 'retired').map((version) => (
                   <Button key={version.id} size="small" variant="outlined" color="inherit" disabled={busy} onClick={() => onRollbackRule(rule, version)}>
                     回滚到版本 {version.version_number}
                   </Button>
@@ -312,11 +324,18 @@ function CreatorRuleList({
             disabled={!narrowing || !Object.values(scopeDraft).some((value) => value.trim()) || !onResolveConflict}
             onClick={() => {
               if (!narrowing || !onResolveConflict) return;
-              onResolveConflict(narrowing.rule, narrowing.conflict, 'narrow_scope', {
-                ...(narrowing.rule.active_version?.scope ?? {}),
-                ...(scopeDraft.experiment.trim() ? { experiment: scopeDraft.experiment.trim() } : {}),
-                ...(scopeDraft.audience.trim() ? { audience: scopeDraft.audience.trim() } : {}),
-                ...(scopeDraft.format.trim() ? { format: scopeDraft.format.trim() } : {}),
+              // 审计 e54a2643 medium：对话框打开期间 rules 可能已刷新，
+              // 以最新规则为基准提交，避免回写过期的 scope 快照。
+              const currentRule = rules.find((item) => item.id === narrowing.rule.id) ?? narrowing.rule;
+              const scopePatch: Record<string, string> = {};
+              (['experiment', 'audience', 'format'] as const).forEach((field) => {
+                if (scopeDraft[field] !== scopeSeed[field] && scopeDraft[field].trim()) {
+                  scopePatch[field] = scopeDraft[field].trim();
+                }
+              });
+              onResolveConflict(currentRule, narrowing.conflict, 'narrow_scope', {
+                ...(currentRule.active_version?.scope ?? {}),
+                ...scopePatch,
               });
               setNarrowing(null);
             }}

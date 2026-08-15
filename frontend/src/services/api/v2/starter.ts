@@ -34,7 +34,7 @@ export const generateStarterDirections = (input: DirectionGenerateInput) =>
 export const selectStarterDirection = (directionId: string, input: DirectionSelectInput) =>
   getData(
     v2Client.post<ApiEnvelope<StarterWorkspace>>(
-      `/starter/directions/${directionId}:select`,
+      `/starter/directions/${encodeURIComponent(directionId)}:select`,
       input,
     ),
   );
@@ -42,7 +42,7 @@ export const selectStarterDirection = (directionId: string, input: DirectionSele
 export const reviewStarterSprint = (sprintId: string, input: StarterReviewInput) =>
   getData(
     v2Client.post<ApiEnvelope<StarterWorkspace>>(
-      `/starter/sprints/${sprintId}:review`,
+      `/starter/sprints/${encodeURIComponent(sprintId)}:review`,
       input,
     ),
   );

@@ -67,6 +67,7 @@ describe('ProjectWorkspace', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   // ADR 0002：发布意图为空的历史内容，表头不能声称它是一条“解决”内容。
@@ -605,5 +606,67 @@ describe('ProjectWorkspace', () => {
       contentIntent: 'solve',
       contentFormat: 'vlog_plan',
     });
+  });
+
+  // 审计 e54a2643 critical：编辑器状态只在挂载时初始化。切换项目或保存后
+  // 基线版本变化时，旧文本会被自动保存写到新版本键上，甚至覆盖更新的服务端版本。
+  it('resyncs editor text when the workspace switches to another base version', () => {
+    const { rerender } = render(
+      <ProjectWorkspace
+        workspace={workspace}
+        busy={false}
+        actionPanel={<div>当前阶段动作</div>}
+        onBack={vi.fn()}
+        onRefresh={vi.fn()}
+        onSaveVersion={vi.fn().mockResolvedValue(true)}
+        onTransition={vi.fn()}
+      />,
+    );
+    expect(screen.getByLabelText('当前内容标题')).toHaveValue('第一版真实经验');
+
+    const refreshed: CalibrationWorkspace = {
+      ...workspace,
+      current_version: {
+        id: 'v2',
+        title: '第二版标题',
+        body_text: '第二版正文。',
+        version_number: 2,
+      },
+    };
+    rerender(
+      <ProjectWorkspace
+        workspace={refreshed}
+        busy={false}
+        actionPanel={<div>当前阶段动作</div>}
+        onBack={vi.fn()}
+        onRefresh={vi.fn()}
+        onSaveVersion={vi.fn().mockResolvedValue(true)}
+        onTransition={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByLabelText('当前内容标题')).toHaveValue('第二版标题');
+    expect(screen.getByLabelText('当前内容正文')).toHaveValue('第二版正文。');
+  });
+
+  // 审计 e54a2643 medium：编辑器状态标签硬编码“已保存”，存在未保存修改时
+  // 会误导用户。应由 hasUnsavedChanges 驱动。
+  it('marks the editor as unsaved while local edits diverge from the baseline', () => {
+    renderWorkspace();
+    expect(screen.getByText('已保存')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('当前内容标题'), {
+      target: { value: '改过的标题' },
+    });
+
+    expect(screen.getByText('未保存')).toBeInTheDocument();
+    expect(screen.queryByText('已保存')).not.toBeInTheDocument();
+  });
+
+  // 审计 e54a2643 medium：navigator.onLine 在状态初始化器里直接读取，
+  // navigator 不可用的环境下会抛 TypeError。需要守卫。
+  it('renders when navigator is unavailable', () => {
+    vi.stubGlobal('navigator', undefined);
+    expect(() => renderWorkspace()).not.toThrow();
   });
 });

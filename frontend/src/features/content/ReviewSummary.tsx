@@ -42,8 +42,11 @@ export default function ReviewSummary({ workspace }: { workspace: CalibrationWor
       </Typography>
       <Alert severity={severity}>{title}</Alert>
       <Stack divider={<Divider flexItem />} mt={2}>
-        {review.comparison.expected_behavior_comparisons.map((item) => (
-          <Box key={item.claim} py={1.25} display="flex" justifyContent="space-between" gap={2}>
+        {/* 审计 e54a2643 batch C：comparison 在 insufficient 等状态下可能缺失，
+            防御性兜底避免整个复盘区块渲染崩溃。 */}
+        {(review.comparison?.expected_behavior_comparisons ?? []).map((item, index) => (
+          // 审计 e54a2643 medium：claim 不保证唯一，叠加 index 避免 key 碰撞。
+          <Box key={`${item.claim}-${index}`} py={1.25} display="flex" justifyContent="space-between" gap={2}>
             <Box>
               <Typography variant="body2" fontWeight={600}>
                 {behaviorLabels[item.claim] ?? item.claim}

@@ -85,4 +85,24 @@ describe('v2 onboarding and starter API', () => {
     expect(v2Client.post).toHaveBeenNthCalledWith(3, '/starter/directions/d1:select', expect.any(Object));
     expect(v2Client.post).toHaveBeenNthCalledWith(4, '/starter/sprints/s1:review', expect.any(Object));
   });
+
+  it('encodes starter path parameters with special characters', async () => {
+    // Audit e54a2643 medium: ids containing '/', '?', '#' must not break
+    // the path when interpolated into the endpoint.
+    await selectStarterDirection('a/b#c', { expected_direction_version: 1, idempotency_key: 'k' });
+    await reviewStarterSprint('s p?x', {
+      observed_summary: 'Observed',
+      blocker_reasons: [],
+      next_topics: [],
+      expected_sprint_version: 1,
+      idempotency_key: 'k2',
+    });
+
+    expect(v2Client.post).toHaveBeenNthCalledWith(
+      1, `/starter/directions/${encodeURIComponent('a/b#c')}:select`, expect.any(Object),
+    );
+    expect(v2Client.post).toHaveBeenNthCalledWith(
+      2, `/starter/sprints/${encodeURIComponent('s p?x')}:review`, expect.any(Object),
+    );
+  });
 });

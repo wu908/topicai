@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Alert, Button, Chip, CircularProgress, MenuItem, TextField } from '@mui/material';
 import { ArrowForward, Check, Close } from '@mui/icons-material';
@@ -52,6 +52,24 @@ type TimelinessFilter = 'all' | NonNullable<ContentOpportunity['dimensions']>['t
 
 const makeKey = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
+// 审计 e54a2643 security：来源 URL 由用户提交，javascript:/data: 会在点击时
+// 于当前源执行。只允许 http/https 成为链接，其他降级为纯文本保留可见。
+function isSafeExternalUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url, window.location.href);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+function SourceLink({ url, label }: { url: string; label: string }) {
+  if (!isSafeExternalUrl(url)) {
+    return <span>{label}（不可信链接，已禁用跳转）：{url}</span>;
+  }
+  return <a href={url} target="_blank" rel="noreferrer">{label}</a>;
+}
+
 function OpportunityRow({ item, onChanged }: {
   item: ContentOpportunity;
   onChanged: () => Promise<void>;
@@ -68,16 +86,26 @@ function OpportunityRow({ item, onChanged }: {
   const [publishedAt, setPublishedAt] = useState(item.source_published_at ?? '');
   const [sourceAuthority, setSourceAuthority] = useState(item.source_authority ?? '');
   const expiredSourceNeedsConfirmation = item.required_action?.action_type === 'source_expired';
-  const needsSourceVerification = item.required_action !== null;
+  // 审计 e54a2643 batch C：required_action 缺失时可能是 undefined 而非 null，
+  // 用真值判断而不是严格比较。
+  const needsSourceVerification = Boolean(item.required_action);
   const [timeliness, setTimeliness] = useState<'current' | 'expiring' | 'expired'>(
     expiredSourceNeedsConfirmation ? 'expired' : 'current',
   );
   const hasDimensions = Object.keys(item.dimensions ?? {}).length > 0;
+  // 审计 e54a2643 medium：幂等键按操作稳定——瞬时失败后的重试复用
+  // 同一把键供服务端去重，成功后才轮换。
+  const decideKeyRef = useRef<{ signature: string; key: string } | null>(null);
+  const verifyKeyRef = useRef<{ signature: string; key: string } | null>(null);
 
   const decide = async (decision: 'accept' | 'save' | 'reject') => {
     setBusy(true);
     setError(null);
     try {
+      const signature = `${decision}:v${item.version}`;
+      if (!decideKeyRef.current || decideKeyRef.current.signature !== signature) {
+        decideKeyRef.current = { signature, key: makeKey(`opportunity-${decision}-${item.id}`) };
+      }
       await decideContentOpportunity(item.id, {
         decision,
         confirmed_title: decision === 'accept' ? title.trim() : undefined,
@@ -87,8 +115,9 @@ function OpportunityRow({ item, onChanged }: {
           : undefined,
         reason: decision === 'save' ? '稍后再评估' : decision === 'reject' ? '这次不继续这个方向' : undefined,
         expected_opportunity_version: item.version,
-        idempotency_key: makeKey(`opportunity-${decision}-${item.id}`),
+        idempotency_key: decideKeyRef.current.key,
       });
+      decideKeyRef.current = null;
       await onChanged();
     } catch (err) {
       setError(extractErrorMessage(err, '机会处理失败，请保留当前内容后重试'));
@@ -101,6 +130,11 @@ function OpportunityRow({ item, onChanged }: {
     setBusy(true);
     setError(null);
     try {
+      // 审计 e54a2643 medium：来源核验同样按操作稳定幂等键。
+      const signature = `${verificationStatus}:v${item.version}`;
+      if (!verifyKeyRef.current || verifyKeyRef.current.signature !== signature) {
+        verifyKeyRef.current = { signature, key: makeKey(`opportunity-source-${verificationStatus}-${item.id}`) };
+      }
       await verifyContentOpportunitySource(item.id, {
         verification_status: verificationStatus,
         original_url: verificationStatus === 'verified' ? sourceUrl.trim() : undefined,
@@ -110,8 +144,9 @@ function OpportunityRow({ item, onChanged }: {
         reason: verificationStatus === 'insufficient' ? '暂时无法核验原始来源' : undefined,
         confirmed_by_user: true,
         expected_opportunity_version: item.version,
-        idempotency_key: makeKey(`opportunity-source-${verificationStatus}-${item.id}`),
+        idempotency_key: verifyKeyRef.current.key,
       });
+      verifyKeyRef.current = null;
       await onChanged();
     } catch (err) {
       setError(extractErrorMessage(err, '来源核验失败，请保留当前内容后重试'));
@@ -149,10 +184,10 @@ function OpportunityRow({ item, onChanged }: {
           {source.published_at ? <span> · 发布时间：{source.published_at}</span> : null}
           <span> · 核验：{source.verification_state === 'verified' ? '已核验' : source.verification_state === 'insufficient' ? '不足' : '待核验'}</span>
           {source.rights_note ? <span> · 权利说明：{source.rights_note}</span> : null}
-          {source.url ? <> · <a href={source.url} target="_blank" rel="noreferrer">打开此来源</a></> : null}
+          {source.url ? <> · <SourceLink url={source.url} label="打开此来源" /></> : null}
         </div>
       ))}
-      {item.source_url ? <p className="operations-meta"><a href={item.source_url} target="_blank" rel="noreferrer">查看原始来源</a></p> : null}
+      {item.source_url ? <p className="operations-meta"><SourceLink url={item.source_url} label="查看原始来源" /></p> : null}
       {item.evidence_refs.length ? <p className="operations-meta">证据引用：{item.evidence_refs.join(' · ')}</p> : null}
       {hasDimensions ? <>
         <p className="operations-meta">
@@ -176,8 +211,7 @@ function OpportunityRow({ item, onChanged }: {
               : '来源尚未核验，暂时不能据此创建内容。'}
         </Alert>
       ) : null}
-      {['proposed', 'saved'].includes(item.status) && item.opportunity_type === 'user_source'
-        && needsSourceVerification ? (
+      {['proposed', 'saved'].includes(item.status) && needsSourceVerification ? (
         <div className="operations-form">
           <TextField label="原始链接" value={sourceUrl} onChange={(event) => setSourceUrl(event.target.value)} fullWidth />
           <TextField label="发布时间" value={publishedAt} onChange={(event) => setPublishedAt(event.target.value)} placeholder="2026-07-31T00:00:00Z" fullWidth />
@@ -235,15 +269,26 @@ export default function OpportunitiesPage() {
   const [manualExpiresAt, setManualExpiresAt] = useState('');
   const [submittingManual, setSubmittingManual] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // 审计 e54a2643 medium：手动提交幂等键按载荷稳定，失败重试复用同一把键。
+  const manualKeyRef = useRef<{ signature: string; key: string } | null>(null);
+  // 审计 e54a2643 medium：卸载后到达的响应不能再写入状态。
+  const requestTokenRef = useRef(0);
+  useEffect(() => () => {
+    requestTokenRef.current = -1;
+  }, []);
 
   const load = useCallback(async () => {
+    const token = (requestTokenRef.current += 1);
     setError(null);
     try {
-      setItems((await listContentOpportunities()).items);
+      const next = (await listContentOpportunities()).items;
+      if (requestTokenRef.current !== token) return;
+      setItems(next);
     } catch (err) {
+      if (requestTokenRef.current !== token) return;
       setError(extractErrorMessage(err, '内容机会加载失败'));
     } finally {
-      setLoading(false);
+      if (requestTokenRef.current === token) setLoading(false);
     }
   }, []);
 
@@ -270,14 +315,19 @@ export default function OpportunitiesPage() {
     setSubmittingManual(true);
     setError(null);
     try {
-      const created = await createContentOpportunity({
+      const payload = {
         trigger: manualTrigger,
         pasted_text: manualText.trim(),
         original_url: manualUrl.trim() || undefined,
         authoritative_source: manualAuthority.trim() || undefined,
         expires_at: manualExpiresAt ? new Date(manualExpiresAt).toISOString() : undefined,
-        idempotency_key: makeKey(`manual-opportunity-${manualTrigger}`),
-      });
+      };
+      const signature = JSON.stringify(payload);
+      if (!manualKeyRef.current || manualKeyRef.current.signature !== signature) {
+        manualKeyRef.current = { signature, key: makeKey(`manual-opportunity-${manualTrigger}`) };
+      }
+      const created = await createContentOpportunity({ ...payload, idempotency_key: manualKeyRef.current.key });
+      manualKeyRef.current = null;
       setItems((current) => [created, ...current]);
       setManualText('');
       setManualUrl('');

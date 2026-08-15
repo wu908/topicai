@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   AccountTreeOutlined,
   AddCircleOutline,
@@ -105,6 +105,21 @@ export default function SeriesPanel({
   const [selectedIds, setSelectedIds] = useState<string[]>(() =>
     eligible.map((project) => project.id),
   );
+  // 审计 e54a2643 batch C：selectedIds 只在挂载时播种一次，之后新到达的
+  // 可选项目保持未选中（发现系列永远 disabled），掉出的 id 也会残留。
+  // 只自动选中新出现的项目；用户手动取消的选中不会被重新勾选。
+  const eligibleKey = eligible.map((project) => project.id).join('|');
+  const seenEligibleIds = useRef<Set<string>>(new Set(eligible.map((project) => project.id)));
+  useEffect(() => {
+    const ids = eligibleKey ? eligibleKey.split('|') : [];
+    const seen = seenEligibleIds.current;
+    setSelectedIds((items) => {
+      const kept = items.filter((id) => ids.includes(id));
+      const fresh = ids.filter((id) => !seen.has(id) && !kept.includes(id));
+      return [...kept, ...fresh];
+    });
+    seenEligibleIds.current = new Set(ids);
+  }, [eligibleKey]);
   const [drafts, setDrafts] = useState<
     Record<string, { name: string; promise: string; continuationPrompt: string }>
   >({});
@@ -180,15 +195,18 @@ export default function SeriesPanel({
       )}
 
       {pending.map((item) => {
-        const values = drafts[item.id] ?? {
+        const defaults = {
           name: item.proposed_name,
           promise: item.proposed_promise,
           continuationPrompt: item.proposed_continuation_prompt,
         };
-        const update = (field: keyof typeof values, value: string) =>
+        const values = drafts[item.id] ?? defaults;
+        // 审计 e54a2643 batch C：updater 必须从 prev state 合并，否则会丢失
+        // 同一轮渲染内对另一个字段的更新。
+        const update = (field: keyof typeof defaults, value: string) =>
           setDrafts((items) => ({
             ...items,
-            [item.id]: { ...values, [field]: value },
+            [item.id]: { ...(items[item.id] ?? defaults), [field]: value },
           }));
         const valid = values.name.trim() && values.promise.trim()
           && values.continuationPrompt.trim();
@@ -245,30 +263,36 @@ export default function SeriesPanel({
 
       {confirmed.map((item) => {
         const sourceRef = `creator-series:${item.id}`;
-        const related = opportunities.find((opportunity) => opportunity.source_ref === sourceRef);
+        // 审计 e54a2643 medium：同一系列可能存在多个机会（旧 rejected +
+        // 新 proposed），find 会拿数组顺序决定的任意一条；优先 proposed。
+        const related =
+          opportunities.find(
+            (opportunity) => opportunity.source_ref === sourceRef && opportunity.status === 'proposed',
+          ) ?? opportunities.find((opportunity) => opportunity.source_ref === sourceRef);
         const createdProject = related?.created_project_id
           ? projects.find((project) => project.id === related.created_project_id)
           : undefined;
         const canPrepare = Boolean(onProposeOpportunity) && (!related || related.status === 'rejected'
           || (related.status === 'accepted' && createdProject
             && eligibleStatuses.has(createdProject.status)));
+        const opportunityDefaults = related ? {
+          title: related.proposed_title,
+          audienceChange: related.proposed_audience_change,
+          materials: related.proposed_material_requirements.join('\n'),
+          contentIntent: related.content_intent,
+          contentFormat: related.content_format,
+        } : null;
         const values = related?.status === 'proposed'
-          ? (opportunityDrafts[related.id] ?? {
-            title: related.proposed_title,
-            audienceChange: related.proposed_audience_change,
-            materials: related.proposed_material_requirements.join('\n'),
-            contentIntent: related.content_intent,
-            contentFormat: related.content_format,
-          })
+          ? (opportunityDrafts[related.id] ?? opportunityDefaults)
           : null;
         function updateOpportunity<K extends keyof NonNullable<typeof values>>(
           field: K,
           value: NonNullable<typeof values>[K],
         ) {
-          if (!related || !values) return;
+          if (!related || !opportunityDefaults) return;
           setOpportunityDrafts((items) => ({
             ...items,
-            [related.id]: { ...values, [field]: value },
+            [related.id]: { ...(items[related.id] ?? opportunityDefaults), [field]: value },
           }));
         }
         const materialRequirements = values?.materials

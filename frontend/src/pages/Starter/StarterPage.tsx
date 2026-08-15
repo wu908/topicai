@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Button,
@@ -58,15 +58,25 @@ export default function StarterPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Audit e54a2643 medium: 卸载后到达的响应不能再写入状态。
+  const requestTokenRef = useRef(0);
+  useEffect(() => () => {
+    requestTokenRef.current = -1;
+  }, []);
+
   const load = useCallback(async () => {
+    const token = (requestTokenRef.current += 1);
     setLoading(true);
     setError(null);
     try {
-      setWorkspace(await getStarterWorkspace());
+      const next = await getStarterWorkspace();
+      if (requestTokenRef.current !== token) return;
+      setWorkspace(next);
     } catch (err) {
+      if (requestTokenRef.current !== token) return;
       setError(extractErrorMessage(err, '起步实验加载失败'));
     } finally {
-      setLoading(false);
+      if (requestTokenRef.current === token) setLoading(false);
     }
   }, []);
 
@@ -76,19 +86,25 @@ export default function StarterPage() {
   }, [load]);
 
   const run = async (command: () => Promise<unknown>) => {
+    const token = (requestTokenRef.current += 1);
     setBusy(true);
     setError(null);
     try {
       await command();
-      setWorkspace(await getStarterWorkspace());
+      const next = await getStarterWorkspace();
+      if (requestTokenRef.current !== token) return;
+      setWorkspace(next);
     } catch (err) {
+      if (requestTokenRef.current !== token) return;
       setError(extractErrorMessage(err, '操作没有完成，请保留输入后重试'));
     } finally {
-      setBusy(false);
+      if (requestTokenRef.current === token) setBusy(false);
     }
   };
 
-  if (loading) {
+  // Audit e54a2643 medium: 已有数据时刷新不展示全屏 loading，
+  // 避免表单卸载重挂丢失输入。
+  if (loading && !workspace) {
     return <div className="starter-loading"><CircularProgress size={26} aria-label="加载起步实验" /></div>;
   }
 
@@ -120,7 +136,11 @@ function AssessmentStep({
 }) {
   const existing = workspace?.assessment;
   const [motivation, setMotivation] = useState<StarterAssessmentInput['motivation']>(existing?.motivation ?? 'curious');
-  const [hours, setHours] = useState(existing?.available_hours_per_week ?? 3);
+  // Audit e54a2643: keep the raw text so a cleared field stays editable;
+  // Number('') === NaN used to pass the 0..40 guard and post null.
+  const [hoursText, setHoursText] = useState(String(existing?.available_hours_per_week ?? 3));
+  const hours = Number(hoursText);
+  const hoursValid = hoursText.trim() !== '' && Number.isFinite(hours) && hours >= 0 && hours <= 40;
   const [publish, setPublish] = useState(existing?.publish_commitment ?? true);
   const [acceptExperiment, setAcceptExperiment] = useState(existing?.accept_experiment ?? true);
   const [experiences, setExperiences] = useState(existing?.experience_assets.join('\n') ?? '');
@@ -128,6 +148,9 @@ function AssessmentStep({
   const [skills, setSkills] = useState(existing?.skill_assets.join('\n') ?? '');
   const [privacy, setPrivacy] = useState(existing?.privacy_limits.join('\n') ?? '');
   const hasAsset = [experiences, interests, skills].some((value) => splitItems(value).length > 0);
+  // Audit e54a2643 medium: 幂等键按载荷稳定——失败重试复用同一把键，
+  // 载荷变化或成功后才轮换。
+  const submitKeyRef = useRef<{ signature: string; key: string } | null>(null);
 
   return (
     <section className="starter-section" aria-labelledby="starter-assessment-title">
@@ -145,7 +168,7 @@ function AssessmentStep({
           <MenuItem value="expression">想表达和记录</MenuItem>
           <MenuItem value="other">其他</MenuItem>
         </TextField>
-        <TextField type="number" label="每周可投入小时" value={hours} inputProps={{ min: 0, max: 40 }} onChange={(event) => setHours(Number(event.target.value))} />
+        <TextField type="number" label="每周可投入小时" value={hoursText} inputProps={{ min: 0, max: 40 }} onChange={(event) => setHoursText(event.target.value)} />
       </div>
       <TextField label="你亲自经历过什么" value={experiences} onChange={(event) => setExperiences(event.target.value)} multiline minRows={3} placeholder="每行一条，例如：从零准备转行面试" />
       <TextField label="你愿意持续探索什么" value={interests} onChange={(event) => setInterests(event.target.value)} multiline minRows={3} placeholder="每行一条，例如：低成本健康饮食" />
@@ -158,18 +181,25 @@ function AssessmentStep({
       <Button
         variant="contained"
         startIcon={<ArrowForward />}
-        disabled={busy || hours < 0 || hours > 40}
-        onClick={() => void run(() => submitStarterAssessment({
-          motivation,
-          available_hours_per_week: hours,
-          publish_commitment: publish,
-          accept_experiment: acceptExperiment,
-          experience_assets: splitItems(experiences),
-          interest_assets: splitItems(interests),
-          skill_assets: splitItems(skills),
-          privacy_limits: splitItems(privacy),
-          idempotency_key: makeKey('starter-assessment'),
-        }))}
+        disabled={busy || !hoursValid}
+        onClick={() => void run(async () => {
+          const payload = {
+            motivation,
+            available_hours_per_week: hours,
+            publish_commitment: publish,
+            accept_experiment: acceptExperiment,
+            experience_assets: splitItems(experiences),
+            interest_assets: splitItems(interests),
+            skill_assets: splitItems(skills),
+            privacy_limits: splitItems(privacy),
+          };
+          const signature = JSON.stringify(payload);
+          if (!submitKeyRef.current || submitKeyRef.current.signature !== signature) {
+            submitKeyRef.current = { signature, key: makeKey('starter-assessment') };
+          }
+          await submitStarterAssessment({ ...payload, idempotency_key: submitKeyRef.current.key });
+          submitKeyRef.current = null;
+        })}
       >
         {publish && acceptExperiment && hours > 0 && hasAsset ? '生成实验方向' : '保存评估'}
       </Button>
@@ -179,12 +209,21 @@ function AssessmentStep({
 
 function DirectionStep({ workspace, busy, run }: { workspace: StarterWorkspace; busy: boolean; run: (command: () => Promise<unknown>) => Promise<void> }) {
   const assessment = workspace.assessment;
+  const generateKeyRef = useRef<{ signature: string; key: string } | null>(null);
   if (!assessment) return null;
   if (!workspace.candidates.length) {
     return (
       <section className="starter-section" aria-labelledby="starter-direction-title">
         <div className="starter-step-heading"><span>2 / 3</span><h2 id="starter-direction-title">准备三条可测试方向</h2><p>方向只使用你刚才确认的内容，不依赖热点或流量预测。</p></div>
-        <Button variant="contained" startIcon={<ScienceOutlined />} disabled={busy} onClick={() => void run(() => generateStarterDirections({ expected_assessment_version: assessment.version, idempotency_key: makeKey('starter-directions') }))}>查看候选方向</Button>
+        <Button variant="contained" startIcon={<ScienceOutlined />} disabled={busy} onClick={() => void run(async () => {
+          // Audit e54a2643 medium: 幂等键按评估版本稳定，失败重试复用同一把键。
+          const signature = `v${assessment.version}`;
+          if (!generateKeyRef.current || generateKeyRef.current.signature !== signature) {
+            generateKeyRef.current = { signature, key: makeKey('starter-directions') };
+          }
+          await generateStarterDirections({ expected_assessment_version: assessment.version, idempotency_key: generateKeyRef.current.key });
+          generateKeyRef.current = null;
+        })}>查看候选方向</Button>
       </section>
     );
   }
@@ -199,6 +238,7 @@ function DirectionStep({ workspace, busy, run }: { workspace: StarterWorkspace; 
 }
 
 function DirectionOption({ candidate, busy, run }: { candidate: DirectionCandidate; busy: boolean; run: (command: () => Promise<unknown>) => Promise<void> }) {
+  const selectKeyRef = useRef<{ signature: string; key: string } | null>(null);
   return (
     <article className="starter-direction">
       <div className="starter-direction-top"><h3>{candidate.label}</h3><Chip size="small" label="低制作成本" /></div>
@@ -206,7 +246,15 @@ function DirectionOption({ candidate, busy, run }: { candidate: DirectionCandida
       <p><strong>为什么你能讲</strong>{candidate.creator_credibility}</p>
       <ol>{candidate.first_three_topics.map((topic) => <li key={topic.title}><span>{topic.title}</span><small>{intentLabels[topic.content_intent]}内容 · {topic.audience_change}</small></li>)}</ol>
       <p className="starter-validation"><strong>这次验证</strong>{candidate.validation_method}</p>
-      <Button variant="outlined" endIcon={<ArrowForward />} disabled={busy} onClick={() => void run(() => selectStarterDirection(candidate.id, { expected_direction_version: candidate.version, idempotency_key: makeKey('starter-sprint') }))}>选择并创建三篇实验</Button>
+      <Button variant="outlined" endIcon={<ArrowForward />} disabled={busy} onClick={() => void run(async () => {
+        // Audit e54a2643 medium: 幂等键按候选稳定，失败重试复用同一把键。
+        const signature = `${candidate.id}:v${candidate.version}`;
+        if (!selectKeyRef.current || selectKeyRef.current.signature !== signature) {
+          selectKeyRef.current = { signature, key: makeKey('starter-sprint') };
+        }
+        await selectStarterDirection(candidate.id, { expected_direction_version: candidate.version, idempotency_key: selectKeyRef.current.key });
+        selectKeyRef.current = null;
+      })}>选择并创建三篇实验</Button>
     </article>
   );
 }
@@ -216,6 +264,7 @@ function SprintStep({ workspace, busy, run, onOpenProject }: { workspace: Starte
   const [summary, setSummary] = useState('');
   const [blockers, setBlockers] = useState('');
   const [nextTopics, setNextTopics] = useState('');
+  const reviewKeyRef = useRef<{ signature: string; key: string } | null>(null);
   const firstOpenProject = useMemo(() => workspace.projects.find((project) => !['published', 'awaiting_review', 'settled'].includes(project.status)) ?? workspace.projects[0], [workspace.projects]);
   if (!sprint) return null;
   return (
@@ -241,7 +290,21 @@ function SprintStep({ workspace, busy, run, onOpenProject }: { workspace: Starte
               <TextField label="这轮实际发生了什么" value={summary} onChange={(event) => setSummary(event.target.value)} multiline minRows={3} />
               <TextField label="主要阻碍（最多 3 条）" value={blockers} onChange={(event) => setBlockers(event.target.value)} multiline minRows={2} />
               <TextField label="下一轮想测试什么（最多 3 条）" value={nextTopics} onChange={(event) => setNextTopics(event.target.value)} multiline minRows={2} />
-              <Button variant="outlined" disabled={busy || summary.trim().length < 5} onClick={() => void run(() => reviewStarterSprint(sprint.id, { observed_summary: summary.trim(), blocker_reasons: splitItems(blockers).slice(0, 3), next_topics: splitItems(nextTopics).slice(0, 3), expected_sprint_version: sprint.version, idempotency_key: makeKey('starter-review') }))}>完成本轮复盘</Button>
+              <Button variant="outlined" disabled={busy || summary.trim().length < 5} onClick={() => void run(async () => {
+                // Audit e54a2643 medium: 幂等键按复盘载荷稳定，失败重试复用同一把键。
+                const payload = {
+                  observed_summary: summary.trim(),
+                  blocker_reasons: splitItems(blockers).slice(0, 3),
+                  next_topics: splitItems(nextTopics).slice(0, 3),
+                  expected_sprint_version: sprint.version,
+                };
+                const signature = JSON.stringify(payload);
+                if (!reviewKeyRef.current || reviewKeyRef.current.signature !== signature) {
+                  reviewKeyRef.current = { signature, key: makeKey('starter-review') };
+                }
+                await reviewStarterSprint(sprint.id, { ...payload, idempotency_key: reviewKeyRef.current.key });
+                reviewKeyRef.current = null;
+              })}>完成本轮复盘</Button>
             </div>
           ) : <Alert severity="info">至少发布一篇后，才能根据真实结果完成本轮复盘。</Alert>}
         </>

@@ -98,4 +98,77 @@ describe('GrowthOnboardingPage', () => {
       expect.stringMatching(/^history-import:/),
     ));
   });
+
+  it('reuses the idempotency key on failed retries and rotates it for a new payload', async () => {
+    api.importHistory.mockRejectedValue(new Error('network'));
+    renderPage();
+    await screen.findByRole('heading', { name: '导入历史内容' });
+    const input = screen.getByLabelText('历史内容');
+    fireEvent.change(input, { target: { value: '第一篇' } });
+
+    // Audit e54a2643: a retry after a transient failure must reuse the
+    // same key so the server can de-duplicate the import.
+    fireEvent.click(screen.getByRole('button', { name: '导入历史内容' }));
+    await waitFor(() => expect(api.importHistory).toHaveBeenCalledTimes(1));
+    const firstKey = api.importHistory.mock.calls[0][2];
+    fireEvent.click(screen.getByRole('button', { name: '导入历史内容' }));
+    await waitFor(() => expect(api.importHistory).toHaveBeenCalledTimes(2));
+    expect(api.importHistory.mock.calls[1][2]).toBe(firstKey);
+
+    // A changed payload must rotate the key.
+    fireEvent.change(input, { target: { value: '第二篇' } });
+    fireEvent.click(screen.getByRole('button', { name: '导入历史内容' }));
+    await waitFor(() => expect(api.importHistory).toHaveBeenCalledTimes(3));
+    expect(api.importHistory.mock.calls[2][2]).not.toBe(firstKey);
+  });
+
+  it('renders the profile form when optional attribute lists are missing', async () => {
+    // Audit e54a2643 medium: 后端可能不返回空的 voice_traits/avoid_traits，
+    // applyProfile 和渲染都不能直接对 undefined 调用 map。
+    api.getGrowthCreatorProfile.mockResolvedValue({
+      ...profile,
+      attributes: {
+        niche: profile.attributes.niche,
+        target_audience: profile.attributes.target_audience,
+        growth_goal: profile.attributes.growth_goal,
+        content_pillars: profile.attributes.content_pillars,
+      },
+    });
+    renderPage();
+
+    expect(await screen.findByRole('heading', { name: '校对创作画像' })).toBeInTheDocument();
+    expect(screen.getByDisplayValue('租房')).toBeInTheDocument();
+  });
+
+  it('falls back to provisional wording for an unknown attribute status', async () => {
+    api.getGrowthCreatorProfile.mockResolvedValue({
+      ...profile,
+      attributes: {
+        ...profile.attributes,
+        niche: { ...profile.attributes.niche, status: 'legacy_status' },
+      },
+    });
+    renderPage();
+
+    await screen.findByDisplayValue('租房');
+    // Audit e54a2643 medium: 未知 status 不能渲染成 "undefined · 低置信"，
+    // 必须回退到“暂定”文案。
+    expect(screen.queryByText(/undefined/)).not.toBeInTheDocument();
+    expect(screen.getAllByText('暂定 · 低置信').length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('caps content pillars at five entries', async () => {
+    renderPage();
+    await screen.findByDisplayValue('租房');
+    fireEvent.change(screen.getByRole('textbox', { name: /目标读者/ }), { target: { value: '第一次独立租房的年轻人' } });
+    fireEvent.change(screen.getByRole('textbox', { name: /内容支柱/ }), {
+      target: { value: '一\n二\n三\n四\n五\n六' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '确认画像并继续' }));
+
+    // Audit e54a2643 medium: 文案承诺最多 5 项，提交前必须截断。
+    await waitFor(() => expect(api.updateGrowthCreatorProfile).toHaveBeenCalledWith(
+      expect.objectContaining({ content_pillars: ['一', '二', '三', '四', '五'] }),
+    ));
+  });
 });

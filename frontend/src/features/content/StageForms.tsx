@@ -81,6 +81,11 @@ const toLocalDateTimeValue = (date: Date) => {
 
 const safeFilename = (value: string) => value.replace(/[\\/:*?"<>|]/g, '-');
 
+// 审计 e54a2643 medium：datetime-local 的部分输入会产生无效值，
+// new Date(...).toISOString() 会抛 RangeError，提交前先校验。
+const isValidDateTimeValue = (value: string) =>
+  Boolean(value) && !Number.isNaN(new Date(value).getTime());
+
 function saveBlob(filename: string, blob: Blob) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
@@ -272,6 +277,14 @@ export function VersionForm({
 }: VersionFormProps) {
   const [title, setTitle] = useState(workspace.project.title);
   const [body, setBody] = useState('');
+  // 审计 e54a2643 medium：useState 种子只在挂载时执行，切换到另一个项目时
+  // 用渲染期重置模式同步标题，避免沿用旧项目的值。
+  const [prevProjectId, setPrevProjectId] = useState(workspace.project.id);
+  if (prevProjectId !== workspace.project.id) {
+    setPrevProjectId(workspace.project.id);
+    setTitle(workspace.project.title);
+    setBody('');
+  }
   return (
     <Paper component="section" variant="outlined" sx={panelSx}>
       <Typography component="h2" variant="h5" mb={2}>
@@ -342,6 +355,12 @@ export function HypothesisForm({
   const [basis, setBasis] = useState('');
   const [uncertainties, setUncertainties] = useState('');
   const [observationWindow, setObservationWindow] = useState(7);
+  // 审计 e54a2643 medium：audienceChange 种子只在挂载时执行，切换项目时同步。
+  const [prevProjectId, setPrevProjectId] = useState(workspace.project.id);
+  if (prevProjectId !== workspace.project.id) {
+    setPrevProjectId(workspace.project.id);
+    setAudienceChange(workspace.project.audience_change || '');
+  }
   const version = workspace.current_version;
   const intent = workspace.project.content_intent;
   const intentFieldsComplete = intent === 'solve'
@@ -573,17 +592,32 @@ export function PublicationForm({
   const check = checkProjectId === workspace.project.id ? storedCheck : null;
   const checkError = checkErrorProjectId === workspace.project.id;
   const [gate, setGate] = useState<HumanGate | null>(action?.human_gate ?? null);
+  // 审计 e54a2643 batch C：gate 只在挂载时从 action 初始化一次。切换到另一个
+  // 带 human_gate 的行动时旧 gate 会被沿用到新行动上，用渲染期重置模式同步。
+  const [prevGateActionId, setPrevGateActionId] = useState(action?.id ?? null);
+  if ((action?.id ?? null) !== prevGateActionId) {
+    setPrevGateActionId(action?.id ?? null);
+    setGate(action?.human_gate ?? null);
+  }
   const [gateError, setGateError] = useState(false);
   const [gateAttempt, setGateAttempt] = useState(0);
   useEffect(() => {
-    if (action?.action_type === 'record_publication' && !gate) {
-      void openHumanGate(action.id)
-        .then((nextGate) => {
-          setGate(nextGate);
-          setGateError(false);
-        })
-        .catch(() => setGateError(true));
-    }
+    if (action?.action_type !== 'record_publication' || gate) return undefined;
+    // 审计 e54a2643 medium：与下方 publish-check effect 一致，加取消守卫，
+    // 避免 action 变化/卸载后迟到的 gate 响应写入状态。
+    let active = true;
+    void openHumanGate(action.id)
+      .then((nextGate) => {
+        if (!active) return;
+        setGate(nextGate);
+        setGateError(false);
+      })
+      .catch(() => {
+        if (active) setGateError(true);
+      });
+    return () => {
+      active = false;
+    };
   }, [action, gate, gateAttempt, openHumanGate]);
 
   useEffect(() => {
@@ -748,10 +782,16 @@ export function PublicationForm({
           <Button
             variant="contained"
             startIcon={<PublishOutlined />}
-            disabled={busy || !publishedAt || !versionId || !gate || !checkReady}
+            disabled={busy || !publishedAt || !isValidDateTimeValue(publishedAt) || !versionId || !gate || !checkReady}
             onClick={() => {
               if (!versionId) return;
               if (!gate) return;
+              const publishedAtDate = new Date(publishedAt);
+              if (Number.isNaN(publishedAtDate.getTime())) {
+                setArtifactError('发布时间无效，请重新选择。');
+                return;
+              }
+              setArtifactError(null);
               void onCommand(async () => {
                 if (gate.status === 'pending') {
                   await decideHumanGate(gate.id, {
@@ -765,7 +805,7 @@ export function PublicationForm({
                   content_version_id: versionId,
                   publication_gate_id: gate.id,
                   note_url: url.trim() || undefined,
-                  published_at: new Date(publishedAt).toISOString(),
+                  published_at: publishedAtDate.toISOString(),
                   expected_project_version: workspace.project.version,
                   idempotency_key: makeKey('publication'),
                 });
@@ -825,6 +865,14 @@ export function SnapshotForm({
   const [proposalConfirmed, setProposalConfirmed] = useState(false);
   const record = workspace.publish_record;
   const hasMetric = Object.values(values).some((value) => value !== '');
+  // Audit e54a2643: min=0 is only a UI hint — partial number input ('-',
+  // '1e') parses to NaN and negatives/fractions type freely. Every entered
+  // metric must be a finite non-negative integer before submit is allowed.
+  const metricInvalid = Object.values(values).some((value) => {
+    if (value === '') return false;
+    const parsed = Number(value);
+    return !Number.isInteger(parsed) || parsed < 0;
+  });
 
   const extractScreenshot = () => onCommand(async () => {
     if (!screenshot) return;
@@ -946,12 +994,14 @@ export function SnapshotForm({
             variant="contained"
             startIcon={<AssessmentOutlined />}
             disabled={
-              busy || !record || !capturedAt
-              || (unavailable ? !unavailableReason.trim() : !hasMetric)
+              busy || !record || !capturedAt || !isValidDateTimeValue(capturedAt)
+              || (unavailable ? !unavailableReason.trim() : !hasMetric || metricInvalid)
               || Boolean(proposal && !proposalConfirmed)
             }
             onClick={() => {
               if (!record) return;
+              const capturedAtDate = new Date(capturedAt);
+              if (Number.isNaN(capturedAtDate.getTime())) return;
               const metrics = Object.fromEntries(
                 Object.entries(values)
                   .filter(([, value]) => value !== '')
@@ -959,7 +1009,7 @@ export function SnapshotForm({
               ) as PerformanceMetrics;
               void onCommand(() =>
                 appendSnapshot(record.id, {
-                  captured_at: new Date(capturedAt).toISOString(),
+                  captured_at: capturedAtDate.toISOString(),
                   source: proposal ? 'screenshot' : 'manual',
                   result_availability: unavailable ? 'unavailable' : 'observed',
                   ...(unavailable

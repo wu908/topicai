@@ -29,7 +29,28 @@ const PALETTE = {
   border: '#e8e5e1',
 } as const;
 
-const v3 = (name: string): string => `var(--v3-${name})`;
+/** Token names must exist in styles/tokens.css; typos fail at compile time. */
+type V3Token =
+  | 'bg'
+  | 'surface'
+  | 'panel-bg'
+  | 'sidebar-bg'
+  | 'border'
+  | 'border-light'
+  | 'border-hover'
+  | 'surface-hover'
+  | 'text'
+  | 'text-sec'
+  | 'text-ter'
+  | 'accent'
+  | 'accent-hover'
+  | 'blue'
+  | 'shadow-card'
+  | 'shadow-card-hover'
+  | 'shadow-modal';
+
+const v3 = (name: V3Token, fallback?: string): string =>
+  fallback ? `var(--v3-${name}, ${fallback})` : `var(--v3-${name})`;
 
 const theme = createTheme({
   palette: {
@@ -73,7 +94,8 @@ const theme = createTheme({
       fontSize: '0.6875rem',
       fontWeight: 400,
       lineHeight: 1.5,
-      color: v3('text-ter'),
+      // text-sec instead of text-ter: #9b9b9b fails WCAG AA (≈2.8:1) on these surfaces
+      color: v3('text-sec'),
     },
     button: { textTransform: 'none', fontWeight: 500 },
   },
@@ -89,7 +111,7 @@ const theme = createTheme({
           fontSize: '0.8125rem',
           fontWeight: 500,
           textTransform: 'none',
-          transition: 'all 0.15s ease',
+          transition: 'background-color 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease',
         },
         contained: {
           boxShadow: 'none',
@@ -103,7 +125,7 @@ const theme = createTheme({
           borderRadius: 12,
           border: `1px solid ${v3('border')}`,
           boxShadow: v3('shadow-card'),
-          transition: 'all 0.2s',
+          transition: 'box-shadow 0.2s ease',
           '&:hover': { boxShadow: v3('shadow-card-hover') },
         },
       },

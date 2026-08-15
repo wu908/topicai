@@ -156,6 +156,35 @@ describe('HomePage', () => {
     expect(navigateMock).toHaveBeenCalledWith('/content/p1');
   });
 
+  // 审计 e54a2643 batch C：暂缓成功后从不刷新工作台快照，界面保留过期状态。
+  it('silently refreshes the workspace after deferring an action', async () => {
+    render(<MemoryRouter><HomePage /></MemoryRouter>);
+    await screen.findByText(action.title);
+    fireEvent.click(screen.getByRole('button', { name: '暂不做' }));
+    await waitFor(() => expect(api.getTodayWorkspace).toHaveBeenCalledTimes(2));
+  });
+
+  // 审计 e54a2643 batch C：startAction 与 actionPath 对 create_project 行动
+  // 解析出不同目的地，主按钮与「手动继续」会跳到不同页面。
+  it('routes the primary and manual continue buttons to the same destination', async () => {
+    api.getTodayWorkspace.mockResolvedValue({
+      action: {
+        ...action,
+        action_type: 'create_project',
+        project_id: 'p1',
+        fallback_action: { action_type: 'create_project', path: '/content/new?series=s1' },
+      },
+      creator_state: { completed_project_count: 0 },
+    });
+
+    render(<MemoryRouter><HomePage /></MemoryRouter>);
+    await screen.findByText(action.title);
+    fireEvent.click(screen.getByRole('button', { name: '开始一条内容' }));
+    expect(navigateMock).toHaveBeenLastCalledWith('/content/new?series=s1');
+    fireEvent.click(screen.getByRole('button', { name: '手动继续' }));
+    expect(navigateMock).toHaveBeenLastCalledWith('/content/new?series=s1');
+  });
+
   it('requires a reason before stopping an unsuitable AI suggestion', async () => {
     render(<MemoryRouter><HomePage /></MemoryRouter>);
     await screen.findByText(action.title);

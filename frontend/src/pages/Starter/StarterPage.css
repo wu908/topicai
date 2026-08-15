@@ -137,7 +137,7 @@
 
 .starter-project-list button:hover,
 .starter-project-list button:focus-visible {
-  border-color: #b8b4ae;
+  border-color: var(--v3-border-hover);
   outline: none;
 }
 

@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react';
-import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import {
   ArticleOutlined,
   FolderOutlined,
@@ -72,15 +72,9 @@ const SIDEBAR_CSS = `
 `;
 
 export default function Sidebar() {
-  const location = useLocation();
   const navigate = useNavigate();
   const user = useAuthStore((state) => state.user);
   const logout = useAuthStore((state) => state.logout);
-
-  const isActive = (path: string) =>
-    path === '/'
-      ? location.pathname === '/'
-      : location.pathname === path || location.pathname.startsWith(`${path}/`);
 
   return (
     <aside className="v3-sidebar" style={asideStyle}>
@@ -153,33 +147,33 @@ export default function Sidebar() {
         aria-label="主导航"
         style={{ flex: 1, overflowY: 'auto', padding: '0 8px' }}
       >
-        {NAV_ITEMS.map((item) => {
-          const active = isActive(item.to);
-          return (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.to === '/'}
-              className={active ? 'v3-sidebar-link active' : 'v3-sidebar-link'}
-              style={navLinkStyle(active)}
-              aria-label={item.label}
+        {NAV_ITEMS.map((item) => (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            end={item.to === '/'}
+            // 审计 e54a2643 medium：激活态直接由 NavLink 的匹配结果驱动，
+            // 避免手写 isActive 与 end 语义分叉。
+            className={({ isActive }) =>
+              isActive ? 'v3-sidebar-link active' : 'v3-sidebar-link'}
+            style={({ isActive }) => navLinkStyle(isActive)}
+            aria-label={item.label}
+          >
+            <span
+              style={{
+                width: 18,
+                height: 18,
+                flexShrink: 0,
+                display: 'grid',
+                placeItems: 'center',
+              }}
+              aria-hidden="true"
             >
-              <span
-                style={{
-                  width: 18,
-                  height: 18,
-                  flexShrink: 0,
-                  display: 'grid',
-                  placeItems: 'center',
-                }}
-                aria-hidden="true"
-              >
-                {item.icon}
-              </span>
-              <span className="v3-sidebar-label">{item.label}</span>
-            </NavLink>
-          );
-        })}
+              {item.icon}
+            </span>
+            <span className="v3-sidebar-label">{item.label}</span>
+          </NavLink>
+        ))}
       </nav>
 
       <footer
@@ -199,7 +193,12 @@ export default function Sidebar() {
           type="button"
           className="v3-sidebar-logout"
           onClick={() => {
-            logout();
+            try {
+              logout();
+            } catch {
+              // Logout failures (e.g. sandboxed storage) must not strand the
+              // user — always route back to the login screen.
+            }
             navigate('/login');
           }}
           aria-label="退出登录"

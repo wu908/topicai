@@ -1,5 +1,3 @@
-import { createApiClient } from '@/services/api/client';
-
-const v2Client = createApiClient('/api/v2');
-
-export default v2Client;
+// Share the single apiClient instance instead of building a second one —
+// two singletons would diverge on any future client-level state.
+export { default } from '@/services/api/client';

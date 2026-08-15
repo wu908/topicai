@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
   Button,
@@ -28,7 +28,15 @@ const key = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toStrin
 async function fileBase64(file: File) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result).split(',')[1] || '');
+    reader.onload = () => {
+      const base64 = String(reader.result).split(',')[1] || '';
+      // Audit e54a2643 medium: 空文件会读出空 base64，直接拒绝而不是提交空内容。
+      if (!base64) {
+        reject(new Error('文件内容为空'));
+        return;
+      }
+      resolve(base64);
+    };
     reader.onerror = () => reject(reader.error);
     reader.readAsDataURL(file);
   });
@@ -49,6 +57,11 @@ export default function MaterialsPage() {
   const [file, setFile] = useState<File | null>(null);
   const [reuseProject, setReuseProject] = useState<Record<string, string>>({});
   const [deleteImpact, setDeleteImpact] = useState<Record<string, string[]>>({});
+  // Audit e54a2643: idempotency keys must be stable per attempt — a retry
+  // after a transient failure reuses the same key so the server can
+  // de-duplicate; keys rotate only after a confirmed success.
+  const [materialKey, setMaterialKey] = useState(() => key('material'));
+  const usageKeyRef = useRef<Record<string, string>>({});
 
   const load = useCallback(async () => {
     setError(null);
@@ -69,6 +82,11 @@ export default function MaterialsPage() {
   }, [load]);
 
   const save = async () => {
+    // Audit e54a2643 medium: 防御性守卫，避免 file 为空时非空断言崩溃。
+    if ((kind === 'image' || kind === 'document') && !file) {
+      setError('请先选择要上传的文件');
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -81,13 +99,14 @@ export default function MaterialsPage() {
         }),
         privacy_level: privacy,
         project_id: projectId || undefined,
-        idempotency_key: key('material'),
+        idempotency_key: materialKey,
       });
       setTitle('');
       setContent('');
       setFile(null);
       setProjectId('');
       setShowCreate(false);
+      setMaterialKey(key('material'));
       await load();
     } catch (err) {
       setError(extractErrorMessage(err, '素材保存失败'));
@@ -99,12 +118,21 @@ export default function MaterialsPage() {
   const link = async (materialId: string) => {
     const selected = reuseProject[materialId];
     if (!selected) return;
+    const signature = `${materialId}:${selected}`;
+    if (!usageKeyRef.current[signature]) {
+      usageKeyRef.current[signature] = key(`material-usage-${materialId}`);
+    }
     setBusy(true);
+    setError(null);
     try {
       await addMaterialUsage(materialId, {
         project_id: selected,
-        idempotency_key: key(`material-usage-${materialId}`),
+        idempotency_key: usageKeyRef.current[signature],
       });
+      delete usageKeyRef.current[signature];
+      // Audit e54a2643 medium: 关联成功后清空选中值，
+      // 避免已关联项目掉出选项列表后 select 回显失同步。
+      setReuseProject((current) => ({ ...current, [materialId]: '' }));
       await load();
     } catch (err) {
       setError(extractErrorMessage(err, '素材关联失败'));
@@ -115,6 +143,7 @@ export default function MaterialsPage() {
 
   const remove = async (material: Material, confirmed = false) => {
     setBusy(true);
+    setError(null);
     try {
       await deleteMaterial(material.id, confirmed);
       setDeleteImpact((current) => ({ ...current, [material.id]: [] }));
@@ -174,7 +203,7 @@ export default function MaterialsPage() {
           {materials.map((material) => (
             <article className="operations-row" key={material.id}>
               <div className="operations-row-header">
-                <div><h2>{material.title}</h2><p className="operations-meta">{kindLabels[material.kind]} · {Math.max(1, Math.ceil(material.size / 1024))} KB</p></div>
+                <div><h2>{material.title}</h2><p className="operations-meta">{kindLabels[material.kind]} · {Math.max(1, Math.ceil((material.size ?? 0) / 1024))} KB</p></div>
                 <Chip size="small" label={privacyLabels[material.privacy_level]} color={material.privacy_level === 'sensitive' ? 'warning' : 'default'} />
               </div>
               {material.content ? <p className="operations-row-copy">{material.content}</p> : null}

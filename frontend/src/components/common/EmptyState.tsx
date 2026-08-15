@@ -34,7 +34,8 @@ const EmptyState: React.FC<EmptyStateProps> = ({
       }}
     >
       <Box sx={{ mb: 2, color: 'text.disabled' }}>
-        {icon || <Inbox sx={{ fontSize: 48 }} />}
+        {/* Audit e54a2643 medium: ?? only falls back when the icon is not provided. */}
+        {icon ?? <Inbox sx={{ fontSize: 48 }} />}
       </Box>
       <Typography
         variant="h5"

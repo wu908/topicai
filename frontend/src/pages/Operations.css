@@ -56,7 +56,7 @@
 
 .operations-meta {
   margin-top: 8px;
-  color: var(--v3-text-ter);
+  color: var(--v3-text-sec);
   font-size: 11px;
   line-height: 1.5;
 }
@@ -149,6 +149,8 @@
 
 @media (max-width: 640px) {
   .operations-row { padding: 16px; }
-  .operations-row-actions > button { width: 100%; }
-  .operations-toolbar > button { flex: 1; }
+  .operations-row-actions > button,
+  .operations-row-actions > a { width: 100%; }
+  .operations-toolbar > button,
+  .operations-toolbar > a { flex: 1 1 auto; min-width: 0; }
 }

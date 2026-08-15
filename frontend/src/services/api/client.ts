@@ -14,7 +14,11 @@ function forceLogout() {
 }
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
-const AUTH_BASE_URL = `${API_BASE_URL}/api/v2`;
+const API_PREFIX = '/api/v2';
+const AUTH_BASE_URL = `${API_BASE_URL}${API_PREFIX}`;
+
+/** Auth endpoints must fail fast on 401 instead of entering the refresh loop. */
+const AUTH_ENDPOINTS = ['/auth/login', '/auth/register', '/auth/refresh'];
 
 /** Get auth headers with JWT token */
 function getHeaders(): Record<string, string> {
@@ -29,13 +33,56 @@ function getHeaders(): Record<string, string> {
 }
 
 /** Handle 401 by attempting token refresh, then retrying the request */
+// Concurrent 401s must share ONE refresh request: with rotating refresh
+// tokens the first successful refresh invalidates the token every later
+// refresh attempt would reuse, so parallel refreshes force-logout all but
+// one caller. The in-flight promise serializes everyone onto a single POST.
+let inflightRefresh: Promise<string> | null = null;
+
+function refreshAccessToken(refreshToken: string): Promise<string> {
+  if (!inflightRefresh) {
+    inflightRefresh = (async () => {
+      try {
+        const refreshResponse = await fetch(`${AUTH_BASE_URL}/auth/refresh`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refresh_token: refreshToken }),
+        });
+
+        if (!refreshResponse.ok) {
+          throw new Error('Token refresh failed');
+        }
+
+        // Validate the envelope before trusting it: a malformed 2xx body
+        // (data null / missing token) must fail as a refresh failure, not
+        // surface as a TypeError from destructuring.
+        let refreshData: ApiResponse<{ access_token: string }> | null = null;
+        try {
+          refreshData = await refreshResponse.json();
+        } catch {
+          throw new Error('Token refresh failed: unparseable body');
+        }
+        const newToken = refreshData?.data?.access_token;
+        if (typeof newToken !== 'string' || newToken.length === 0) {
+          throw new Error('Token refresh failed: missing access_token');
+        }
+        localStorage.setItem('access_token', newToken);
+        return newToken;
+      } finally {
+        inflightRefresh = null;
+      }
+    })();
+  }
+  return inflightRefresh;
+}
+
 async function handleUnauthorized(
   requestFn: () => Promise<Response>,
-  originalUrl: string
+  requestUrl: string
 ): Promise<Response> {
-  const isAuthEndpoint = ['/auth/login', '/auth/register', '/auth/refresh'].some(
-    (p) => originalUrl.includes(p)
-  );
+  // Classify by the request URL, not response.url: mocked/proxied Response
+  // objects often carry an empty url, which would silently skip this guard.
+  const isAuthEndpoint = AUTH_ENDPOINTS.some((p) => requestUrl.includes(p));
   if (isAuthEndpoint) {
     forceLogout();
     throw new Error('Authentication failed');
@@ -48,22 +95,8 @@ async function handleUnauthorized(
   }
 
   try {
-    const refreshResponse = await fetch(`${AUTH_BASE_URL}/auth/refresh`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refresh_token: refreshToken }),
-    });
-
-    if (!refreshResponse.ok) {
-      forceLogout();
-      throw new Error('Token refresh failed');
-    }
-
-    const refreshData: ApiResponse<{ access_token: string }> = await refreshResponse.json();
-    const newToken = refreshData.data.access_token;
-    localStorage.setItem('access_token', newToken);
-
-    // Retry the original request with new token
+    await refreshAccessToken(refreshToken);
+    // Retry the original request with the shared new token.
     return requestFn();
   } catch {
     forceLogout();
@@ -72,11 +105,14 @@ async function handleUnauthorized(
 }
 
 /** Parse response and handle errors consistently */
-async function parseResponse<T>(response: Response, requestFn?: () => Promise<Response>): Promise<T> {
+async function parseResponse<T>(
+  response: Response,
+  requestFn?: () => Promise<Response>,
+  requestUrl = '',
+): Promise<T> {
   // Handle 401 with token refresh
   if (response.status === 401 && requestFn) {
-    const url = response.url || '';
-    const retryResponse = await handleUnauthorized(requestFn, url);
+    const retryResponse = await handleUnauthorized(requestFn, requestUrl);
     return parseResponse<T>(retryResponse); // No further retry on 401 after refresh
   }
 
@@ -93,7 +129,17 @@ async function parseResponse<T>(response: Response, requestFn?: () => Promise<Re
     throw error;
   }
 
-  return response.json();
+  // 204 No Content (e.g. DELETE endpoints) and ok responses with an empty
+  // body have no JSON to parse — resolve with undefined instead of letting
+  // response.json() reject.
+  if (response.status === 204) {
+    return undefined as T;
+  }
+  const text = await response.text();
+  if (text.length === 0) {
+    return undefined as T;
+  }
+  return JSON.parse(text) as T;
 }
 
 /** Convert params object to URL search string, filtering out undefined/null values */
@@ -126,12 +172,12 @@ async function request<T>(
     });
 
   const response = await makeRequest();
-  const data = await parseResponse<T>(response, makeRequest);
+  const data = await parseResponse<T>(response, makeRequest, url);
   return { data };
 }
 
 /** Create a versioned client while sharing JWT refresh and error behavior. */
-export function createApiClient(apiPrefix: '/api/v2') {
+export function createApiClient(apiPrefix: `/api/v${string}`) {
   const baseUrl = `${API_BASE_URL}${apiPrefix}`;
   return {
     get: <T>(url: string, config?: { params?: Record<string, unknown> }) =>
@@ -147,6 +193,6 @@ export function createApiClient(apiPrefix: '/api/v2') {
   };
 }
 
-const apiClient = createApiClient('/api/v2');
+const apiClient = createApiClient(API_PREFIX);
 
 export default apiClient;

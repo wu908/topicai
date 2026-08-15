@@ -65,7 +65,11 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
               页面出错了
             </Typography>
             <Typography variant="body2" sx={{ color: 'text.secondary', mb: 3 }}>
-              {this.state.error?.message || '发生了意外错误，请稍后重试'}
+              {/* 审计 e54a2643 medium：原始错误消息可能暴露内部实现细节，
+                  只在 DEV 下展示，生产环境统一用通用提示。 */}
+              {import.meta.env.DEV && this.state.error?.message
+                ? this.state.error.message
+                : '发生了意外错误，请稍后重试'}
             </Typography>
             <Button variant="contained" onClick={this.handleReset}>
               重新加载
