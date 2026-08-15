@@ -32,9 +32,13 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
     if (isAuthenticated && !user) void Promise.resolve(fetchCurrentUser()).catch(() => undefined);
   }, [fetchCurrentUser, isAuthenticated, user]);
 
-  // Wait for session hydration before deciding — otherwise a verified user
-  // flashes the login redirect / empty shell for a moment.
-  if (isLoading) return <LoadingFallback />;
+  // Wait for the initial session hydration before deciding — otherwise a
+  // verified user flashes the login redirect / empty shell for a moment.
+  // Gate only while there is no user yet: once a session exists, pages like
+  // HomePage re-run fetchCurrentUser on every mount, and blanking the whole
+  // layout on isLoading would unmount the page and re-trigger the fetch in
+  // an endless remount loop.
+  if (isLoading && !user) return <LoadingFallback />;
   if (!isAuthenticated) return <Navigate to="/login" replace />;
   return <AppLayout>{children}</AppLayout>;
 };

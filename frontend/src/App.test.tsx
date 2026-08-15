@@ -78,4 +78,18 @@ describe('App routing guards', () => {
     expect(screen.queryByTestId('app-layout')).not.toBeInTheDocument();
     expect(screen.queryByTestId('home-page')).not.toBeInTheDocument();
   });
+
+  it('keeps the layout mounted when an established session refreshes', async () => {
+    // E2E regression: pages like HomePage re-run fetchCurrentUser on mount,
+    // which flips isLoading. Blank the whole layout on that flag and the
+    // page unmounts, re-mounts and re-fetches forever.
+    mockAuthState.isAuthenticated = true;
+    mockAuthState.user = { id: 'u-1', username: 'tester' };
+    mockAuthState.isLoading = true;
+
+    render(<App />);
+
+    expect(await screen.findByTestId('app-layout')).toBeInTheDocument();
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+  });
 });

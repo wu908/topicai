@@ -1,7 +1,7 @@
 """Contracts for privacy-safe MVP experiment instrumentation."""
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import text
@@ -89,7 +89,11 @@ async def test_action_funnel_has_stable_denominator_and_safe_events(client, test
     )
     assert manual.status_code == 201
 
-    timestamp = "2026-07-22T12:00:00Z"
+    # Anchor the metrics window to the real clock: the action produced by
+    # /api/v2/today carries the actual current timestamp, so a hardcoded
+    # end_at would silently exclude it once that date passes (date bomb).
+    now = datetime.now(UTC).replace(microsecond=0)
+    timestamp = now.isoformat().replace("+00:00", "Z")
     session = await test_db.get_session()
     async with session:
         async with session.begin():
@@ -160,8 +164,8 @@ async def test_action_funnel_has_stable_denominator_and_safe_events(client, test
     response = await client.get(
         "/api/v2/internal/validation/action-metrics",
         params={
-            "start_at": "2026-07-15T00:00:00Z",
-            "end_at": "2026-08-15T00:00:00Z",
+            "start_at": (now - timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "end_at": (now + timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "experiment_id": "E1",
             "cohort": "variant",
         },
