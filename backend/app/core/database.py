@@ -10,7 +10,7 @@ import re
 import sqlite3
 from typing import Any
 
-from sqlalchemy import text
+from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
@@ -136,6 +136,17 @@ class Database:
 
         # Enable WAL mode + per-connection pragmas (MUST be in same
         # connection for :memory:). These are runtime behavior, not schema.
+        #
+        # foreign_keys/busy_timeout are PER-CONNECTION settings in SQLite.
+        # File databases use NullPool (a fresh connection per checkout), so
+        # setting them once here would only affect this borrowed connection.
+        # The connect listener below re-applies them on every new connection;
+        # journal_mode=WAL is persisted in the database file itself.
+        @event.listens_for(self.engine.sync_engine, "connect")
+        def _set_per_connection_pragmas(dbapi_connection, connection_record):
+            dbapi_connection.execute("PRAGMA foreign_keys=ON")
+            dbapi_connection.execute("PRAGMA busy_timeout=5000")
+
         async with self.engine.begin() as conn:
             await conn.execute(text("PRAGMA journal_mode=WAL"))
             await conn.execute(text("PRAGMA foreign_keys=ON"))

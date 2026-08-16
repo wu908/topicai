@@ -41,7 +41,7 @@ import type {
 
 interface CommandProps {
   busy: boolean;
-  onCommand: (command: () => Promise<unknown>) => Promise<void>;
+  onCommand: (command: () => Promise<unknown>, idempotencyKey?: string) => Promise<void>;
 }
 
 interface ProjectCreateFormProps extends CommandProps {
@@ -181,7 +181,7 @@ export function ProjectCreateForm({
         idempotency_key: makeKey('project'),
       });
       onCreated(created);
-    });
+    }, 'project');
 
   return (
     <Paper component="section" variant="outlined" sx={panelSx}>
@@ -316,6 +316,7 @@ export function VersionForm({
                   expected_project_version: workspace.project.version,
                   idempotency_key: makeKey('version'),
                 }),
+                'version',
               )
             }
           >
@@ -354,7 +355,7 @@ export function HypothesisForm({
   const [supportingResponses, setSupportingResponses] = useState<ExpectedBehavior[]>([]);
   const [basis, setBasis] = useState('');
   const [uncertainties, setUncertainties] = useState('');
-  const [observationWindow, setObservationWindow] = useState(7);
+  const [observationWindow, setObservationWindow] = useState<number | string>(7);
   // 审计 e54a2643 medium：audienceChange 种子只在挂载时执行，切换项目时同步。
   const [prevProjectId, setPrevProjectId] = useState(workspace.project.id);
   if (prevProjectId !== workspace.project.id) {
@@ -495,7 +496,7 @@ export function HypothesisForm({
         <TextField
           label="观察窗口（天）"
           value={observationWindow}
-          onChange={(event) => setObservationWindow(Number(event.target.value))}
+          onChange={(event) => setObservationWindow(event.target.value)}
           type="number"
           inputProps={{ min: 1, max: 365 }}
         />
@@ -505,7 +506,8 @@ export function HypothesisForm({
             startIcon={<CheckCircleOutline />}
             disabled={
               busy || !version || !audienceChange.trim() || !intentFieldsComplete
-              || observationWindow < 1 || observationWindow > 365
+              || Number.isNaN(Number(observationWindow))
+              || Number(observationWindow) < 1 || Number(observationWindow) > 365
             }
             onClick={() => {
               // intent 已由上面的历史内容分支收窄为非空。
@@ -530,10 +532,11 @@ export function HypothesisForm({
                     .split('\n')
                     .map((item) => item.trim())
                     .filter(Boolean),
-                  observation_window_days: observationWindow,
+                  observation_window_days: Number(observationWindow),
                   expected_project_version: workspace.project.version,
                   idempotency_key: makeKey('hypothesis'),
                 }),
+                'hypothesis',
               );
             }}
           >
@@ -657,7 +660,7 @@ export function PublicationForm({
     }));
     setCheckProjectId(workspace.project.id);
     setCheckErrorProjectId(null);
-  });
+  }, 'publish-check');
 
   const acknowledge = (findingId: string) => onCommand(async () => {
     if (!check) return;
@@ -666,7 +669,7 @@ export function PublicationForm({
       idempotency_key: makeKey(`publish-check-${findingId}`),
     }));
     setCheckProjectId(workspace.project.id);
-  });
+  }, `publish-check-${findingId}`);
 
   const copyBody = async () => {
     if (!version || !navigator.clipboard?.writeText) {
@@ -809,7 +812,7 @@ export function PublicationForm({
                   expected_project_version: workspace.project.version,
                   idempotency_key: makeKey('publication'),
                 });
-              });
+              }, 'publication');
             }}
           >
             确认已发布
@@ -1026,6 +1029,7 @@ export function SnapshotForm({
                   expected_project_version: workspace.project.version,
                   idempotency_key: makeKey('snapshot'),
                 }),
+                'snapshot',
               );
             }}
           >
@@ -1073,6 +1077,7 @@ export function BlindReviewAction({
               expected_project_version: workspace.project.version,
               idempotency_key: makeKey('blind-review'),
             }),
+            'blind-review',
           );
         }}
       >
@@ -1143,6 +1148,7 @@ export function ObservationForm({
                   expected_project_version: workspace.project.version,
                   idempotency_key: makeKey('observation'),
                 }),
+                'observation',
               );
             }}
           >
