@@ -177,14 +177,21 @@ describe('apiClient', () => {
     // Audit e54a2643 medium: Response objects built in mocks/proxies often
     // have an empty url. A 401 on /auth/login must still fail fast instead
     // of attempting a token refresh.
+    // 2026-08-16 回归走查：登录 401 不能 forceLogout 整页刷新，必须把
+    // 后端返回的“邮箱或密码错误”抛给页面渲染，让用户能改正。
     localStorage.setItem('refresh_token', 'refresh-jwt');
 
-    const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 401 }));
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ code: 401, message: '邮箱或密码错误' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    );
     vi.stubGlobal('fetch', fetchMock);
 
     const { default: apiClient } = await import('../client');
     await expect(apiClient.post('/auth/login', { email: 'a@b.com', password: 'x' }))
-      .rejects.toThrow('Authentication failed');
+      .rejects.toThrow('邮箱或密码错误');
 
     // No refresh attempt: only the original login call was made.
     expect(fetchMock).toHaveBeenCalledTimes(1);

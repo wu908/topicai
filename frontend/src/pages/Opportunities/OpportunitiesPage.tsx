@@ -12,6 +12,7 @@ import {
 } from '@/services/api/v2/projects';
 import type { ContentOpportunity } from '@/types/contracts/v2/content';
 import { extractErrorMessage } from '@/utils/error';
+import { readableRef } from '@/utils/labels';
 import '../Operations.css';
 
 const statusLabels = { proposed: '待确认', saved: '已收藏', accepted: '已采用', rejected: '已放弃' } as const;
@@ -172,8 +173,9 @@ function OpportunityRow({ item, onChanged }: {
       </div>
       <p className="operations-row-copy">{item.proposed_rationale}</p>
       {item.source_excerpt ? <p className="operations-row-copy">来源摘录：{item.source_excerpt}</p> : null}
+      {/* 审计修复 2026-08-16 UX-M4：来源引用经 readableRef 转换，原始 ID 不外露。 */}
       <p className="operations-meta">
-        来源引用：{item.source_ref}
+        来源引用：{readableRef(item.source_ref)}
         {item.source_authority ? ` · 发布方：${item.source_authority}` : ''}
         {item.source_published_at ? ` · 发布时间：${item.source_published_at}` : ''}
       </p>
@@ -188,7 +190,7 @@ function OpportunityRow({ item, onChanged }: {
         </div>
       ))}
       {item.source_url ? <p className="operations-meta"><SourceLink url={item.source_url} label="查看原始来源" /></p> : null}
-      {item.evidence_refs.length ? <p className="operations-meta">证据引用：{item.evidence_refs.join(' · ')}</p> : null}
+      {item.evidence_refs.length ? <p className="operations-meta">证据引用：{item.evidence_refs.map(readableRef).join(' · ')}</p> : null}
       {hasDimensions ? <>
         <p className="operations-meta">
           受众匹配：{dimensionValue(item.dimensions?.audience_fit)} · 创作者匹配：{dimensionValue(item.dimensions?.creator_fit)}
@@ -269,6 +271,8 @@ export default function OpportunitiesPage() {
   const [manualExpiresAt, setManualExpiresAt] = useState('');
   const [submittingManual, setSubmittingManual] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // 审计修复 2026-08-16 UX-H7/L6：生成/保存成功后给出明确反馈。
+  const [notice, setNotice] = useState<string | null>(null);
   // 审计 e54a2643 medium：手动提交幂等键按载荷稳定，失败重试复用同一把键。
   const manualKeyRef = useRef<{ signature: string; key: string } | null>(null);
   // 审计 e54a2643 medium：卸载后到达的响应不能再写入状态。
@@ -299,12 +303,16 @@ export default function OpportunitiesPage() {
   const generate = async () => {
     setGenerating(true);
     setError(null);
+    setNotice(null);
     try {
       const generated = (await generateContentOpportunities(6)).items;
       setItems((current) => [
         ...generated,
         ...current.filter((item) => !generated.some((candidate) => candidate.id === item.id)),
       ]);
+      setNotice(generated.length
+        ? `生成了 ${generated.length} 条新机会，请在下方逐条确认。`
+        : '暂时没有生成新的机会。可能是 AI 服务未配置完整，或你的历史内容与画像还不够；也可以手动添加来源。');
     } catch (err) {
       setError(extractErrorMessage(err, '内容机会生成失败'));
     } finally {
@@ -314,6 +322,7 @@ export default function OpportunitiesPage() {
   const submitManual = async () => {
     setSubmittingManual(true);
     setError(null);
+    setNotice(null);
     try {
       const payload = {
         trigger: manualTrigger,
@@ -334,6 +343,7 @@ export default function OpportunitiesPage() {
       setManualAuthority('');
       setManualExpiresAt('');
       setManualOpen(false);
+      setNotice('来源已保存，核验完成后即可据此创建内容。');
     } catch (err) {
       setError(extractErrorMessage(err, '手动来源保存失败'));
     } finally {
@@ -354,6 +364,7 @@ export default function OpportunitiesPage() {
       {loading ? <div className="operations-loading"><CircularProgress size={26} /></div> : (
         <>
           {error ? <Alert severity="error" action={<Button onClick={() => void load()}>重试</Button>}>{error}</Alert> : null}
+          {notice ? <Alert severity="info">{notice}</Alert> : null}
           <div className="operations-toolbar" role="group" aria-label="机会状态">
             {([['all', '全部'], ['proposed', '待确认'], ['saved', '已收藏'], ['accepted', '已采用'], ['rejected', '已放弃']] as const).map(([value, label]) => (
               <Button key={value} size="small" variant={filter === value ? 'contained' : 'outlined'} onClick={() => setFilter(value)}>{label}</Button>
@@ -402,7 +413,8 @@ export default function OpportunitiesPage() {
           {visible.length ? <div className="operations-list">{visible.map((item) => <OpportunityRow key={`${item.id}-${item.version}`} item={item} onChanged={load} />)}</div> : (
             <section className="operations-empty">
               <h2>{items.length ? '这个状态下还没有机会' : '还没有可确认的内容机会'}</h2>
-              <p>完成历史导入和画像确认后，可以从真实内容与常青需求生成机会，不依赖没有依据的爆款分。</p>
+              {/* 审计修复 2026-08-16 UX-M6：空状态改为平实文案，不使用术语。 */}
+              <p>导入历史笔记并确认画像后，AI 会基于你的真实内容和长期受关注的话题提出新机会。你也可以点击右上角「手动添加来源」自己提交一条。</p>
               <div className="operations-row-actions"><Button variant="contained" onClick={() => navigate('/content')}>查看内容项目</Button></div>
             </section>
           )}

@@ -28,6 +28,7 @@ import ReviewSummary from './ReviewSummary';
 import ObservationList from './ObservationList';
 import ViewpointPanel from './ViewpointPanel';
 import SeriesPanel, { type SeriesOpportunityDecisionValues } from './SeriesPanel';
+import { readableRef } from '@/utils/labels';
 import {
   readProjectDraft,
   removeProjectDraft,
@@ -93,16 +94,8 @@ interface NextStepGuide {
   helper: string;
 }
 
-const actionRefLabels: Record<string, string> = {
-  confirmed_intent: '这条内容真正想产生的影响',
-  audience_change: '读者看完后应发生的变化',
-  first_party_evidence: '你的真实经历或证据',
-  fact_accuracy: '事实是否准确',
-  public_scope: '哪些内容可以公开',
-  publication_time: '真实发布时间',
-  next_experiment: '下一次唯一实验',
-};
-
+// 编排动作的 unknown_refs 统一走 labels.ts 集中映射，
+// 避免 complete_publish_judgment 等枚举标识符直接暴露给用户。
 function nextStepGuide(workspace: CalibrationWorkspace): NextStepGuide {
   if (workspace.orchestrated_action) {
     return {
@@ -110,7 +103,7 @@ function nextStepGuide(workspace: CalibrationWorkspace): NextStepGuide {
       description: workspace.orchestrated_action.reason,
       progress: workspace.orchestrated_action.status === 'deferred' ? '已暂缓' : 'AI 选择的下一步',
       helper: workspace.orchestrated_action.unknown_refs.length
-        ? `还需要确认：${actionRefLabels[workspace.orchestrated_action.unknown_refs[0]] || workspace.orchestrated_action.unknown_refs[0]}`
+        ? `还需要确认：${readableRef(workspace.orchestrated_action.unknown_refs[0])}`
         : '你只需要完成这一个动作，其他步骤会在后面出现。',
     };
   }
@@ -408,7 +401,7 @@ export default function ProjectWorkspace({
             <h2>这篇内容的进度</h2>
             <p>完成一个动作，再进入下一步</p>
           </div>
-          <OutlineItem icon={<FactCheckOutlined />} title="内容意图" value={intentLabel ? `${intentLabel}：${purpose}` : '尚未分类，可回溯确认当时的意图'} state={workspace.project.intent_status === 'working_confirmed' || workspace.project.intent_status === 'locked' ? 'confirmed' : 'pending'} />
+          <OutlineItem icon={<FactCheckOutlined />} title="内容意图" hint="这条内容想让读者发生什么变化" value={intentLabel ? `${intentLabel}：${purpose}` : '尚未分类，可回溯确认当时的意图'} state={workspace.project.intent_status === 'working_confirmed' || workspace.project.intent_status === 'locked' ? 'confirmed' : 'pending'} />
           <OutlineItem
             icon={<TimelineOutlined />}
             title="需要的真实素材"
@@ -419,18 +412,21 @@ export default function ProjectWorkspace({
           <OutlineItem
             icon={<Check />}
             title="发布前确认"
+            hint="发布前确认事实准确、表达代表你、愿意公开"
             value={hypothesis ? '事实、表达和公开范围已锁定' : '还需要确认候选内容'}
             state={hypothesis ? 'confirmed' : 'pending'}
           />
           <OutlineItem
             icon={<ScienceOutlined />}
             title="发布后复盘"
+            hint="发布后对照真实表现看结果，决定下一次怎么验证"
             value={latestObservation?.next_test ?? '发布后再看实际表现'}
             state={latestObservation ? 'pending' : 'muted'}
           />
           <OutlineItem
             icon={<LockOutlined />}
             title="长期经验"
+            hint="经过多次验证的结论才会沉淀，不凭一篇内容下结论"
             value={workspace.latest_blind_review ? '当前结果仍需要更多样本' : '不会凭一篇内容下结论'}
             state="muted"
           />
@@ -672,17 +668,21 @@ function OutlineItem({
   title,
   value,
   detail,
+  hint,
   state,
 }: {
   icon: ReactNode;
   title: string;
   value: string;
   detail?: string;
+  // 审计修复 2026-08-16 UX-L3/L7：术语首次出现时附平实解释。
+  hint?: string;
   state: 'confirmed' | 'pending' | 'muted';
 }) {
   return (
     <div className={`outline-item outline-${state}`}>
       <div className="outline-item-title"><span>{icon}</span><strong>{title}</strong></div>
+      {hint ? <small>{hint}</small> : null}
       <p>{value}</p>
       {detail ? <small>{detail}</small> : null}
     </div>

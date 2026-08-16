@@ -9,6 +9,7 @@ import {
   MenuItem,
   Stack,
   TextField,
+  Typography,
 } from '@mui/material';
 import {
   ArrowBack,
@@ -57,6 +58,9 @@ export default function StarterPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // 审计修复 2026-08-16 UX-H6：步骤提交成功后给出明确通知，
+  // 避免静默切换步骤导致的方向迷失。
+  const [notice, setNotice] = useState<string | null>(null);
 
   // Audit e54a2643 medium: 卸载后到达的响应不能再写入状态。
   const requestTokenRef = useRef(0);
@@ -89,6 +93,7 @@ export default function StarterPage() {
     const token = (requestTokenRef.current += 1);
     setBusy(true);
     setError(null);
+    setNotice(null);
     try {
       await command();
       const next = await getStarterWorkspace();
@@ -114,8 +119,9 @@ export default function StarterPage() {
         返回内容
       </Button>
       {error ? <Alert severity="error" role="alert" action={<Button onClick={() => void load()}>重试</Button>}>{error}</Alert> : null}
+      {notice ? <Alert severity="success">{notice}</Alert> : null}
       {!workspace?.assessment || workspace.next_step === 'assessment' ? (
-        <AssessmentStep workspace={workspace} busy={busy} run={run} />
+        <AssessmentStep workspace={workspace} busy={busy} run={run} onNotice={setNotice} />
       ) : workspace.next_step === 'directions' ? (
         <DirectionStep workspace={workspace} busy={busy} run={run} />
       ) : (
@@ -129,10 +135,12 @@ function AssessmentStep({
   workspace,
   busy,
   run,
+  onNotice,
 }: {
   workspace: StarterWorkspace | null;
   busy: boolean;
   run: (command: () => Promise<unknown>) => Promise<void>;
+  onNotice: (message: string) => void;
 }) {
   const existing = workspace?.assessment;
   const [motivation, setMotivation] = useState<StarterAssessmentInput['motivation']>(existing?.motivation ?? 'curious');
@@ -178,10 +186,12 @@ function AssessmentStep({
         <FormControlLabel control={<Checkbox checked={publish} onChange={(event) => setPublish(event.target.checked)} />} label="我愿意在 14 天内至少发布一篇" />
         <FormControlLabel control={<Checkbox checked={acceptExperiment} onChange={(event) => setAcceptExperiment(event.target.checked)} />} label="我知道这只是一次实验，不是永久定位结论" />
       </Stack>
+      {/* 审计修复 2026-08-16 UX-M5：资产全空时禁用提交并说明原因。 */}
+      {!hasAsset ? <Alert severity="info">至少填写一条你亲自经历过的内容、愿意探索的兴趣或会做的事，才能继续。</Alert> : null}
       <Button
         variant="contained"
         startIcon={<ArrowForward />}
-        disabled={busy || !hoursValid}
+        disabled={busy || !hoursValid || !hasAsset}
         onClick={() => void run(async () => {
           const payload = {
             motivation,
@@ -199,10 +209,17 @@ function AssessmentStep({
           }
           await submitStarterAssessment({ ...payload, idempotency_key: submitKeyRef.current.key });
           submitKeyRef.current = null;
+          onNotice(publish && acceptExperiment && hours > 0 && hasAsset
+            ? '评估已保存，接下来可以生成实验方向。'
+            : '评估已保存。勾选发布承诺并投入时间后，下一步就能生成实验方向。');
         })}
       >
-        {publish && acceptExperiment && hours > 0 && hasAsset ? '生成实验方向' : '保存评估'}
+        {/* 审计修复 2026-08-16 UX-L2：按钮文案固定，避免随表单状态变化。 */}
+        保存并继续
       </Button>
+      <Typography variant="body2" color="text.secondary" mt={1}>
+        提交后会保存你的评估；如果愿意发布并投入时间，下一步将生成可测试方向。
+      </Typography>
     </section>
   );
 }

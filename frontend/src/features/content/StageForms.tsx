@@ -402,6 +402,7 @@ export function HypothesisForm({
           onChange={(event) => setAudienceChange(event.target.value)}
           multiline
           minRows={2}
+          helperText="例如：看完后愿意试一次这个方法，或想继续关注我的变化"
         />
         {intent === 'solve' ? <>
           <TextField
@@ -410,6 +411,7 @@ export function HypothesisForm({
             onChange={(e) => setProblem(e.target.value)}
             multiline
             minRows={2}
+            helperText="用一句话描述读者在真实场景里遇到的具体困境"
           />
           <TextField
             label="你准备给出的答案"
@@ -417,6 +419,7 @@ export function HypothesisForm({
             onChange={(e) => setPromise(e.target.value)}
             multiline
             minRows={2}
+            helperText="你能基于亲身经历讲清楚的方法或步骤"
           />
         </> : null}
         {intent === 'share' ? (
@@ -426,6 +429,7 @@ export function HypothesisForm({
             onChange={(e) => setViewpoint(e.target.value)}
             multiline
             minRows={2}
+            helperText="这次分享所依据的真实经历或你坚持的观点"
           />
         ) : null}
         {intent === 'record' ? (
@@ -435,6 +439,7 @@ export function HypothesisForm({
             onChange={(e) => setContinuation(e.target.value)}
             multiline
             minRows={2}
+            helperText="读者之后可以继续追踪的后续进展，例如：每周更新一次进度"
           />
         ) : null}
         <TextField
@@ -446,6 +451,7 @@ export function HypothesisForm({
             setPrimaryResponse(next);
             setSupportingResponses((current) => current.filter((item) => item !== next));
           }}
+          helperText="选你最想验证的读者反应，发布后的复盘会拿它做对照"
         >
           {behaviorOptions.map(([value, label]) => (
             <MenuItem key={value} value={value}>{label}</MenuItem>
@@ -499,6 +505,7 @@ export function HypothesisForm({
           onChange={(event) => setObservationWindow(event.target.value)}
           type="number"
           inputProps={{ min: 1, max: 365 }}
+          helperText="从发布开始计算，到期后才能进入复盘；建议 7 到 14 天"
         />
         <Box>
           <Button

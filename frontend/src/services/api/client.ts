@@ -18,6 +18,9 @@ const API_PREFIX = '/api/v2';
 const AUTH_BASE_URL = `${API_BASE_URL}${API_PREFIX}`;
 
 /** Auth endpoints must fail fast on 401 instead of entering the refresh loop. */
+// 登录/注册的 401 是“凭据错误”，不是会话失效：必须把后端消息（如
+// “邮箱或密码错误”）抛给调用方渲染，而不是 forceLogout 整页硬刷新
+// 把表单和提示一起清掉。只有 refresh 端点失败才需要强制登出。
 const AUTH_ENDPOINTS = ['/auth/login', '/auth/register', '/auth/refresh'];
 
 /** Get auth headers with JWT token */
@@ -84,7 +87,9 @@ async function handleUnauthorized(
   // objects often carry an empty url, which would silently skip this guard.
   const isAuthEndpoint = AUTH_ENDPOINTS.some((p) => requestUrl.includes(p));
   if (isAuthEndpoint) {
-    forceLogout();
+    if (requestUrl.includes('/auth/refresh')) {
+      forceLogout();
+    }
     throw new Error('Authentication failed');
   }
 
@@ -110,10 +115,14 @@ async function parseResponse<T>(
   requestFn?: () => Promise<Response>,
   requestUrl = '',
 ): Promise<T> {
-  // Handle 401 with token refresh
+  // Handle 401 with token refresh. Auth endpoints (login/register) never
+  // retry: their 401 carries a user-facing message that must be rendered.
   if (response.status === 401 && requestFn) {
-    const retryResponse = await handleUnauthorized(requestFn, requestUrl);
-    return parseResponse<T>(retryResponse); // No further retry on 401 after refresh
+    const isAuthEndpoint = AUTH_ENDPOINTS.some((p) => requestUrl.includes(p));
+    if (!isAuthEndpoint) {
+      const retryResponse = await handleUnauthorized(requestFn, requestUrl);
+      return parseResponse<T>(retryResponse); // No further retry on 401 after refresh
+    }
   }
 
   if (!response.ok) {

@@ -84,7 +84,8 @@ describe('StarterPage', () => {
     renderPage();
     expect(await screen.findByRole('heading', { name: '先盘点你真正能讲的东西' })).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('你亲自经历过什么'), { target: { value: '第一次独自租房' } });
-    fireEvent.click(screen.getByRole('button', { name: '生成实验方向' }));
+    // 审计修复 2026-08-16 UX-L2：主按钮文案固定为「保存并继续」。
+    fireEvent.click(screen.getByRole('button', { name: '保存并继续' }));
     await waitFor(() => expect(api.submitStarterAssessment).toHaveBeenCalledWith(expect.objectContaining({
       experience_assets: ['第一次独自租房'],
       publish_commitment: true,
@@ -99,10 +100,14 @@ describe('StarterPage', () => {
     // Audit e54a2643: clearing the field made Number('') === NaN, which
     // passed the < 0 / > 40 guards and posted available_hours_per_week null.
     fireEvent.change(screen.getByLabelText('每周可投入小时'), { target: { value: '' } });
-    expect(screen.getByRole('button', { name: '保存评估' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '保存并继续' })).toBeDisabled();
 
+    // 审计修复 2026-08-16 UX-M5：资产全空也会禁用提交，
+    // 所以启用断言需要先填一条真实资产。
     fireEvent.change(screen.getByLabelText('每周可投入小时'), { target: { value: '5' } });
-    expect(screen.getByRole('button', { name: '保存评估' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: '保存并继续' })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText('你亲自经历过什么'), { target: { value: '第一次独自租房' } });
+    expect(screen.getByRole('button', { name: '保存并继续' })).toBeEnabled();
   });
 
   it('explains evidence and creates the selected three-project experiment', async () => {
@@ -156,16 +161,16 @@ describe('StarterPage', () => {
 
     // Audit e54a2643 medium: 瞬时失败后的重试必须复用同一把幂等键，
     // 否则服务端无法去重。
-    fireEvent.click(screen.getByRole('button', { name: '生成实验方向' }));
+    fireEvent.click(screen.getByRole('button', { name: '保存并继续' }));
     await waitFor(() => expect(api.submitStarterAssessment).toHaveBeenCalledTimes(1));
-    fireEvent.click(screen.getByRole('button', { name: '生成实验方向' }));
+    fireEvent.click(screen.getByRole('button', { name: '保存并继续' }));
     await waitFor(() => expect(api.submitStarterAssessment).toHaveBeenCalledTimes(2));
     const firstKey = api.submitStarterAssessment.mock.calls[0][0].idempotency_key;
     expect(api.submitStarterAssessment.mock.calls[1][0].idempotency_key).toBe(firstKey);
 
     // 输入变化后键必须轮换。
     fireEvent.change(screen.getByLabelText('每周可投入小时'), { target: { value: '5' } });
-    fireEvent.click(screen.getByRole('button', { name: '生成实验方向' }));
+    fireEvent.click(screen.getByRole('button', { name: '保存并继续' }));
     await waitFor(() => expect(api.submitStarterAssessment).toHaveBeenCalledTimes(3));
     expect(api.submitStarterAssessment.mock.calls[2][0].idempotency_key).not.toBe(firstKey);
   });
@@ -175,7 +180,7 @@ describe('StarterPage', () => {
     renderPage();
     expect(await screen.findByRole('heading', { name: '先盘点你真正能讲的东西' })).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('你亲自经历过什么'), { target: { value: '第一次独自租房' } });
-    fireEvent.click(screen.getByRole('button', { name: '生成实验方向' }));
+    fireEvent.click(screen.getByRole('button', { name: '保存并继续' }));
     await waitFor(() => expect(api.submitStarterAssessment).toHaveBeenCalledTimes(1));
 
     fireEvent.click(screen.getByRole('button', { name: '重试' }));

@@ -25,11 +25,30 @@ const LoginPage: React.FC = () => {
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  // 审计修复 2026-08-16 UX-H1/M8：不再依赖浏览器原生 minLength 气泡，
+  // 改用中文表单校验提示；本地校验错误优先于 store 错误展示。
+  const [formError, setFormError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault();
     clearError();
+    setFormError(null);
+    if (tab === 'register') {
+      if (username.trim().length < 2) {
+        setFormError('姓名至少需要 2 个字符，两个字的中文姓名也可以。');
+        return;
+      }
+      if (password.length < 8) {
+        setFormError('密码至少需要 8 位字符。');
+        return;
+      }
+      if (confirmPassword !== password) {
+        setFormError('两次输入的密码不一致，请检查后重新提交。');
+        return;
+      }
+    }
     try {
       if (tab === 'login') {
         await login(email, password);
@@ -112,6 +131,7 @@ const LoginPage: React.FC = () => {
                   onClick={() => {
                     setTab(value);
                     clearError();
+                    setFormError(null);
                   }}
                   style={{
                     padding: '10px 20px',
@@ -133,7 +153,7 @@ const LoginPage: React.FC = () => {
           </div>
 
           {/* Error alert */}
-          {error && (
+          {(formError || error) && (
             <div
               role="alert"
               style={{
@@ -142,7 +162,7 @@ const LoginPage: React.FC = () => {
                 marginBottom: 8,
               }}
             >
-              {error}
+              {formError || error}
             </div>
           )}
 
@@ -212,7 +232,6 @@ const LoginPage: React.FC = () => {
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
                     required
-                    minLength={3}
                     maxLength={50}
                     style={{
                       height: 42,
@@ -260,9 +279,8 @@ const LoginPage: React.FC = () => {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  // minLength is a registration policy; applying it to login
-                  // blocks existing shorter passwords from submitting.
-                  minLength={tab === 'register' ? 8 : undefined}
+                  // 审计修复 UX-M8：长度策略改为提交时中文提示，
+                  // 避免浏览器原生英文校验气泡。
                   style={{
                     height: 42,
                     fontSize: 14,
@@ -303,7 +321,57 @@ const LoginPage: React.FC = () => {
                   {showPassword ? '隐藏' : '显示'}
                 </button>
               </div>
+              {tab === 'register' && (
+                <div style={{ fontSize: 12, color: 'var(--v3-text-sec)', marginTop: 6 }}>
+                  密码至少需要 8 位字符
+                </div>
+              )}
             </div>
+
+            {tab === 'register' && (
+              <div style={{ marginBottom: 18 }}>
+                <label
+                  htmlFor="login-confirm-password"
+                  style={{
+                    display: 'block',
+                    fontSize: 12.5,
+                    fontWeight: 500,
+                    color: 'var(--v3-text-sec)',
+                    marginBottom: 6,
+                  }}
+                >
+                  确认密码
+                </label>
+                <input
+                  id="login-confirm-password"
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="再输入一次密码"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  required
+                  autoComplete="new-password"
+                  style={{
+                    height: 42,
+                    fontSize: 14,
+                    padding: '0 14px',
+                    width: '100%',
+                    borderRadius: 6,
+                    border: '1px solid var(--v3-border)',
+                    background: 'var(--v3-bg)',
+                    color: 'var(--v3-text)',
+                    fontFamily: 'inherit',
+                    outline: 'none',
+                    boxSizing: 'border-box',
+                  }}
+                  onFocus={(e) => {
+                    e.currentTarget.style.borderColor = 'var(--v3-text)';
+                  }}
+                  onBlur={(e) => {
+                    e.currentTarget.style.borderColor = 'var(--v3-border)';
+                  }}
+                />
+              </div>
+            )}
 
             <button
               type="submit"

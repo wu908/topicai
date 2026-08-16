@@ -11,7 +11,8 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 class RegisterRequest(BaseModel):
     email: EmailStr
-    username: str = Field(min_length=3, max_length=50)
+    # 两字中文姓名（如"小明"）是真实场景，最低 2 字符与前端校验保持一致。
+    username: str = Field(min_length=2, max_length=50)
     password: str = Field(min_length=8, max_length=128)
 
 

@@ -17,6 +17,7 @@ import {
 import { useAuthStore } from '@/store/authStore';
 import type { CreatorState, HumanGate, UserSettings } from '@/types/contracts/v2/content';
 import { extractErrorMessage } from '@/utils/error';
+import { humanizeGoal, isKnownGoalEnum } from '@/utils/labels';
 import '../Operations.css';
 
 const trustLabels = {
@@ -63,6 +64,8 @@ export default function MePage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // 审计修复 2026-08-16 UX-L8：信任条件长段落默认折叠。
+  const [showTrustDetail, setShowTrustDetail] = useState(false);
   const aiAvailable = Boolean(settings?.ai.enabled && settings.ai.configured);
   // Number.isInteger 在 lib 里不是类型守卫，用局部守卫收窄 number | null。
   const isWholeGoal = (value: number | null): value is number =>
@@ -72,7 +75,9 @@ export default function MePage() {
   const applySettings = useCallback((next: UserSettings) => {
     setSettings(next);
     setWeeklyGoal(next.weekly_publish_goal);
-    setContentStrategy(next.content_strategy);
+    // 审计修复 2026-08-16 UX-M9：后端默认返回的是目标枚举（stable_publish），
+    // 回显时转为中文描述；用户自填的自由文本原样保留。
+    setContentStrategy(isKnownGoalEnum(next.content_strategy) ? humanizeGoal(next.content_strategy) : next.content_strategy);
     setAccountReference(next.xiaohongshu_account_reference || '');
   }, []);
 
@@ -177,14 +182,14 @@ export default function MePage() {
             <div className="operations-stat"><strong>{Math.round((state.candidate_acceptance_rate ?? 0) * 100)}%</strong><span>AI 候选确认率</span></div>
           </div>
           <section className="operations-row">
-            <div className="operations-row-header"><div><h2>当前创作目标</h2><p className="operations-row-copy">{state.current_goal || '稳定更新并通过复盘持续涨粉'}</p></div><Chip size="small" label={trustLabels[state.automation_trust_level]} /></div>
+            <div className="operations-row-header"><div><h2>当前创作目标</h2><p className="operations-row-copy">{humanizeGoal(state.current_goal) || '稳定更新并通过复盘持续涨粉'}</p></div><Chip size="small" label={trustLabels[state.automation_trust_level]} /></div>
             <p className="operations-helper">AI 默认只负责准备下一步。发布、公开范围、事实确认和长期经验写入始终由你决定。</p>
           </section>
           <section className="operations-row">
             <div className="operations-row-header"><div><h2>创作设置</h2><p className="operations-row-copy">这些设置会用于安排后续内容项目，不包含平台密码或访问令牌。</p></div></div>
             <Stack spacing={2}>
               <TextField label="每周发布目标" type="number" value={weeklyGoal ?? ''} inputProps={{ min: 1, max: 7 }} onChange={(event) => setWeeklyGoal(event.target.value === '' ? null : Number(event.target.value))} required />
-              <TextField label="内容策略" value={contentStrategy} onChange={(event) => setContentStrategy(event.target.value)} multiline minRows={2} required />
+              <TextField label="内容策略" value={contentStrategy} onChange={(event) => setContentStrategy(event.target.value)} multiline minRows={2} required helperText="用一句话描述你这段时间的创作重点，例如：每周分享一条真实踩坑经验" />
               <TextField label="小红书账号备注" value={accountReference} onChange={(event) => setAccountReference(event.target.value)} helperText="仅用于区分账号，不要填写密码或令牌" />
               <div className="operations-row-actions">
                 <Button variant="contained" startIcon={<SaveOutlined />} disabled={busy || !goalValid || !contentStrategy.trim()} onClick={() => void saveSettings()}>保存设置</Button>
@@ -196,10 +201,20 @@ export default function MePage() {
               <div><h2>AI 能力状态</h2><p className="operations-row-copy">{settings.ai.configured ? `已连接${settings.ai.model_identifier ? ` · ${settings.ai.model_identifier}` : ''}` : settings.ai.enabled ? '已启用，但服务尚未配置完整' : '当前未启用'}</p></div>
               <Chip size="small" color={settings.ai.configured ? 'success' : 'default'} label={settings.ai.configured ? '可用' : '不可用'} />
             </div>
+            {/* 审计修复 2026-08-16 UX-M3：降级时补充具体缺失项和影响范围。 */}
+            {!settings.ai.configured ? (
+              <p className="operations-helper">需要管理员先完成 AI 服务配置（服务地址、密钥和模型名称）。在此之前，问题生成、候选内容准备等 AI 能力暂不可用，但你仍可手动创建和推进内容项目。</p>
+            ) : null}
             <p className="operations-meta">文本能力：{aiAvailable && settings.ai.capabilities.includes('text') ? '可用' : '不可用'} · 截图识别：{aiAvailable && settings.ai.vision_enabled ? '可用' : '不可用'}</p>
           </section>
           <section className="operations-row">
-            <div className="operations-row-header"><div><h2>自动化信任条件</h2><p className="operations-row-copy">每项能力各自累计 {REQUIRED_ACCEPTED} 次被采纳的结果，并处理完事实或隐私纠正后，才可由你主动开启项目级自动准备。发布、公开范围等受保护的决定始终需要你确认，不计入这里。</p></div><Chip size="small" color={state.autopilot_eligible ? 'success' : 'default'} label={state.autopilot_eligible ? '条件已满足' : '继续积累中'} /></div>
+            <div className="operations-row-header"><div><h2>自动化信任条件</h2><p className="operations-row-copy">每项能力累计 {REQUIRED_ACCEPTED} 次被采纳的结果后，可开启项目级自动准备。</p></div><Chip size="small" color={state.autopilot_eligible ? 'success' : 'default'} label={state.autopilot_eligible ? '条件已满足' : '继续积累中'} /></div>
+            <div className="operations-row-actions">
+              <Button size="small" onClick={() => setShowTrustDetail((value) => !value)}>{showTrustDetail ? '收起条件说明' : '查看条件说明'}</Button>
+            </div>
+            {showTrustDetail ? (
+              <p className="operations-helper">采纳次数按能力分别累计，不使用全局信任分。发布、公开范围等受保护的决定始终需要你确认，不计入这里；处理完事实或隐私纠正后才可开启自动准备。</p>
+            ) : null}
             <ul className="operations-capability-list">
               {AUTO_PREPARE_CAPABILITIES.map(({ key, label }) => {
                 const accepted = state.capability_trust?.[key] ?? 0;
