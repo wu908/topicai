@@ -253,6 +253,65 @@ class TestForeignKeyConstraints:
         await db.close()
 
 
+class TestPerConnectionPragmas:
+    """Regression: foreign_keys/busy_timeout are per-connection in SQLite.
+
+    File databases use NullPool, so every checkout opens a fresh physical
+    connection. init_db used to issue the pragmas once on a borrowed
+    connection, which left every later connection with foreign_keys=OFF
+    and busy_timeout=0 (the :memory: StaticPool path hid this in tests).
+    The connect listener must re-apply them on each new connection.
+    """
+
+    @pytest.mark.asyncio
+    async def test_file_db_fresh_connection_keeps_pragmas(self, tmp_path):
+        """A new connection on a file DB keeps FK enforcement and timeout."""
+        from app.core.database import Database
+
+        db = Database(f"sqlite+aiosqlite:///{tmp_path / 'pragma.db'}")
+        await db.init_db()
+
+        result = await db.fetch_one("PRAGMA foreign_keys")
+        assert result is not None
+        assert result["foreign_keys"] == 1
+
+        result = await db.fetch_one("PRAGMA busy_timeout")
+        assert result is not None
+        # SQLite reports this pragma under the column name "timeout".
+        assert result["timeout"] == 5000
+
+        await db.close()
+
+    @pytest.mark.asyncio
+    async def test_file_db_foreign_key_violation_rejected(self, tmp_path):
+        """FK enforcement actually rejects orphan rows on a file DB."""
+        import sqlalchemy.exc
+
+        from app.core.database import Database
+
+        db = Database(f"sqlite+aiosqlite:///{tmp_path / 'pragma-fk.db'}")
+        await db.init_db()
+
+        now = utc_now()
+        with pytest.raises(sqlalchemy.exc.IntegrityError):
+            await db.insert(
+                "materials",
+                {
+                    "id": "material-fk",
+                    "owner_user_id": "nonexistent-user",
+                    "name": "evidence.pdf",
+                    "mime_type": "application/pdf",
+                    "kind": "document",
+                    "size": 1,
+                    "source_url": "/materials",
+                    "created_at": now,
+                    "updated_at": now,
+                },
+            )
+
+        await db.close()
+
+
 class TestConcurrentAccess:
     """TC02-09: Concurrent read/write safety."""
 

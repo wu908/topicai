@@ -121,6 +121,11 @@ export default function ContentPage() {
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
 
+  // 幂等键稳定化（与 Materials/Starter/Opportunities 页面同一模式）：
+  // 同一签名在一次尝试内复用同一个键，瞬时失败重试时服务端可去重；
+  // 只有确认成功后由 runCommand 轮换（删除缓存键），避免重放旧结果。
+  const keyCacheRef = useRef<Record<string, string>>({});
+
   // 审计 e54a2643 medium：load/runCommand 在 await 后无条件 setState，
   // 卸载或新请求发起后旧响应会覆盖新数据。用递增令牌丢弃过期响应。
   const requestTokenRef = useRef(0);
@@ -187,13 +192,22 @@ export default function ContentPage() {
     };
   }, [fetchPageData]);
 
+  const stableKey = useCallback((signature: string) => {
+    if (!keyCacheRef.current[signature]) {
+      keyCacheRef.current[signature] = makeKey(signature);
+    }
+    return keyCacheRef.current[signature];
+  }, []);
+
   const runCommand = useCallback(
-    async (command: () => Promise<unknown>) => {
+    async (command: () => Promise<unknown>, idempotencyKey?: string) => {
       const token = (requestTokenRef.current += 1);
       setBusy(true);
       setError(null);
       try {
         await command();
+        // 成功后才轮换幂等键；失败保留，重试复用同一键由服务端去重。
+        if (idempotencyKey) delete keyCacheRef.current[idempotencyKey];
         if (requestTokenRef.current !== token) return;
         if (projectId) {
           const [projectList, currentWorkspace, materialList] = await Promise.all([
@@ -231,9 +245,8 @@ export default function ContentPage() {
         to_status: status,
         reason,
         expected_observation_version: observation.version,
-        idempotency_key: makeKey(`observation-${status}`),
-      }),
-    );
+        idempotency_key: stableKey(`observation-${status}-${observation.id}`),
+      }), `observation-${status}-${observation.id}`);
   };
 
   if (loading) {
@@ -276,7 +289,7 @@ export default function ContentPage() {
             onCommand={runCommand}
             onCreated={(created) => navigate(`/content/${created.id}`)}
             createProject={createProject}
-            makeKey={makeKey}
+            makeKey={stableKey}
           />
         ) : (
             <div className="content-project-list">
@@ -340,8 +353,8 @@ export default function ContentPage() {
         onManage={() => navigate('/materials')}
         onLink={(material) => void runCommand(() => addMaterialUsage(material.id, {
           project_id: workspace.project.id,
-          idempotency_key: makeKey(`project-material-${material.id}`),
-        }))}
+          idempotency_key: stableKey(`project-material-${material.id}-${workspace.project.id}`),
+        }), `project-material-${material.id}-${workspace.project.id}`)}
       />
       <ProjectWorkspace
         key={workspace.current_version?.id ?? `project-${workspace.project.id}`}
@@ -353,7 +366,7 @@ export default function ContentPage() {
               <Alert severity="info">
                 AI 已停止这条建议。你仍可使用下面的手动步骤；项目变化后，AI 会重新判断。
               </Alert>
-              <StageAction workspace={workspace} busy={busy} runCommand={runCommand} />
+              <StageAction workspace={workspace} busy={busy} runCommand={runCommand} makeKey={stableKey} />
             </Stack>
           )
           : workspace.orchestrated_action && (
@@ -361,7 +374,7 @@ export default function ContentPage() {
           || (workspace.orchestrated_action.action_type === 'confirm_learning' && workspace.next_action === 'create_observation')
         )
           ? <IntentActionPanel key={`${workspace.orchestrated_action.id}-${workspace.orchestrated_action.human_gate?.id ?? 'no-gate'}`} workspace={workspace} action={workspace.orchestrated_action} busy={busy} runCommand={runCommand} />
-          : <StageAction workspace={workspace} busy={busy} runCommand={runCommand} />}
+          : <StageAction workspace={workspace} busy={busy} runCommand={runCommand} makeKey={stableKey} />}
         onBack={() => navigate('/content')}
         onRefresh={() => void load()}
         onSaveVersion={async (title, bodyText) => {
@@ -371,44 +384,44 @@ export default function ContentPage() {
               title,
               body_text: bodyText,
               expected_project_version: workspace.project.version,
-              idempotency_key: makeKey('workspace-version'),
+              idempotency_key: stableKey('workspace-version'),
             });
             saved = true;
-          });
+          }, 'workspace-version');
           return saved;
         }}
         onTransition={handleTransition}
         onProposeRule={(observation) => void runCommand(() => proposeRuleCandidate(observation.id, {
           expected_creator_state_version: workspace.creator_state?.version ?? workspace.project.creator_state_version,
-          idempotency_key: makeKey(`rule-candidate-${observation.id}`),
-        }))}
+          idempotency_key: stableKey(`rule-candidate-${observation.id}`),
+        }), `rule-candidate-${observation.id}`)}
         onDecideRule={(version: CreatorRuleVersion, decision) => void runCommand(() => decideRuleCandidate(version.id, {
           decision,
           expected_candidate_version: version.version_number,
-          idempotency_key: makeKey(`rule-${decision}-${version.id}`),
-        }))}
+          idempotency_key: stableKey(`rule-${decision}-${version.id}`),
+        }), `rule-${decision}-${version.id}`)}
         onRollbackRule={(rule: CreatorRule, version: CreatorRuleVersion) => void runCommand(() => rollbackCreatorRule(rule.id, {
           target_version_id: version.id,
           expected_rule_version: rule.version,
-          idempotency_key: makeKey(`rule-rollback-${rule.id}-${version.id}`),
-        }))}
+          idempotency_key: stableKey(`rule-rollback-${rule.id}-${version.id}`),
+        }), `rule-rollback-${rule.id}-${version.id}`)}
         onResolveConflict={(rule: CreatorRule, conflict: CreatorRuleConflict, resolutionType, scope) =>
           void runCommand(() => resolveCreatorRuleConflict(rule.id, conflict.rule_id, {
             resolution_type: resolutionType,
             scope,
             expected_rule_version: rule.version,
             expected_conflict_rule_version: conflict.rule_version,
-            idempotency_key: makeKey(`rule-conflict-${resolutionType}-${rule.id}-${conflict.rule_id}`),
-          }))}
+            idempotency_key: stableKey(`rule-conflict-${resolutionType}-${rule.id}-${conflict.rule_id}`),
+          }), `rule-conflict-${resolutionType}-${rule.id}-${conflict.rule_id}`)}
         onProposeViewpoint={(sourceEvidenceIds) => void runCommand(() => proposeViewpointCandidate(
           workspace.project.id,
           {
             source_evidence_ids: sourceEvidenceIds,
             source_content_version_id: workspace.current_version?.id,
             expected_project_version: workspace.project.version,
-            idempotency_key: makeKey(`viewpoint-propose-${workspace.project.id}`),
+            idempotency_key: stableKey(`viewpoint-propose-${workspace.project.id}`),
           },
-        ))}
+        ), `viewpoint-propose-${workspace.project.id}`)}
         onDecideViewpoint={(viewpoint: CreatorViewpoint, decision, confirmedStatement) => void runCommand(() => decideViewpointCandidate(
           viewpoint.id,
           {
@@ -416,25 +429,25 @@ export default function ContentPage() {
             confirmed_statement: confirmedStatement,
             reason: decision === 'reject' ? '用户确认这条候选不代表自己的观点' : undefined,
             expected_viewpoint_version: viewpoint.version,
-            idempotency_key: makeKey(`viewpoint-${decision}-${viewpoint.id}`),
+            idempotency_key: stableKey(`viewpoint-${decision}-${viewpoint.id}`),
           },
-        ))}
+        ), `viewpoint-${decision}-${viewpoint.id}`)}
         onRevokeViewpoint={(viewpoint: CreatorViewpoint) => void runCommand(() => revokeCreatorViewpoint(
           viewpoint.id,
           {
             reason: '用户从内容工作台撤销了这条观点',
             expected_viewpoint_version: viewpoint.version,
-            idempotency_key: makeKey(`viewpoint-revoke-${viewpoint.id}`),
+            idempotency_key: stableKey(`viewpoint-revoke-${viewpoint.id}`),
           },
-        ))}
+        ), `viewpoint-revoke-${viewpoint.id}`)}
         projects={projects}
         onProposeSeries={(sourceProjects) => void runCommand(() => proposeSeriesCandidate({
           source_project_ids: sourceProjects.map((project) => project.id),
           expected_project_versions: Object.fromEntries(
             sourceProjects.map((project) => [project.id, project.version]),
           ),
-          idempotency_key: makeKey('series-propose'),
-        }))}
+          idempotency_key: stableKey('series-propose'),
+        }), 'series-propose')}
         onDecideSeries={(series: CreatorSeries, decision, values) => void runCommand(() => decideSeriesCandidate(
           series.id,
           {
@@ -444,24 +457,24 @@ export default function ContentPage() {
             confirmed_continuation_prompt: values?.continuationPrompt,
             reason: decision === 'reject' ? '用户确认这些内容不属于同一系列' : undefined,
             expected_series_version: series.version,
-            idempotency_key: makeKey(`series-${decision}-${series.id}`),
+            idempotency_key: stableKey(`series-${decision}-${series.id}`),
           },
-        ))}
+        ), `series-${decision}-${series.id}`)}
         onRevokeSeries={(series: CreatorSeries) => void runCommand(() => revokeCreatorSeries(
           series.id,
           {
             reason: '用户从内容工作台撤销了这个系列',
             expected_series_version: series.version,
-            idempotency_key: makeKey(`series-revoke-${series.id}`),
+            idempotency_key: stableKey(`series-revoke-${series.id}`),
           },
-        ))}
+        ), `series-revoke-${series.id}`)}
         onProposeSeriesExtension={(series: CreatorSeries) => void runCommand(() => proposeSeriesExtension(
           series.id,
           {
             expected_series_version: series.version,
-            idempotency_key: makeKey(`series-extension-${series.id}`),
+            idempotency_key: stableKey(`series-extension-${series.id}`),
           },
-        ))}
+        ), `series-extension-${series.id}`)}
         onDecideOpportunity={(opportunity: ContentOpportunity, decision, values) => void runCommand(() => decideContentOpportunity(
           opportunity.id,
           {
@@ -473,9 +486,9 @@ export default function ContentPage() {
             confirmed_content_format: values?.contentFormat,
             reason: decision === 'reject' ? '用户确认这篇延展内容现在不合适' : undefined,
             expected_opportunity_version: opportunity.version,
-            idempotency_key: makeKey(`opportunity-${decision}-${opportunity.id}`),
+            idempotency_key: stableKey(`opportunity-${decision}-${opportunity.id}`),
           },
-        ))}
+        ), `opportunity-${decision}-${opportunity.id}`)}
         onOpenOpportunityProject={(nextProjectId) => navigate(`/content/${nextProjectId}`)}
       />
     </div>
@@ -587,15 +600,30 @@ function IntentActionPanel({
   const [answer, setAnswer] = useState('');
   const [classificationBasis, setClassificationBasis] = useState('');
   const [gate, setGate] = useState<HumanGate | null>(action.human_gate);
+  // 审计修复：openHumanGate 失败原来被 catch 吞掉，gate 恒 null，
+  // deps 不变不会重试，页面永久停在转圈。现在记录错误并提供重试。
+  const [gateError, setGateError] = useState<string | null>(null);
+  const [gateAttempt, setGateAttempt] = useState(0);
 
   useEffect(() => {
     if (
       (action.action_type === 'review_candidate' && workspace.candidate_review?.can_lock && !gate)
       || (action.action_type === 'confirm_learning' && workspace.next_action === 'create_observation' && !gate)
     ) {
-      void openHumanGate(action.id).then(setGate).catch(() => undefined);
+      void openHumanGate(action.id)
+        .then((created) => {
+          setGate(created);
+          setGateError(null);
+        })
+        .catch((err: unknown) => setGateError(extractErrorMessage(err, '确认入口加载失败')));
     }
-  }, [action.action_type, action.id, gate, workspace.candidate_review?.can_lock, workspace.next_action]);
+    // gateAttempt 变化触发失败后重试（重试前由 retryGate 清空错误态）。
+  }, [action.action_type, action.id, gate, workspace.candidate_review?.can_lock, workspace.next_action, gateAttempt]);
+
+  const retryGate = () => {
+    setGateError(null);
+    setGateAttempt((attempt) => attempt + 1);
+  };
 
   // 审计 e54a2643 medium：服务端可能返回未知意图值，回退到默认意图文案，
   // 避免无守卫索引崩溃。
@@ -703,8 +731,10 @@ function IntentActionPanel({
   if (action.action_type === 'confirm_learning') {
     return (
       <LearningConfirmationPanel
-        plan={workspace.latest_blind_review?.comparison.intent_review}
+        plan={workspace.latest_blind_review?.comparison?.intent_review}
         gate={gate}
+        gateError={gateError}
+        onRetryGate={retryGate}
         busy={busy}
         runCommand={runCommand}
       />
@@ -738,7 +768,9 @@ function IntentActionPanel({
             readOnly
           />
         ) : null}
-        {gate ? <Button variant="contained" startIcon={<CheckCircleOutline />} disabled={busy || gate.status !== 'pending'} onClick={() => void runCommand(() => decideHumanGate(gate.id, { decision: 'confirm', decision_payload: { facts_confirmed: true, expression_confirmed: true, public_scope_confirmed: true }, expected_gate_version: gate.version, idempotency_key: `candidate-gate-${gate.id}-${gate.version}` }))}>确认候选内容并进入发布准备</Button> : <CircularProgress size={22} aria-label="准备确认" />}
+        {gate ? <Button variant="contained" startIcon={<CheckCircleOutline />} disabled={busy || gate.status !== 'pending'} onClick={() => void runCommand(() => decideHumanGate(gate.id, { decision: 'confirm', decision_payload: { facts_confirmed: true, expression_confirmed: true, public_scope_confirmed: true }, expected_gate_version: gate.version, idempotency_key: `candidate-gate-${gate.id}-${gate.version}` }))}>确认候选内容并进入发布准备</Button> : gateError ? (
+          <Alert severity="error" action={<Button color="inherit" size="small" onClick={retryGate}>重试</Button>}>{gateError}</Alert>
+        ) : <CircularProgress size={22} aria-label="准备确认" />}
       </Stack>
     </Paper>
   );
@@ -747,11 +779,15 @@ function IntentActionPanel({
 function LearningConfirmationPanel({
   plan,
   gate,
+  gateError = null,
+  onRetryGate,
   busy,
   runCommand,
 }: {
   plan: NonNullable<CalibrationWorkspace['latest_blind_review']>['comparison']['intent_review'];
   gate: HumanGate | null;
+  gateError?: string | null;
+  onRetryGate?: () => void;
   busy: boolean;
   runCommand: (command: () => Promise<unknown>) => Promise<void>;
 }) {
@@ -807,6 +843,8 @@ function LearningConfirmationPanel({
             >
               确认未知结果和下一步
             </Button>
+          ) : gateError ? (
+            <Alert severity="error" action={<Button color="inherit" size="small" onClick={onRetryGate}>重试</Button>}>{gateError}</Alert>
           ) : <CircularProgress size={22} aria-label="准备复盘确认" />}
         </Stack>
       </Paper>
@@ -853,6 +891,8 @@ function LearningConfirmationPanel({
               暂不保存
             </Button>
           </Stack>
+        ) : gateError ? (
+          <Alert severity="error" action={<Button color="inherit" size="small" onClick={onRetryGate}>重试</Button>}>{gateError}</Alert>
         ) : <CircularProgress size={22} aria-label="准备复盘确认" />}
       </Stack>
     </Paper>
@@ -1014,10 +1054,12 @@ function StageAction({
   workspace,
   busy,
   runCommand,
+  makeKey,
 }: {
   workspace: CalibrationWorkspace;
   busy: boolean;
-  runCommand: (command: () => Promise<unknown>) => Promise<void>;
+  runCommand: (command: () => Promise<unknown>, idempotencyKey?: string) => Promise<void>;
+  makeKey: (prefix: string) => string;
 }) {
   const common = { workspace, busy, onCommand: runCommand, makeKey };
   switch (workspace.next_action) {

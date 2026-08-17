@@ -492,8 +492,7 @@ async def test_confirmed_series_opportunity_requires_acceptance_and_replays_proj
     )
 
     class FakeLLM:
-        active_provider = "compatible"
-        providers = {"compatible": {"model": "test-model-v1"}}
+        model = "test-model-v1"
 
         @staticmethod
         def is_available(capability):

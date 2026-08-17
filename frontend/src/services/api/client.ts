@@ -118,14 +118,23 @@ async function parseResponse<T>(
 
   if (!response.ok) {
     let message = `Request failed with status ${response.status}`;
+    // Preserve the full envelope (including meta.details) on the error:
+    // some flows (e.g. DELETE /materials 409 MaterialInUse) depend on
+    // error.response.data.meta.details to drive confirmation UI.
+    let errorBody: { message?: string; detail?: string; meta?: { details?: unknown } } | null = null;
     try {
-      const errorBody = await response.json();
+      errorBody = await response.json();
       message = errorBody?.message || errorBody?.detail || message;
     } catch {
       // Use default message if body parse fails
     }
-    const error = new Error(message) as Error & { response?: { status: number; data?: { message?: string } } };
-    error.response = { status: response.status, data: { message } };
+    const error = new Error(message) as Error & {
+      response?: { status: number; data?: { message?: string; meta?: { details?: unknown } } };
+    };
+    error.response = {
+      status: response.status,
+      data: { message, ...(errorBody?.meta ? { meta: errorBody.meta } : {}) },
+    };
     throw error;
   }
 

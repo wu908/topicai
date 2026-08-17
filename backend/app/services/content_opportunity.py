@@ -742,7 +742,7 @@ class ContentOpportunityService:
                         evidence_refs=evidence_refs,
                         policy_version="series-extension-v1",
                         model_identifier=(
-                            self.llm.providers[self.llm.active_provider]["model"]
+                            self.llm.model
                             if proposal_source == "ai" and self.llm
                             else None
                         ),

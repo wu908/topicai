@@ -179,13 +179,21 @@ class CreatorRuleService:
         async with session:
             async with session.begin():
                 status = "active" if body.decision == "confirm" else "rejected"
-                await session.execute(
+                updated = await session.execute(
                     text(
                         "UPDATE creator_rule_versions SET status=:status,confirmed_at=:confirmed "
                         "WHERE id=:id AND owner_user_id=:owner AND status='proposed'"
                     ),
                     {"status": status, "confirmed": timestamp if status == "active" else None, "id": version_id, "owner": owner},
                 )
+                # A concurrent decision may have already moved this version out
+                # of 'proposed' (the status pre-check above runs outside the
+                # transaction). When zero rows change, this request lost the
+                # race and must not touch active_version_id.
+                if updated.rowcount != 1:
+                    raise VersionConflictException(
+                        candidate["version_number"] + 1, body.expected_candidate_version
+                    )
                 if status == "active":
                     await session.execute(
                         text(
