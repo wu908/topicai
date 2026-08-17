@@ -23,6 +23,7 @@ import {
   ScienceOutlined,
 } from '@mui/icons-material';
 import { extractErrorMessage } from '@/utils/error';
+import { readableRef } from '@/utils/labels';
 import {
   appendSnapshot,
   createBlindReview,
@@ -272,7 +273,8 @@ export default function ContentPage() {
             </Button>
           )}
         </header>
-        {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
+        {/* 审计修复 2026-08-16 UX-L9：列表视图错误补充重试入口。 */}
+        {error ? <Alert severity="error" sx={{ mb: 2 }} action={<Button color="inherit" size="small" onClick={() => void load()}>重试</Button>}>{error}</Alert> : null}
         {empty ? (
           <section className="starter-entry" aria-labelledby="starter-entry-title">
             <ScienceOutlined />
@@ -322,9 +324,15 @@ export default function ContentPage() {
       <Alert
         severity="error"
         action={
-          <Button color="inherit" size="small" onClick={() => void load()}>
-            重试
-          </Button>
+          <>
+            <Button color="inherit" size="small" onClick={() => void load()}>
+              重试
+            </Button>
+            {/* 审计修复 2026-08-16 UX-M7：项目不存在时给出返回出路。 */}
+            <Button color="inherit" size="small" onClick={() => navigate('/content')}>
+              返回项目列表
+            </Button>
+          </>
         }
       >
         未找到内容项目
@@ -334,7 +342,8 @@ export default function ContentPage() {
 
   return (
     <div className="content-page content-workspace-page">
-      {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
+      {/* 审计修复 2026-08-16 UX-L9：工作台视图错误补充重试入口。 */}
+      {error ? <Alert severity="error" sx={{ mb: 2 }} action={<Button color="inherit" size="small" onClick={() => void load()}>重试</Button>}>{error}</Alert> : null}
       <Box display="flex" justifyContent="flex-end" mb={1}>
         <Button
           variant="outlined"
@@ -758,6 +767,8 @@ function IntentActionPanel({
     <Paper component="section" variant="outlined" sx={{ p: { xs: 2, sm: 3 }, borderColor: 'var(--v3-border)', boxShadow: 'none' }}>
       <Stack spacing={2}>
         <div><Chip size="small" label="发布前确认" /><h2>候选内容已经准备好</h2><p>{action.reason}</p></div>
+        {/* 审计修复 2026-08-16 UX-M1：明确逐段确认结果已持久保留，缓解中途离开后进度丢失的担忧。 */}
+        <Alert severity="info">你之前逐段确认的结果已保留在下方，随时可以返回重新确认，系统不会因为刷新或离开页面而丢失。</Alert>
         <Alert severity="warning">请检查事实是否准确、表达是否代表你，以及是否愿意公开。系统不会自动发布。</Alert>
         {workspace.candidate_review ? (
           <CandidateReviewPanel
@@ -924,6 +935,9 @@ function CandidateReviewPanel({
   readOnly?: boolean;
 }) {
   const [replacements, setReplacements] = useState<Record<string, string>>({});
+  // 审计修复 2026-08-16 UX-L4：已确认段落不再重复展示确认/拒绝按钮，
+  // 需要改时通过「重新修改这一段」展开。
+  const [reopenIds, setReopenIds] = useState<Record<string, boolean>>({});
   const pendingCount = review.segments.filter((segment) => !segment.decision).length;
   const rejectedCount = review.segments.filter((segment) => segment.decision?.decision === 'rejected').length;
 
@@ -968,7 +982,8 @@ function CandidateReviewPanel({
                 <Chip size="small" color={decision?.decision === 'rejected' ? 'warning' : decision ? 'success' : 'default'} label={decisionLabel(decision?.decision)} />
               </Stack>
               <Box sx={{ mt: 1, whiteSpace: 'pre-wrap', lineHeight: 1.75 }}>{segment.text}</Box>
-              {segment.source_refs.length > 0 ? <small>依据：{segment.source_refs.join('、')}</small> : <small>依据：当前版本中的用户确认素材</small>}
+              {/* 审计修复 2026-08-16 UX-H3：依据引用经 readableRef 转换，UUID 不外露。 */}
+              {segment.source_refs.length > 0 ? <small>依据：{segment.source_refs.map(readableRef).join('、')}</small> : <small>依据：当前版本中的用户确认素材</small>}
               {!readOnly && decision?.decision === 'rejected' ? (
                 <Stack spacing={1} sx={{ mt: 1.5 }}>
                   <TextField
@@ -983,10 +998,16 @@ function CandidateReviewPanel({
                 </Stack>
               ) : null}
               {!readOnly ? (
-                <Stack direction="row" spacing={1} sx={{ mt: 1.5 }}>
-                  <Button size="small" variant={decision?.decision === 'accepted' ? 'contained' : 'outlined'} disabled={busy} onClick={() => decide(segment, 'accept')}>确认保留</Button>
-                  <Button size="small" color="inherit" variant={decision?.decision === 'rejected' ? 'contained' : 'outlined'} disabled={busy} onClick={() => decide(segment, 'reject')}>拒绝这一段</Button>
-                </Stack>
+                decision && !reopenIds[segment.id] ? (
+                  <Stack sx={{ mt: 1.5 }}>
+                    <Button size="small" color="inherit" disabled={busy} onClick={() => setReopenIds((items) => ({ ...items, [segment.id]: true }))}>重新修改这一段</Button>
+                  </Stack>
+                ) : (
+                  <Stack direction="row" spacing={1} sx={{ mt: 1.5 }}>
+                    <Button size="small" variant={decision?.decision === 'accepted' ? 'contained' : 'outlined'} disabled={busy} onClick={() => decide(segment, 'accept')}>确认保留</Button>
+                    <Button size="small" color="inherit" variant={decision?.decision === 'rejected' ? 'contained' : 'outlined'} disabled={busy} onClick={() => decide(segment, 'reject')}>拒绝这一段</Button>
+                  </Stack>
+                )
               ) : null}
             </Box>
           );

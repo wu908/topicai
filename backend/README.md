@@ -16,7 +16,8 @@ FastAPI backend for the v2-only `ContentProject` product.
 Copy `.env.example` to `.env`, set a strong `JWT_SECRET_KEY`, and optionally set `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`, and `LLM_CAPABILITIES`.
 
 ```powershell
-.\.venv\Scripts\python.exe -m uvicorn main:create_app --factory --host 127.0.0.1 --port 8000 --reload
+# 审计修复 2026-08-16 UX-M10：端口与 frontend/vite.config.ts 的 /api 代理保持一致。
+.\.venv\Scripts\python.exe -m uvicorn main:create_app --factory --host 127.0.0.1 --port 8765 --reload
 ```
 
 ## Quality Gates

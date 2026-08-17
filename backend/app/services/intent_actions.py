@@ -617,7 +617,10 @@ class ActionResponseService:
             f"这条内容希望做到：{audience_change}\n\n"
             f"建议结构（{config['label']}）：\n"
             + "\n".join(f"- {item}" for item in config["materials"])
-            + "\n\n[请在发布前补充并确认具体细节；当前版本不会虚构缺失经历。]"
+            # 审计修复 2026-08-16 UX-M2：降级占位段落附带具体填写方式，
+            # 而不是只提示待补充；保留原断言子串。
+            + "\n\n[请在发布前补充并确认具体细节：对照上方建议结构逐条写下你亲身经历的内容，"
+            "写不出的条目直接删除；当前版本不会虚构缺失经历。]"
         )
         return CandidateDraft(
             title=project["title"],

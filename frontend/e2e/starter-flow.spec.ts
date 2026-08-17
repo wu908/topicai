@@ -25,9 +25,11 @@ test('starter publishes the first experiment and completes the sprint review', a
   await page.goto('/onboarding/assessment');
 
   await expect(page.getByRole('heading', { name: '先盘点你真正能讲的东西' })).toBeVisible();
+  // 2026-08-16 UX-M5/L2：未填每周投入小时时提交按钮禁用，按钮文案固定为“保存并继续”。
+  await page.getByLabel('每周可投入小时').fill('4');
   await page.getByLabel('你亲自经历过什么').fill('从零学会手冲咖啡，并记录每次失败的原因');
   await page.getByLabel('你愿意持续探索什么').fill('低成本提升家庭咖啡稳定性');
-  await page.getByRole('button', { name: '生成实验方向' }).click();
+  await page.getByRole('button', { name: '保存并继续' }).click();
 
   await expect(page.getByRole('heading', { name: '准备三条可测试方向' })).toBeVisible();
   await page.getByRole('button', { name: '查看候选方向' }).click();

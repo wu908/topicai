@@ -121,6 +121,10 @@ describe('LoginPage', () => {
     fireEvent.change(screen.getByLabelText('密码'), {
       target: { value: 'hunter2hunter2' },
     });
+    // 审计修复 2026-08-16 UX-M8：注册表单新增确认密码字段。
+    fireEvent.change(screen.getByLabelText('确认密码'), {
+      target: { value: 'hunter2hunter2' },
+    });
     fireEvent.click(screen.getByRole('button', { name: '创建账号' }));
 
     await waitFor(() => {

@@ -6,6 +6,7 @@ import PageContainer from '@/components/layout/PageContainer';
 import { getTodayWorkspace, respondToAction } from '@/services/api/v2/projects';
 import type { IntentAction, TodayWorkspace } from '@/types/contracts/v2/content';
 import { extractErrorMessage } from '@/utils/error';
+import { readableRef } from '@/utils/labels';
 import { useAuthStore } from '@/store/authStore';
 import './HomePage.css';
 
@@ -52,31 +53,8 @@ const outcomeLabels: Record<IntentAction['action_type'], string> = {
   scope_learning: '它只作为后续内容的参考，不会被当成可复盘的发布',
 };
 
-const refLabels: Record<string, string> = {
-  'project:title': '你给这条内容的标题或想法',
-  'project:intent': '已确认的内容意图',
-  'content:current_version': '当前候选内容',
-  'content:locked_version': '已确认的发布版本',
-  'publication:record': '真实发布记录',
-  'publication:hypothesis': '发布前确认',
-  'performance:latest': '最新表现数据',
-  'review:latest': '本次复盘结果',
-  'observation:latest': '待验证经验',
-  confirmed_intent: '这条内容真正想产生的影响',
-  audience_change: '读者看完后应发生的变化',
-  first_party_evidence: '你的真实经历或证据',
-  fact_accuracy: '事实是否准确',
-  public_scope: '哪些内容可以公开',
-  publication_time: '真实发布时间',
-  next_experiment: '下一次唯一实验',
-};
-
-const readableRef = (value: string) => {
-  if (value.startsWith('project:audience:')) return '你想到的目标读者';
-  if (value.startsWith('creator-series:')) return '你已确认的内容系列';
-  if (value.startsWith('content-opportunity:')) return '待确认的系列续篇机会';
-  return refLabels[value] || value;
-};
+// 审计修复 2026-08-16 UX-H2/H4：依据引用统一走 utils/labels 的 readableRef，
+// 英文枚举（content_seed）和带 UUID 的内部引用不再原样展示给用户。
 
 const safeInternalPath = (path: string | undefined, fallback = '/content') => {
   if (!path?.startsWith('/')) return fallback;

@@ -57,6 +57,8 @@ export default function MaterialsPage() {
   const [file, setFile] = useState<File | null>(null);
   const [reuseProject, setReuseProject] = useState<Record<string, string>>({});
   const [deleteImpact, setDeleteImpact] = useState<Record<string, string[]>>({});
+  // 审计修复 2026-08-16 UX-L6：保存/关联/删除成功后给出明确反馈。
+  const [notice, setNotice] = useState<string | null>(null);
   // Audit e54a2643: idempotency keys must be stable per attempt — a retry
   // after a transient failure reuses the same key so the server can
   // de-duplicate; keys rotate only after a confirmed success.
@@ -89,6 +91,7 @@ export default function MaterialsPage() {
     }
     setBusy(true);
     setError(null);
+    setNotice(null);
     try {
       await createMaterial({
         kind,
@@ -107,6 +110,7 @@ export default function MaterialsPage() {
       setProjectId('');
       setShowCreate(false);
       setMaterialKey(key('material'));
+      setNotice('素材已保存。');
       await load();
     } catch (err) {
       setError(extractErrorMessage(err, '素材保存失败'));
@@ -124,6 +128,7 @@ export default function MaterialsPage() {
     }
     setBusy(true);
     setError(null);
+    setNotice(null);
     try {
       await addMaterialUsage(materialId, {
         project_id: selected,
@@ -133,6 +138,7 @@ export default function MaterialsPage() {
       // Audit e54a2643 medium: 关联成功后清空选中值，
       // 避免已关联项目掉出选项列表后 select 回显失同步。
       setReuseProject((current) => ({ ...current, [materialId]: '' }));
+      setNotice('素材已关联到所选项目。');
       await load();
     } catch (err) {
       setError(extractErrorMessage(err, '素材关联失败'));
@@ -144,9 +150,11 @@ export default function MaterialsPage() {
   const remove = async (material: Material, confirmed = false) => {
     setBusy(true);
     setError(null);
+    setNotice(null);
     try {
       await deleteMaterial(material.id, confirmed);
       setDeleteImpact((current) => ({ ...current, [material.id]: [] }));
+      setNotice('素材已删除。');
       await load();
     } catch (err) {
       const response = (err as { response?: { data?: { meta?: { details?: { projects?: Array<{ title: string }> } } } } }).response;
@@ -198,6 +206,7 @@ export default function MaterialsPage() {
         </section>
       ) : null}
       {error ? <Alert severity="error" action={<Button onClick={() => void load()}>重试</Button>}>{error}</Alert> : null}
+      {notice ? <Alert severity="success">{notice}</Alert> : null}
       {loading ? <div className="operations-loading"><CircularProgress size={26} /></div> : materials.length ? (
         <div className="operations-list">
           {materials.map((material) => (
@@ -211,7 +220,16 @@ export default function MaterialsPage() {
                 {material.usages.length ? `正在用于：${material.usages.map((usage) => usage.project_title).join('、')}` : '尚未关联内容项目'}
               </p>
               {deleteImpact[material.id]?.length ? (
-                <Alert severity="warning" action={<Button color="inherit" disabled={busy} onClick={() => void remove(material, true)}>保留引用快照并删除</Button>}>
+                <Alert
+                  severity="warning"
+                  action={
+                    <>
+                      <Button color="inherit" disabled={busy} onClick={() => void remove(material, true)}>保留引用快照并删除</Button>
+                      {/* 审计修复 2026-08-16 UX-L5：删除确认提供取消出口。 */}
+                      <Button color="inherit" disabled={busy} onClick={() => setDeleteImpact((current) => ({ ...current, [material.id]: [] }))}>取消</Button>
+                    </>
+                  }
+                >
                   将影响：{deleteImpact[material.id].join('、')}
                 </Alert>
               ) : null}
