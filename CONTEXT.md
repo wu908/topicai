@@ -318,3 +318,65 @@ The user's permission for one specific AI capability to prepare reversible
 work automatically after at least three accepted results of that capability
 and no unresolved correction. It never authorizes protected decisions.
 _Avoid_: Global AI trust score, implicit consent
+
+**Creative Inbox**:
+The async intake where the creator dumps inspirations, materials, and
+half-formed ideas at any moment. An inbox submission is both a production
+trigger and a direction override that may steer production outside the
+confirmed profile.
+_Avoid_: Materials library replacement, harvested or crawled input, mandatory intake form
+
+**Production Thread**:
+The bounded background job that turns inbox inputs into Deliverables
+through an explicit lifecycle (queued, producing, ready, failed, expired)
+with rate limits and a guaranteed voice reporting failures. It never
+creates a Content Project and never publishes.
+_Avoid_: Queue infrastructure service, silent failure, autonomous publisher
+
+**Deliverable**:
+An autonomously produced, publish-ready package built from the creator's
+own inbox inputs: body with structure outline, a fact sheet traceable to
+specific materials, a draft Publish Judgment, and a proposed publish time.
+A Deliverable exists before and outside any Content Project and never
+publishes itself.
+_Avoid_: In-project candidate draft, auto-published post, prediction-scored content
+
+**Pick-up**:
+The creator's single decision moment of choosing one Deliverable from the
+shelf, confirming its fact sheet, and setting the intended publish time.
+Pick-up is when the Content Project is created; picking equals confirming
+the displayed facts unless an edit is made.
+_Avoid_: Automatic adoption, unconfirmed facts, batch silent acceptance
+
+**Urgent Draft**:
+The synchronous fast lane from a fresh idea to a publishable candidate
+within one session, for time-sensitive publishing impulses. It shares the
+same HumanGates as the async loop and exists so the async model never
+blocks a "publish now" moment.
+_Avoid_: HumanGate bypass, separate tool page, second product
+
+**Exploration Slot**:
+A reserved position in each production batch for a candidate that
+deliberately departs from the confirmed pillars, intents, or formats. An
+exploration rejection is preference evidence and never reduces capability
+trust.
+_Avoid_: Random filler, low-quality exemption, trust-punished experiment
+
+**Drift Proposal**:
+A companion-initiated profile update offer raised when observed behavior
+repeatedly departs from the confirmed creator profile. The profile is
+always changed by the user, never by the AI.
+_Avoid_: Automatic profile rewrite, fixed-niche enforcement, silent drift
+
+**Companion**:
+The personified voice of the AI Orchestrator that reports, explains, and
+marks milestones at agreed moments (morning report, pick-up guidance,
+weekly review, capability milestones, explain-why). It speaks only from
+anchored system state and has no free-form chat in the first release.
+_Avoid_: Chat assistant, autonomous negotiator, cosmetic persona
+
+**Paired Milestone**:
+A growth event that ties a creator behavior, such as four consecutive
+publishing weeks, to an AI capability gain, so AI growth and creator growth
+advance together and every gain is cashed out as creator time saved.
+_Avoid_: Cosmetic levels, one-sided scorekeeping, unearned trust
