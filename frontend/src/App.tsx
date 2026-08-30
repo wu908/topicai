@@ -13,6 +13,7 @@ const HomePage = React.lazy(() => import('@/pages/Home/HomePage'));
 const ContentPage = React.lazy(() => import('@/pages/Content/ContentPage'));
 const OpportunitiesPage = React.lazy(() => import('@/pages/Opportunities/OpportunitiesPage'));
 const MaterialsPage = React.lazy(() => import('@/pages/Materials/MaterialsPage'));
+const AsyncLoopPage = React.lazy(() => import('@/pages/AsyncLoop/AsyncLoopPage'));
 const MePage = React.lazy(() => import('@/pages/Me/MePage'));
 const StarterPage = React.lazy(() => import('@/pages/Starter/StarterPage'));
 const GrowthOnboardingPage = React.lazy(() => import('@/pages/GrowthOnboarding/GrowthOnboardingPage'));
@@ -60,6 +61,7 @@ export default function App() {
             <Route path="/content/:projectId" element={protectedPage(<ContentPage />)} />
             <Route path="/opportunities" element={protectedPage(<OpportunitiesPage />)} />
             <Route path="/materials" element={protectedPage(<MaterialsPage />)} />
+            <Route path="/loop" element={protectedPage(<AsyncLoopPage />)} />
             <Route path="/me" element={protectedPage(<MePage />)} />
             <Route path="/onboarding/assessment" element={protectedPage(<StarterPage />)} />
             <Route path="/onboarding/directions" element={protectedPage(<StarterPage />)} />

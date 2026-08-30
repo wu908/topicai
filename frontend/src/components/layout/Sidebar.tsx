@@ -4,6 +4,7 @@ import {
   ArticleOutlined,
   FolderOutlined,
   HomeOutlined,
+  AutorenewOutlined,
   LightbulbOutlined,
   PersonOutline,
 } from '@mui/icons-material';
@@ -19,6 +20,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/', label: '今日', icon: <HomeOutlined /> },
   { to: '/content', label: '内容', icon: <ArticleOutlined /> },
   { to: '/opportunities', label: '机会', icon: <LightbulbOutlined /> },
+  { to: '/loop', label: '创作循环', icon: <AutorenewOutlined /> },
   { to: '/materials', label: '素材', icon: <FolderOutlined /> },
   { to: '/me', label: '我的', icon: <PersonOutline /> },
 ];
