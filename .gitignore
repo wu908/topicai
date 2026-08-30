@@ -11,7 +11,11 @@ env/
 .test-runtime/
 **/.pytest-*/
 **/.pytest_tmp*/
-backend/.ci-tmp/
+backend/.ci-tmp*/
+backend/.pytest-*/
+backend/.e2e-tmp*/
+backend/.smoke-*/
+backend/.upg-tmp*/
 backend/coverage.xml
 .mypy_cache/
 .ruff_cache/

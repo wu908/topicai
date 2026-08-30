@@ -1,4 +1,0 @@
--- Add the informational action used while a published project waits for review.
--- SQLite CHECK expansion is handled by runner.py's migration post-step.
--- Recovery: restore the database backup or remove migration 039's version row,
--- then rerun the idempotent post-step to rebuild the preserved action table.
