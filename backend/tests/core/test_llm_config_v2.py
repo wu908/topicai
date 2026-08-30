@@ -41,7 +41,7 @@ def test_compatible_config_is_not_configured_without_endpoint_or_key(monkeypatch
     monkeypatch.delenv("LLM_API_KEY", raising=False)
     monkeypatch.delenv("LLM_MODEL", raising=False)
 
-    config = get_compatible_llm_config(Settings())
+    config = get_compatible_llm_config(Settings(_env_file=None))
 
     assert config["configured"] is False
     assert config["capabilities"] == {"text"}
@@ -71,6 +71,9 @@ def test_llm_client_uses_compatible_endpoint_when_configured(monkeypatch):
 def test_llm_client_reports_unavailable_when_no_model_is_configured(monkeypatch):
     for key in ("LLM_BASE_URL", "LLM_API_KEY", "LLM_MODEL"):
         monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("LLM_BASE_URL", "")
+    monkeypatch.setenv("LLM_API_KEY", "")
+    monkeypatch.setenv("LLM_MODEL", "")
     _reset_settings()
 
     with patch("app.core.llm.OpenAI", return_value=MagicMock()):

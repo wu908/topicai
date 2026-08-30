@@ -21,6 +21,12 @@ def override_test_env(monkeypatch, tmp_path):
     monkeypatch.setenv("JWT_SECRET_KEY", "test-secret-key-for-testing-only")
     monkeypatch.setenv("ENVIRONMENT", "test")
     monkeypatch.setenv("OBJECT_STORAGE_ROOT", str(tmp_path / "objects"))
+    # Settings 进程级单例可能已被本地 .env 污染（如真实凭据）；每个测试强制重读。
+    import config.settings as _settings_module
+
+    _settings_module._settings = None
+    yield
+    _settings_module._settings = None
 
 
 @pytest_asyncio.fixture

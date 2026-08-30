@@ -86,6 +86,11 @@ _EXPECTED_TABLES: frozenset[str] = frozenset(
         "snapshot_extractions_v2",
         # auditable owner-data operations (047)
         "account_data_jobs",
+        # async creation loop (050, Spec-013 Phase 1)
+        "inbox_items",
+        "deliverables",
+        "production_events",
+        "loop_metrics",
     }
 )
 
