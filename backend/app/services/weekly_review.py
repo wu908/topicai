@@ -8,7 +8,7 @@ each project is at and what it is missing.
 """
 
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 
@@ -126,5 +126,5 @@ def _stage(snapshot: Any, review: Any, observation: Any) -> str:
 
 
 def _since(days: int) -> str:
-    base = datetime.now(timezone.utc)
+    base = datetime.now(UTC)
     return (base - timedelta(days=days)).isoformat()

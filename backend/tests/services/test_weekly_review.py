@@ -4,8 +4,8 @@ import pytest
 
 from app.models.v2.calibration import (
     BlindReviewCreate,
-    PerformanceSnapshotCreate,
     PerformanceMetrics,
+    PerformanceSnapshotCreate,
 )
 from app.services.blind_review import BlindReviewService
 from app.services.content_project import ContentProjectService
