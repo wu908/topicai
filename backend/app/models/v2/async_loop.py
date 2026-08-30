@@ -46,6 +46,7 @@ class DeliverableView(StrictModel):
     ]
     attribution: str | None
     expire_at: str | None
+    precheck: dict[str, Any] = Field(default_factory=dict)
     version: int
     created_at: str
     updated_at: str

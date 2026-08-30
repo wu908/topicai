@@ -219,6 +219,12 @@ export default function AsyncLoopPage() {
           <Button variant="outlined" disabled={busy} onClick={() => void digest()}>
             消化生产
           </Button>
+          <Button
+            variant="text"
+            onClick={() => window.location.assign('/content')}
+          >
+            现在就想发？走急稿通道 →
+          </Button>
         </Stack>
         {items.length ? (
           <Stack spacing={0.5} sx={{ mt: 2 }}>
@@ -251,6 +257,9 @@ export default function AsyncLoopPage() {
                 ) : null}
                 {d.is_exploration ? (
                   <Chip size="small" label="探索位 · 尝试" color="warning" />
+                ) : null}
+                {d.precheck?.passed ? (
+                  <Chip size="small" label="结构预检通过" variant="outlined" />
                 ) : null}
               </Stack>
               <Typography sx={{ fontWeight: 700, mb: 0.5 }}>{d.title}</Typography>

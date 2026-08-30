@@ -1,0 +1,9 @@
+-- Spec-010 follow-up: expand next_best_actions.action_type for scope_learning.
+--
+-- Historical content has no locked publish record, so it can never satisfy the
+-- working-confirmed precondition that lock_intent requires. scope_learning is
+-- the terminal action that states this instead of proposing a dead end.
+--
+-- The CHECK constraint requires a SQLite table rebuild. That rebuild lives in
+-- runner.py's _post_step_038_scope_learning_action so databases that already
+-- recorded earlier migrations still receive the new action type safely.

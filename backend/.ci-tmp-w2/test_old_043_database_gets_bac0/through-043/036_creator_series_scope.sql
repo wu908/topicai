@@ -1,0 +1,17 @@
+-- Spec-011: a Creator Series may span multiple content intents and formats.
+--
+-- A Creator Series is connected by an ongoing audience promise and its
+-- continuation, not by a shared intent or format. creator_series.content_intent
+-- and creator_series.content_format therefore stop being authoritative and
+-- become nullable, where NULL means "members disagree on this dimension".
+-- The authoritative member sets live in scope_json.member_intents and
+-- scope_json.member_formats.
+--
+-- Dropping NOT NULL requires a SQLite table rebuild, and existing rows need
+-- their scope_json back-filled with single-element member sets. Both steps live
+-- in runner.py's _post_step_036_creator_series_scope so databases that already
+-- recorded this version still receive the rebuild safely.
+--
+-- The two columns are NOT dropped: they remain the single-value fast path that
+-- downstream reads use when every member agrees, exactly as Spec-010 kept
+-- audience_problem / reader_promise for older rows.

@@ -1,0 +1,1 @@
+CREATE INDEX idx_widget_name ON widget(name);

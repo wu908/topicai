@@ -59,6 +59,7 @@ export interface Deliverable {
   status: DeliverableStatus;
   attribution: string | null;
   expire_at: string | null;
+  precheck: { passed: boolean; issues: string[] };
   version: number;
   created_at: string;
   updated_at: string;

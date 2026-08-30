@@ -76,6 +76,7 @@ async def test_digest_creates_ready_deliverable_with_traced_facts(test_db):
     assert d["content_intent"] in ("solve", "share", "record")
     facts = d["facts"]
     assert facts and facts[0]["source_inbox_id"] == item["id"]
+    assert d["precheck"]["passed"] is True
     row = await test_db.fetch_one(
         "SELECT task_type,capability FROM ai_traces_v2 WHERE output_ref=:ref",
         {"ref": f"production-thread:{result['thread_id']}"},

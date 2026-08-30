@@ -22,6 +22,8 @@
 12. [x] 前端三屏合页（收件箱/产出架+拾取/证伪线度量，路由 /loop + 导航「创作循环」）按 DESIGN.md v3 玻璃风格实现；Vitest 5 例；前端全量 222 passed、lint/build 绿
 13. [x] 周度复盘聚合读端点（WeeklyReviewService.rows：判断 vs 实际 vs 阶段引导，不绕 HumanGate）；/loop 周复盘区块；后端 384 passed / 88.46%
 14. [x] Playwright E2E `e2e/async-loop.spec.ts`：注册→丢素材→消化→拾取→项目出现在内容页（2 passed，真实栈 8765+5173）
+15. [x] PublishCheck 结构预检最小集（钩子/要点/结尾/标题/正文长度/事实溯源，5 例 TDD）；迁移 051 加 precheck_json；未过预检不产 ready（needs_input 事件）；前端卡片显示预检芯片；迁移指针抬升至 051
+16. [x] /loop 急稿入口（跳转既有引导流，收拢入口）
 15. [ ] Phase 1 尾巴收口后：狗粮期（Phase 2，用户执行）→ 陪伴层（Phase 3）→ 成长层（Phase 4）
 
 ## 红线执行

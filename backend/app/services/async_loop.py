@@ -117,6 +117,35 @@ class InboxService:
         return self._view(row)
 
 
+class PublishCheckService:
+    """Structural health pre-check for autonomous production (load-bearing).
+
+    最小集：钩子/要点/结尾齐、标题非空、正文长度达标、至少一条可溯源
+    事实。没有通过就不产 ready——这是货架质量的底线。
+    """
+
+    MIN_BODY_CHARS = 30
+
+    @classmethod
+    def run_precheck(cls, draft: dict[str, Any]) -> dict[str, Any]:
+        issues: list[str] = []
+        if not str(draft.get("title") or "").strip():
+            issues.append("标题为空")
+        outline = draft.get("outline") or []
+        steps = {step.get("step") for step in outline}
+        if "hook" not in steps:
+            issues.append("大纲缺少钩子")
+        if not any(step.get("step") == "point" for step in outline):
+            issues.append("大纲缺少要点")
+        if "ending" not in steps:
+            issues.append("大纲缺少结尾互动")
+        if len(str(draft.get("body_text") or "")) < cls.MIN_BODY_CHARS:
+            issues.append("正文过短，无法支撑一条完整笔记")
+        if not (draft.get("facts") or []):
+            issues.append("没有可溯源的事实，禁止虚构")
+        return {"passed": not issues, "issues": issues}
+
+
 class ProductionService:
     """Deterministic production: inbox items in, traceable deliverables out."""
 
@@ -163,7 +192,10 @@ class ProductionService:
         produced: list[dict[str, Any]] = []
         used: list[str] = []
         for item, is_exp in [(i, 0) for i in mains] + [(i, 1) for i in exploration]:
-            produced.append(await self._produce(owner, thread_id, item, is_exp))
+            view = await self._produce(owner, thread_id, item, is_exp)
+            if not view:
+                continue  # 预检未过：素材留在收件箱，等用户补料后重试
+            produced.append(view)
             used.append(item["id"])
         for item_id in used:
             await self.db.execute(
@@ -212,13 +244,22 @@ class ProductionService:
             "supporting": ["follow"],
             "window_days": 7,
         }
+        precheck = PublishCheckService.run_precheck({
+            "title": title, "body_text": body_text,
+            "outline": OUTLINE, "facts": facts,
+        })
+        if not precheck["passed"]:
+            # 承重墙：结构预检不过就不产 ready（无死路——记 needs_input 事件）
+            await self._event(owner, thread_id, None, "needs_input",
+                              {"reason": "precheck_failed", "issues": precheck["issues"]})
+            return {}
         await self.db.execute(
             "INSERT INTO deliverables (id,owner_user_id,thread_id,title,body_text,"
             "outline_json,facts_json,judgment_json,content_intent,proposed_publish_at,"
-            "is_exploration,status,retry_count,expire_at,confidence,version,"
+            "is_exploration,status,retry_count,expire_at,precheck_json,confidence,version,"
             "idempotency_key,request_hash,created_at,updated_at) VALUES "
             "(:id,:owner,:thread,:title,:body,:outline,:facts,:judgment,:intent,"
-            "NULL,:exp,'ready',0,:expire,'medium',1,:key,'',:now,:now)",
+            "NULL,:exp,'ready',0,:expire,:precheck,'medium',1,:key,'',:now,:now)",
             {
                 "id": deliverable_id, "owner": owner, "thread": thread_id,
                 "title": title, "body": body_text,
@@ -228,11 +269,13 @@ class ProductionService:
                 "intent": INTENT_BY_KIND.get(item["kind"], "share"),
                 "exp": is_exploration,
                 "expire": _expire_at(ts),
+                "precheck": json.dumps(precheck, ensure_ascii=False),
                 "key": f"thread-{thread_id}-{item['id']}", "now": ts,
             },
         )
         await self._event(owner, thread_id, deliverable_id, "ready",
-                          {"exploration": bool(is_exploration)})
+                          {"exploration": bool(is_exploration),
+                           "precheck": "passed"})
         row = await self._row(owner, deliverable_id)
         return self._view(row)
 
@@ -309,6 +352,7 @@ class ProductionService:
             "status": row["status"],
             "attribution": row["attribution"],
             "expire_at": row["expire_at"],
+            "precheck": json.loads(row["precheck_json"] or "{}"),
             "version": row["version"],
             "created_at": row["created_at"],
             "updated_at": row["updated_at"],

@@ -122,7 +122,7 @@ class TestHypothesisLockGuardMigration049:
 
         # Migration 049 repairs the trigger in place.
         applied = apply(db, DEFAULT_MIGRATIONS_DIR)
-        assert any(item.version == "050_async_creation_loop" for item in applied)
+        assert any(item.version == "051_deliverable_precheck" for item in applied)
 
         with sqlite3.connect(db) as conn:
             conn.execute(
@@ -163,7 +163,7 @@ class TestHypothesisLockGuardMigration049:
     def test_migration_049_recorded_on_fresh_db(self, tmp_path):
         db = tmp_path / "fresh.db"
         applied = apply(db, DEFAULT_MIGRATIONS_DIR)
-        assert any(item.version == "050_async_creation_loop" for item in applied)
+        assert any(item.version == "051_deliverable_precheck" for item in applied)
         assert apply(db, DEFAULT_MIGRATIONS_DIR) == []
 
 
