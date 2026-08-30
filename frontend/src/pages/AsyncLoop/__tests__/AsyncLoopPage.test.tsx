@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const addInboxItem = vi.fn();
@@ -9,6 +10,7 @@ const pickupDeliverable = vi.fn();
 const discardDeliverable = vi.fn();
 const recordLoopMetric = vi.fn();
 const listLoopMetrics = vi.fn();
+const listWeekly = vi.fn();
 
 vi.mock('@/services/api/v2/asyncLoop', () => ({
   addInboxItem: (...args: unknown[]) => addInboxItem(...args),
@@ -19,6 +21,7 @@ vi.mock('@/services/api/v2/asyncLoop', () => ({
   discardDeliverable: (...args: unknown[]) => discardDeliverable(...args),
   recordLoopMetric: (...args: unknown[]) => recordLoopMetric(...args),
   listLoopMetrics: (...args: unknown[]) => listLoopMetrics(...args),
+  listWeekly: (...args: unknown[]) => listWeekly(...args),
 }));
 
 import AsyncLoopPage from '../AsyncLoopPage';
@@ -63,6 +66,31 @@ describe('AsyncLoopPage', () => {
     });
     listDeliverables.mockResolvedValue({ items: [readyDeliverable], total: 1 });
     listLoopMetrics.mockResolvedValue({ items: [], total: 0 });
+    listWeekly.mockResolvedValue({
+      items: [
+        {
+          project_id: 'p1',
+          title: '阳台种菜 30 天，我踩过的 5 个坑',
+          project_status: 'published',
+          published_at: '2026-08-20T08:00:00Z',
+          note_url: null,
+          judgment: {
+            audience_change: '看完能避开五个坑',
+            primary_response: 'save',
+            window_days: 7,
+          },
+          actual: {
+            captured_at: '2026-08-29T08:00:00Z',
+            metrics: { favorites: 41, comments: 6 },
+            result_availability: 'observed',
+          },
+          review: null,
+          observation: null,
+          stage: 'needs_review',
+        },
+      ],
+      total: 1,
+    });
     addInboxItem.mockResolvedValue({ id: 'i2' });
     digestInbox.mockResolvedValue({ thread_id: 't2', deliverables: [readyDeliverable] });
     pickupDeliverable.mockResolvedValue({
@@ -79,17 +107,25 @@ describe('AsyncLoopPage', () => {
   });
 
   it('renders inbox, shelf, and metrics sections', async () => {
-    render(<AsyncLoopPage />);
+    render(
+      <MemoryRouter>
+        <AsyncLoopPage />
+      </MemoryRouter>,
+    );
     expect(screen.getByText('收件箱')).toBeTruthy();
     await waitFor(() => {
-      expect(screen.getByText('阳台种菜 30 天，我踩过的 5 个坑')).toBeTruthy();
+      expect(screen.getAllByText('阳台种菜 30 天，我踩过的 5 个坑').length).toBeGreaterThan(0);
     });
     expect(screen.getByText('证伪线度量')).toBeTruthy();
     expect(screen.getAllByText(/待消化/).length).toBeGreaterThan(0);
   });
 
   it('adds an inbox item and reloads', async () => {
-    render(<AsyncLoopPage />);
+    render(
+      <MemoryRouter>
+        <AsyncLoopPage />
+      </MemoryRouter>,
+    );
     const input = await screen.findByPlaceholderText(/丢个灵感/);
     fireEvent.change(input, { target: { value: '想写写授粉这件事' } });
     fireEvent.click(screen.getByText('丢进去'));
@@ -98,15 +134,23 @@ describe('AsyncLoopPage', () => {
   });
 
   it('digest triggers production and reloads the shelf', async () => {
-    render(<AsyncLoopPage />);
-    await screen.findByText('阳台种菜 30 天，我踩过的 5 个坑');
+    render(
+      <MemoryRouter>
+        <AsyncLoopPage />
+      </MemoryRouter>,
+    );
+    await screen.findAllByText(/阳台种菜 30 天/);
     fireEvent.click(screen.getByText('消化生产'));
     await waitFor(() => expect(digestInbox).toHaveBeenCalled());
     expect(await screen.findByText(/产出了 1 条新内容/)).toBeTruthy();
   });
 
   it('pickup validates audience change and calls the API', async () => {
-    render(<AsyncLoopPage />);
+    render(
+      <MemoryRouter>
+        <AsyncLoopPage />
+      </MemoryRouter>,
+    );
     const pickupButton = await screen.findByText('拾取');
     fireEvent.click(pickupButton);
     const claim = screen.getByText('认领');
@@ -123,7 +167,11 @@ describe('AsyncLoopPage', () => {
   });
 
   it('discard sends the chosen reason', async () => {
-    render(<AsyncLoopPage />);
+    render(
+      <MemoryRouter>
+        <AsyncLoopPage />
+      </MemoryRouter>,
+    );
     fireEvent.click(await screen.findByText('拾取'));
     fireEvent.click(await screen.findByText('不选了'));
     await waitFor(() => expect(discardDeliverable).toHaveBeenCalled());

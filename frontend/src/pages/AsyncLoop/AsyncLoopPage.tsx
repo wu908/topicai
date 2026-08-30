@@ -14,6 +14,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { extractErrorMessage } from '@/utils/error';
 import PageContainer from '@/components/layout/PageContainer';
+import { Link } from 'react-router-dom';
 import {
   addInboxItem,
   discardDeliverable,
@@ -21,9 +22,11 @@ import {
   listDeliverables,
   listInbox,
   listLoopMetrics,
+  listWeekly,
   pickupDeliverable,
   recordLoopMetric,
 } from '@/services/api/v2/asyncLoop';
+import type { WeeklyRow } from '@/types/contracts/v2/asyncLoop';
 import type {
   Deliverable,
   InboxItem,
@@ -55,6 +58,14 @@ const KIND_LABEL: Record<string, string> = {
 
 const DISCARD_REASONS = ['太俗', '选题不对', '换换口味', '时机不对'];
 
+const STAGE_LABEL: Record<WeeklyRow['stage'], string> = {
+  needs_snapshot: '待回填数据',
+  needs_review: '待盲评',
+  review_insufficient: '数据不足',
+  ready_to_confirm: '待确认结论',
+  confirmed: '已确认',
+};
+
 const makeKey = (prefix: string) =>
   `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
@@ -62,6 +73,7 @@ export default function AsyncLoopPage() {
   const [items, setItems] = useState<InboxItem[]>([]);
   const [deliverables, setDeliverables] = useState<Deliverable[]>([]);
   const [metrics, setMetrics] = useState<MetricRecord[]>([]);
+  const [weekly, setWeekly] = useState<WeeklyRow[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -75,14 +87,16 @@ export default function AsyncLoopPage() {
   const [discardReason, setDiscardReason] = useState('换换口味');
 
   const reload = useCallback(async () => {
-    const [inbox, shelf, metricRows] = await Promise.all([
+    const [inbox, shelf, metricRows, weeklyRows] = await Promise.all([
       listInbox(),
       listDeliverables('ready'),
       listLoopMetrics(),
+      listWeekly(60),
     ]);
     setItems(inbox.items);
     setDeliverables(shelf.items);
     setMetrics(metricRows.items);
+    setWeekly(weeklyRows.items);
   }, []);
 
   useEffect(() => {
@@ -156,7 +170,7 @@ export default function AsyncLoopPage() {
   return (
     <PageContainer
       title="创作循环"
-      subtitle={`收件箱 ${intakeCount} 条待消化 · 产出架 ${deliverables.length} 条待决定`}
+      subtitle={`收件箱 ${intakeCount} 条待消化 · 产出架 ${deliverables.length} 条待决定 · 本周期已发 ${weekly.length}`}
     >
       {error ? (
         <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
@@ -334,6 +348,44 @@ export default function AsyncLoopPage() {
           ))}
         </Box>
       )}
+
+      {/* 周复盘：判断 vs 实际（只读聚合，动作走项目工作台的既有门控） */}
+      <Typography variant="h6" sx={{ mb: 1.5, fontWeight: 700 }}>
+        周复盘 · 判断 vs 实际
+      </Typography>
+      <Paper sx={{ ...glassSx, p: 3, mb: 3 }}>
+        {weekly.length === 0 ? (
+          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+            本周期还没有已发布的内容。发布并回填数据后，这里会出现对照行。
+          </Typography>
+        ) : (
+          <Stack spacing={1.5}>
+            {weekly.map((row) => (
+              <Box key={row.project_id} sx={{ borderBottom: '1px solid divider', pb: 1.5 }}>
+                <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
+                  <Link
+                    to={`/content/${row.project_id}`}
+                    style={{ fontWeight: 700, color: 'inherit' }}
+                  >
+                    {row.title}
+                  </Link>
+                  <Chip size="small" label={STAGE_LABEL[row.stage]} />
+                </Stack>
+                <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
+                  判断 · {row.judgment.audience_change ?? '未记录'} ｜ 最盼反应 ·{' '}
+                  {row.judgment.primary_response ?? '未记录'} ｜ 实际 ·{' '}
+                  {row.actual.result_availability === 'unavailable'
+                    ? '拿不到数据（也是结论，不补 0）'
+                    : Object.entries(row.actual.metrics)
+                        .filter(([, v]) => v !== null)
+                        .map(([k, v]) => `${k} ${v}`)
+                        .join(' · ') || '尚未回填'}
+                </Typography>
+              </Box>
+            ))}
+          </Stack>
+        )}
+      </Paper>
 
       {/* 证伪线度量 */}
       <Typography variant="h6" sx={{ mb: 1.5, fontWeight: 700 }}>

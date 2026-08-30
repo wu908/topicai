@@ -20,6 +20,9 @@
 10. [x] 测试：状态机/幂等/owner 隔离/无模型降级/探索位/限流/过期/拾取建项目/二次拒绝/归因（18 例：14 服务 + 4 HTTP）
 11. [x] 全量回归 378 passed（基线 360 → +18），覆盖率 88.21% ≥ 80%；迁移指针抬升至 050、表白名单注册、conftest Settings 单例隔离、LLM 配置测试密闭化
 12. [x] 前端三屏合页（收件箱/产出架+拾取/证伪线度量，路由 /loop + 导航「创作循环」）按 DESIGN.md v3 玻璃风格实现；Vitest 5 例；前端全量 222 passed、lint/build 绿
+13. [x] 周度复盘聚合读端点（WeeklyReviewService.rows：判断 vs 实际 vs 阶段引导，不绕 HumanGate）；/loop 周复盘区块；后端 384 passed / 88.46%
+14. [x] Playwright E2E `e2e/async-loop.spec.ts`：注册→丢素材→消化→拾取→项目出现在内容页（2 passed，真实栈 8765+5173）
+15. [ ] Phase 1 尾巴收口后：狗粮期（Phase 2，用户执行）→ 陪伴层（Phase 3）→ 成长层（Phase 4）
 
 ## 红线执行
 AITrace 写入点=生产；私密素材不进生产（服务层断言）；探索位落选仅记偏好；四决策 HumanGate 不在本期自动化范围内。

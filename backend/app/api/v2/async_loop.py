@@ -19,6 +19,7 @@ from app.services.async_loop import (
     PickupService,
     ProductionService,
 )
+from app.services.weekly_review import WeeklyReviewService
 
 router = APIRouter(prefix="/loop", tags=["AsyncLoop v2"])
 
@@ -100,6 +101,16 @@ async def discard_deliverable(
     return ApiResponse(data=await PickupService(db).discard(
         user["id"], deliverable_id, body
     ))
+
+
+@router.get("/weekly", response_model=ApiResponse[dict])
+async def weekly_rows(
+    days: int = 7,
+    user=Depends(get_current_user),
+    db: Database = Depends(get_db),
+):
+    rows = await WeeklyReviewService(db).rows(user["id"], days=days)
+    return ApiResponse(data={"items": rows, "total": len(rows)})
 
 
 @router.post("/metrics", response_model=ApiResponse[dict], status_code=201)

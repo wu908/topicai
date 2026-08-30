@@ -95,3 +95,34 @@ export interface MetricRecord {
   meta: Record<string, unknown>;
   created_at: string;
 }
+
+export interface WeeklyRow {
+  project_id: string;
+  title: string;
+  project_status: string;
+  published_at: string;
+  note_url: string | null;
+  judgment: {
+    audience_change: string | null;
+    primary_response: string | null;
+    window_days: number | null;
+  };
+  actual: {
+    captured_at: string | null;
+    metrics: Record<string, number | null>;
+    result_availability: string | null;
+  };
+  review: {
+    id: string;
+    calibration_state: 'valid' | 'insufficient' | 'calibration_invalid';
+    eligible_for_rule_upgrade: boolean;
+    intent_outcome: string | null;
+  } | null;
+  observation: { id: string; status: string; next_test: string } | null;
+  stage:
+    | 'needs_snapshot'
+    | 'needs_review'
+    | 'review_insufficient'
+    | 'ready_to_confirm'
+    | 'confirmed';
+}

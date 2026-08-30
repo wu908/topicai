@@ -8,6 +8,8 @@ from app.services.async_loop import (
     ProductionService,
 )
 from app.services.content_project import ContentProjectService
+from app.services.weekly_review import WeeklyReviewService  # noqa: F401
+from tests.api.v2.test_creator_series import _published_project
 
 
 async def _seed_ready(test_db, suffix="a"):
@@ -109,6 +111,18 @@ async def test_discard_via_http_records_attribution(client, test_db):
     assert discarded.json()["data"]["status"] == "discarded"
     metrics = (await client.get("/api/v2/loop/metrics")).json()["data"]
     assert any(m["metric"] == "discard_attribution" for m in metrics["items"])
+
+
+@pytest.mark.asyncio
+async def test_weekly_rows_via_http(client, test_db):
+    await _published_project(test_db, "api-weekly")
+    rows = (await client.get("/api/v2/loop/weekly?days=60")).json()["data"]
+    assert rows["total"] == 1
+    row = rows["items"][0]
+    assert row["stage"] == "needs_snapshot"
+    assert row["judgment"]["audience_change"]
+    other = await client.get("/api/v2/loop/weekly?days=0")
+    assert other.json()["data"]["total"] == 0
 
 
 @pytest.mark.asyncio

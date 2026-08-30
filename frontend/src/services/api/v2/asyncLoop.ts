@@ -11,6 +11,7 @@ import type {
   MetricRecord,
   PickupInput,
   PickupResult,
+  WeeklyRow,
 } from '@/types/contracts/v2/asyncLoop';
 
 async function getData<T>(promise: Promise<{ data: ApiEnvelope<T> }>): Promise<T> {
@@ -46,6 +47,13 @@ export const discardDeliverable = (id: string, input: DiscardInput) =>
     v2Client.post<ApiEnvelope<Deliverable>>(
       `/loop/deliverables/${encodeURIComponent(id)}:discard`,
       input,
+    ),
+  );
+
+export const listWeekly = (days = 7) =>
+  getData(
+    v2Client.get<ApiEnvelope<{ items: WeeklyRow[]; total: number }>>(
+      `/loop/weekly?days=${days}`,
     ),
   );
 
