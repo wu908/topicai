@@ -1,15 +1,29 @@
 /**
  * Playwright E2E config.
  *
- * Runs against:
+ * Playwright manages BOTH servers of the live stack:
  *   - Vite dev server on port 5173 (frontend)
- *   - Uvicorn on port 8765 (backend API, separate process)
+ *   - Uvicorn on port 8765 (backend API)
  *
- * The webServer block starts the Vite dev server. The backend is expected
- * to be running already (start it manually with the uvicorn command in
- * docs/dev.md before running E2E). Tests assert against the live stack.
+ * The backend webServer exists because manual "start it yourself first"
+ * created orphaned uvicorn processes that kept port 8765 across sessions
+ * (one carried AI_ENABLED=true with real model credentials — candidate
+ * prep then hung 30s+ per call and the intent/starter specs timed out at
+ * the candidate-segment step, while CI, which always starts fresh with
+ * AI off, stayed green). With the backend managed here:
+ *   - the process tree is reaped on exit (no orphans),
+ *   - every run gets a pristine throwaway database,
+ *   - AI is forced off so E2E tests the deterministic paths.
  */
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import { defineConfig, devices } from '@playwright/test';
+
+const configDir = path.dirname(path.resolve(fileURLToPath(import.meta.url)));
+const backendDir = path.resolve(configDir, '..', 'backend');
+const e2eDataDir = path.join(backendDir, 'data', 'e2e');
+const toPosix = (p: string) => p.replace(/\\/g, '/');
 
 export default defineConfig({
   testDir: './e2e',
@@ -29,13 +43,30 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
     },
   ],
-  // We do NOT auto-start the backend here. Start it manually first
-  // (uvicorn main:create_app --port 8765) so E2E tests hit a real stack.
-  // The Vite dev server is auto-started because it's cheap and isolated.
-  webServer: {
-    command: 'pnpm dev',
-    url: 'http://127.0.0.1:5173',
-    reuseExistingServer: true,
-    timeout: 60_000,
-  },
+  webServer: [
+    {
+      command:
+        'python e2e_reset.py && python -m uvicorn main:create_app --factory --host 127.0.0.1 --port 8765',
+      cwd: backendDir,
+      url: 'http://127.0.0.1:8765/api/v2/health',
+      timeout: 60_000,
+      // Never reuse: a stale backend (wrong AI flag, old database) is
+      // exactly the failure mode this setup exists to prevent.
+      reuseExistingServer: false,
+      env: {
+        E2E_DATA_DIR: e2eDataDir,
+        DATABASE_URL: `sqlite+aiosqlite:///${toPosix(path.join(e2eDataDir, 'e2e.db'))}`,
+        OBJECT_STORAGE_ROOT: toPosix(path.join(e2eDataDir, 'objects')),
+        JWT_SECRET_KEY: 'e2e-secret-key-for-local-run-2026',
+        AUTH_RATE_LIMIT_PER_MINUTE: '100',
+        AI_ENABLED: 'false',
+      },
+    },
+    {
+      command: 'pnpm dev',
+      url: 'http://127.0.0.1:5173',
+      reuseExistingServer: true,
+      timeout: 60_000,
+    },
+  ],
 });
