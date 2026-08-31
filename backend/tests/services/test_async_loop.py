@@ -244,7 +244,7 @@ async def test_sweep_expired_is_owner_scoped(test_db):
     import datetime
 
     past = (
-        datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=8)
+        datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=8)
     ).isoformat()
     await test_db.execute(
         "UPDATE deliverables SET expire_at=:past WHERE owner_user_id='u1' "
