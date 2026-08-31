@@ -65,9 +65,10 @@
 |---|---|---|---|
 | P0 | xfail 转正/转 skip+issue（消除长期 flaky 模糊） | 0.5h | ✅ 2026-08-31：根因定位为编排器 offer 决策的时序依赖，改为直插 action+proposed 事件（保留被测 SQL），10/10 连跑确定性通过 |
 | P0 | `rate_limiter` 拒绝分支 + `auth.py` 错误路径补测 | 2h | ✅ 2026-08-31：rate_limiter 44%→**100%**（拒绝/滚动/隔离/清扫 5 例）；auth API 50%→**98%**（7 例）。顺带修复根因：api conftest 的 app 夹具未设 `app.state.db`（auth 端点直接读它，此前 HTTP 层测试必然 500——这正是 auth 层从未有 HTTP 测试的原因） |
-| P1 | `_published_project` 日期动态化 + 提取 `tests/helpers/` | 1h | 待办 |
-| P1 | 补 pickup.schedule_at、sweep 属主隔离、private-API 层三条断言 | 1.5h | 待办 |
-| P2 | intent_actions 两块缺口（175–241、1271–1301） | 3h | 待办 |
-| P2 | 前端 branches 55→65%；loop 的 discard/E2E 链路补全 | 3h | 待办 |
+| P1 | `_published_project` 日期动态化 + 提取 `tests/helpers/` | 1h | ✅ 2026-08-31：`tests/helpers/publish.py`（published_project + insert_user），published_at 改为动态（1 小时前）；周复盘测试回归默认 7 天窗口（更强断言） |
+| P1 | 补 pickup.schedule_at、sweep 属主隔离、private-API 层三条断言 | 1.5h | ✅ 2026-08-31：三条全部补齐 |
+| P2 | intent_actions 两块缺口（175–241、1271–1301） | 3h | ✅ 2026-08-31：新增 test_intent_actions_gaps.py 6 例（回溯归类 happy/重放/版本冲突/非历史拒绝 + 自动化 guided/信任门槛/项目不存在），服务 77%→81% |
+| P2 | 前端 branches 55→65%；loop 的 discard/E2E 链路补全 | 3h | 部分：discard E2E 已补（async-loop spec 3 passed）；branches 65% 待办 |
 
 **P0 修复后全量**：397 passed / 覆盖率 **89.06%**（基线 384/88.46%）。
+**P1+P2 修复后全量**：**410 passed / 覆盖率 89.37%**；E2E 3 passed。

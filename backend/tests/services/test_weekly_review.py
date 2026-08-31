@@ -1,5 +1,7 @@
 """Weekly review aggregation contracts (Spec-013 Phase 1 tail)."""
 
+from datetime import UTC, datetime, timedelta
+
 import pytest
 
 from app.models.v2.calibration import (
@@ -11,18 +13,11 @@ from app.services.blind_review import BlindReviewService
 from app.services.content_project import ContentProjectService
 from app.services.performance_snapshot import PerformanceSnapshotService
 from app.services.weekly_review import WeeklyReviewService
-from tests.api.v2.test_creator_series import _published_project
+from tests.helpers.publish import insert_user
+from tests.helpers.publish import published_project as _published_project
 
 OTHER = "weekly-other"
 
-
-async def insert_user(db, user_id: str) -> None:
-    await db.execute(
-        "INSERT INTO users (id,email,username,password_hash,ai_calls_today,"
-        "ai_calls_reset_at,created_at) VALUES "
-        "(:id,:email,:uname,'hash',0,'','2026-08-30T00:00:00Z')",
-        {"id": user_id, "email": f"{user_id}@example.com", "uname": f"U{user_id}"},
-    )
 
 
 async def _append_snapshot(test_db, project, publish_id, suffix):
@@ -31,7 +26,7 @@ async def _append_snapshot(test_db, project, publish_id, suffix):
         "u1",
         publish_id,
         PerformanceSnapshotCreate(
-            captured_at="2026-08-29T08:00:00Z",
+            captured_at=(datetime.now(UTC) - timedelta(hours=1)).isoformat(),
             source="manual",
             metrics=PerformanceMetrics(favorites=41, comments=6),
             confirmed_by_user=True,
@@ -52,7 +47,7 @@ async def test_no_publications_means_no_rows(test_db):
 async def test_published_project_starts_at_needs_snapshot(test_db):
     await insert_user(test_db, "u1")
     project = await _published_project(test_db, "w1")
-    rows = await WeeklyReviewService(test_db).rows("u1", days=60)
+    rows = await WeeklyReviewService(test_db).rows("u1")
     assert len(rows) == 1 and rows[0]["project_id"] == project["id"]
     assert rows[0]["stage"] == "needs_snapshot"
     assert rows[0]["judgment"]["audience_change"] == "读者持续看到创作者建立更新节奏"
@@ -68,7 +63,7 @@ async def test_snapshot_advances_stage_to_needs_review(test_db):
         {"p": project["id"]},
     )
     await _append_snapshot(test_db, project, record["id"], "w2")
-    row = (await WeeklyReviewService(test_db).rows("u1", days=60))[0]
+    row = (await WeeklyReviewService(test_db).rows("u1"))[0]
     assert row["stage"] == "needs_review"
     assert row["actual"]["metrics"]["favorites"] == 41
 
@@ -91,7 +86,7 @@ async def test_blind_review_insufficient_flags_stage(test_db):
             idempotency_key="weekly-review-w3",
         ),
     )
-    row = (await WeeklyReviewService(test_db).rows("u1", days=60))[0]
+    row = (await WeeklyReviewService(test_db).rows("u1"))[0]
     assert row["stage"] in ("review_insufficient", "ready_to_confirm")
     assert row["review"] is not None
     assert row["observation"] is None

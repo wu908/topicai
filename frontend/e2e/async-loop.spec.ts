@@ -70,3 +70,22 @@ test.describe('async creation loop', () => {
     ).toBeVisible();
   });
 });
+
+  test('discard with attribution returns card to inspiration pool', async ({ page }) => {
+    test.setTimeout(90_000);
+    await login(page);
+    await page.goto('/loop');
+
+    await page.getByPlaceholder(/丢个灵感/).fill('想写写授粉这件事，但先看看方向对不对。');
+    await page.getByRole('button', { name: '丢进去' }).click();
+    await expect(page.getByText('已丢进收件箱。')).toBeVisible();
+    await page.getByRole('button', { name: '消化生产' }).click();
+    await expect(page.getByText(/产出了 1 条新内容/)).toBeVisible();
+
+    await page.getByRole('button', { name: '拾取' }).click();
+    await page.getByRole('button', { name: '不选了' }).click();
+    await expect(page.getByText('已回到灵感池。')).toBeVisible();
+    await expect(
+      page.getByText('架子上还没有待决定的内容。丢点素材，点「消化生产」。'),
+    ).toBeVisible({ timeout: 10_000 });
+  });

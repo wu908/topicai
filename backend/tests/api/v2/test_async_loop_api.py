@@ -9,7 +9,7 @@ from app.services.async_loop import (
 )
 from app.services.content_project import ContentProjectService
 from app.services.weekly_review import WeeklyReviewService  # noqa: F401
-from tests.api.v2.test_creator_series import _published_project
+from tests.helpers.publish import published_project as _published_project
 
 
 async def _seed_ready(test_db, suffix="a"):
@@ -135,3 +135,21 @@ async def test_metrics_roundtrip_via_http(client):
     assert listed["data"] is not None, listed
     assert listed["data"]["total"] == 1
     assert listed["data"]["items"][0]["value"] == 42
+
+
+@pytest.mark.asyncio
+async def test_private_consent_item_never_reaches_shelf_via_api(client):
+    await client.post(
+        "/api/v2/loop/inbox",
+        json={
+            "kind": "text",
+            "title": "家人入镜",
+            "content": "客厅改造前的照片，家人出镜，不该出现在产出架。",
+            "consent": "private",
+            "idempotency_key": "api-private-1",
+        },
+    )
+    digest = (await client.post("/api/v2/loop/inbox/digest")).json()["data"]
+    assert digest["deliverables"] == []
+    shelf = (await client.get("/api/v2/loop/deliverables")).json()["data"]
+    assert shelf["total"] == 0

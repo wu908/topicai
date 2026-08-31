@@ -153,6 +153,7 @@ async def test_pickup_creates_project_through_official_services(test_db):
     project = await ContentProjectService(test_db).get("loop-user", picked["project"]["id"])
     assert project["title"] == d["title"]
     assert project["intent_status"] == "working_confirmed"
+    assert picked["deliverable"]["proposed_publish_at"] == "2026-09-04T19:00:00Z"
     again, replayed = await PickupService(test_db).pickup(
         "loop-user",
         d["id"],
@@ -230,3 +231,29 @@ async def test_metrics_record_and_list(test_db):
     rows = await svc.list("loop-user", metric="pickup_seconds")
     assert len(rows) == 1 and rows[0]["value"] == 41.5
     assert len(await svc.list("loop-user")) == 2
+
+
+async def test_sweep_expired_is_owner_scoped(test_db):
+    await insert_user(test_db, "u1")
+    await insert_user(test_db, "u2")
+    for owner in ("u1", "u2"):
+        await InboxService(test_db).add(
+            owner, _item(f"{owner}-item", content=f"{owner} 的真实经历素材。")
+        )
+        await ProductionService(test_db).digest(owner)
+    import datetime
+
+    past = (
+        datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=8)
+    ).isoformat()
+    await test_db.execute(
+        "UPDATE deliverables SET expire_at=:past WHERE owner_user_id='u1' "
+        "AND status='ready'",
+        {"past": past},
+    )
+    assert await ProductionService(test_db).sweep_expired("u2") == 0
+    row = await test_db.fetch_one(
+        "SELECT status FROM deliverables WHERE owner_user_id='u1' AND status='ready'"
+    )
+    assert row is not None, "u2 的清扫不得触碰 u1 的产出"
+    assert await ProductionService(test_db).sweep_expired("u1") == 1
