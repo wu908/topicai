@@ -321,13 +321,17 @@ async def test_calibration_scope_is_consistent_across_reviews_observations_and_r
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(
-    reason="Flaky ~15%: /next-action may not produce an offered action "
-    "depending on calibration state timing. Root cause not yet identified. "
-    "See ADR-003 / handoff 2026-08-07.",
-    strict=False,
-)
-async def test_project_scoped_calibration_query_executes_on_sqlite(client):
+async def test_project_scoped_calibration_query_executes_on_sqlite(client, test_db):
+    """The experiment-scoped export runs its json_each/join SQL on SQLite.
+
+    The offered action is seeded directly (action + proposed event row) so
+    the test stays deterministic: the orchestrator's offer decision depends
+    on calibration-state timing and was the flaky ~15% root documented in
+    ADR-003 / handoff 2026-08-07. What this test guards — the export SQL
+    executing on SQLite — only needs rows in the funnel tables.
+    """
+    from app.services.v2_utils import now
+
     await client.put(
         "/api/v2/internal/validation/experiments/E3/assignment",
         json={
@@ -346,7 +350,34 @@ async def test_project_scoped_calibration_query_executes_on_sqlite(client):
             },
         )
     ).json()["data"]
-    await client.get(f"/api/v2/projects/{project['id']}/next-action")
+
+    action_id = "scoped-offered-action"
+    timestamp = now()
+    await test_db.execute(
+        "INSERT INTO next_best_actions (id,owner_user_id,project_id,action_type,"
+        "content_intent,title,reason,evidence_refs_json,unknown_refs_json,"
+        "expected_state_change_json,estimated_effort_minutes,automation_level,"
+        "fallback_action_json,status,version,idempotency_key,request_hash,"
+        "created_at,updated_at) VALUES "
+        "(:id,:owner,:project,'answer_key_question','share',"
+        "'回答一个关键问题','补一个真实细节','[]','[]','{}',5,'guided',"
+        "'{}','proposed',1,:key,:hash,:now,:now)",
+        {
+            "id": action_id, "owner": "u1", "project": project["id"],
+            "key": "scoped-seed-action", "hash": "seed", "now": timestamp,
+        },
+    )
+    await test_db.execute(
+        "INSERT INTO action_events (id,owner_user_id,action_id,project_id,"
+        "event_type,from_status,to_status,action_version,idempotency_key,"
+        "request_hash,created_at,experiment_id,cohort) VALUES "
+        "(:id,:owner,:action,:project,'proposed',NULL,'proposed',1,:key,'',"
+        ":now,'E3','variant')",
+        {
+            "id": "scoped-seed-event", "owner": "u1", "action": action_id,
+            "project": project["id"], "key": "scoped-seed-event", "now": timestamp,
+        },
+    )
 
     exported = await client.get(
         "/api/v2/internal/validation/action-metrics",

@@ -61,11 +61,13 @@
 
 ## 5. 建议清单
 
-| 优先级 | 项 | 成本 |
-|---|---|---|
-| P0 | xfail 转正/转 skip+issue（消除长期 flaky 模糊） | 0.5h |
-| P0 | `rate_limiter` 拒绝分支 + `auth.py` 错误路径补测 | 2h |
-| P1 | `_published_project` 日期动态化 + 提取 `tests/helpers/` | 1h |
-| P1 | 补 pickup.schedule_at、sweep 属主隔离、private-API 层三条断言 | 1.5h |
-| P2 | intent_actions 两块缺口（175–241、1271–1301） | 3h |
-| P2 | 前端 branches 55→65%；loop 的 discard/E2E 链路补全 | 3h |
+| 优先级 | 项 | 成本 | 状态 |
+|---|---|---|---|
+| P0 | xfail 转正/转 skip+issue（消除长期 flaky 模糊） | 0.5h | ✅ 2026-08-31：根因定位为编排器 offer 决策的时序依赖，改为直插 action+proposed 事件（保留被测 SQL），10/10 连跑确定性通过 |
+| P0 | `rate_limiter` 拒绝分支 + `auth.py` 错误路径补测 | 2h | ✅ 2026-08-31：rate_limiter 44%→**100%**（拒绝/滚动/隔离/清扫 5 例）；auth API 50%→**98%**（7 例）。顺带修复根因：api conftest 的 app 夹具未设 `app.state.db`（auth 端点直接读它，此前 HTTP 层测试必然 500——这正是 auth 层从未有 HTTP 测试的原因） |
+| P1 | `_published_project` 日期动态化 + 提取 `tests/helpers/` | 1h | 待办 |
+| P1 | 补 pickup.schedule_at、sweep 属主隔离、private-API 层三条断言 | 1.5h | 待办 |
+| P2 | intent_actions 两块缺口（175–241、1271–1301） | 3h | 待办 |
+| P2 | 前端 branches 55→65%；loop 的 discard/E2E 链路补全 | 3h | 待办 |
+
+**P0 修复后全量**：397 passed / 覆盖率 **89.06%**（基线 384/88.46%）。

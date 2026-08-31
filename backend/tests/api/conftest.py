@@ -43,6 +43,9 @@ async def app(test_db):
 
     app = create_app()
     app.dependency_overrides[get_db] = lambda: test_db
+    # Auth endpoints read req.app.state.db directly (no get_db dependency);
+    # point it at the same test database or register/login 500 in tests.
+    app.state.db = test_db
 
     # Default: override returns user 'u1'. Per-test fixtures can swap this.
     async def _fake_user_u1():
@@ -64,6 +67,7 @@ async def app_as_u2(test_db):
 
     app = create_app()
     app.dependency_overrides[get_db] = lambda: test_db
+    app.state.db = test_db
 
     async def _fake_user_u2():
         return {
