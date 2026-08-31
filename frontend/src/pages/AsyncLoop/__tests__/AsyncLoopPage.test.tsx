@@ -178,3 +178,13 @@ describe('AsyncLoopPage', () => {
     expect(discardDeliverable.mock.calls[0][1].reason).toBe('换换口味');
   });
 });
+
+  it('shows a retryable error when loading fails', async () => {
+    listInbox.mockRejectedValue(new Error('network down'));
+    render(
+      <MemoryRouter>
+        <AsyncLoopPage />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByText('network down')).toBeTruthy();
+  });

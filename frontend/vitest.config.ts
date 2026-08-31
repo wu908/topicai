@@ -18,14 +18,11 @@ export default defineConfig({
     // Exclude Playwright E2E specs from vitest (they have their own runner).
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
     exclude: ['node_modules/**', 'e2e/**', 'dist/**'],
-    // Progressive coverage gate (ADR-001).
-    // Constitution Principle II still mandates 80% as final target,
-    // but we accept phase-by-phase progress given current baseline.
-    // Current vitest baseline (2026-06-14): 67%+ lines after Phase 3-续3
-    // work (Phase 2 4 hooks + 5 pages; Phase 3 4 API wrappers + 2 pages;
-    //  Phase 3-续 3 medium pages; Phase 3-续2 2 most-complex pages
-    //  TitleOptimizer + ViralAnalysis; Phase 3-续3 AssetsPage + assets API).
-    // Target trajectory: 25% -> 40% (Phase 2) -> 55% (Phase 3) -> 80% (pre-release).
+    // Progressive coverage gate (ADR-001). Raised 2026-08-31 after the
+    // test-suite audit (docs/reviews/test-suite-audit-2026-08-31.md):
+    // actual baseline lines 82.3 / functions 70.6 / branches 70.4 /
+    // statements 79.6 — gates set ~3-4% under actuals so regressions fail
+    // CI while ordinary additions pass.
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json-summary', 'html'],
@@ -40,9 +37,9 @@ export default defineConfig({
       ],
       thresholds: {
         lines: 80,
-        functions: 55,
-        branches: 55,
-        statements: 55,
+        functions: 66,
+        branches: 66,
+        statements: 76,
       },
     },
   },
