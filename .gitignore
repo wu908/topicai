@@ -101,3 +101,6 @@ specs/007-v4-gap-closure/contracts/
 backend/coverage/
 backend/logs/
 frontend/test-shots/
+
+# E2E throwaway database (managed by playwright webServer)
+backend/data/e2e/
