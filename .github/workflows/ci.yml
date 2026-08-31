@@ -84,6 +84,9 @@ jobs:
       JWT_SECRET_KEY: ci-only-jwt-secret-key-with-at-least-32-characters
       DATABASE_URL: sqlite+aiosqlite:////tmp/topicai-e2e.db
       AI_ENABLED: "false"
+      # E2E specs log in per test; the auth limiter (5/min default) would 429
+      # the last spec's login. The stack is a fixture — relax it here, not in prod.
+      AUTH_RATE_LIMIT_PER_MINUTE: "100"
     steps:
       - name: Check out repository
         uses: actions/checkout@v5
