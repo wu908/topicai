@@ -36,7 +36,7 @@ dependencies = [
     # removes __about__.__version__ which passlib 1.7.4 reads at runtime.
     "pyjwt==2.8.0",
     "bcrypt==4.0.1",
-    "email-validator==2.1.0",
+    "email-validator==2.3.0",
     "apscheduler==3.11.0",
     "sentry-sdk==2.19.2",
 ]
@@ -99,6 +99,13 @@ disable_error_code = [
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+# 显式声明 fixture 循环作用域，消除 pytest-asyncio 的 PytestDeprecationWarning
+asyncio_default_fixture_loop_scope = "function"
+filterwarnings = [
+    # passlib 1.7.4 在 import 层使用 stdlib crypt（Python 3.13 移除）；
+    # 上游未发修复版前窄化忽略，避免 CI 噪音。见 requirements pin。
+    "ignore:'crypt' is deprecated:DeprecationWarning:passlib",
+]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
