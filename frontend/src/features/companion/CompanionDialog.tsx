@@ -158,9 +158,9 @@ export default function CompanionDialog() {
           '&:active': { cursor: 'grabbing', transform: 'scale(.98)' },
         }}
       >
-        <Box aria-hidden sx={{ position: 'absolute', inset: -8, borderRadius: '50%', border: '2px solid transparent', borderTopColor: 'rgba(255,255,255,.98)', borderRightColor: 'rgba(143,190,232,.7)', animation: 'orbit-spin 5s linear infinite' }} />
-        <Box aria-hidden sx={{ position: 'absolute', inset: -15, borderRadius: '50%', border: '1.5px solid transparent', borderTopColor: 'rgba(143,190,232,.5)', animation: 'orbit-spin 9s linear infinite reverse' }} />
-        <Box sx={{ fontSize: 19, fontWeight: 800, color: '#41546E', animation: 'companion-breathe 5s ease-in-out infinite' }}>✦</Box>
+        <Box aria-hidden sx={{ position: 'absolute', inset: -8, borderRadius: '50%', border: '2px solid transparent', borderTopColor: 'rgba(255,255,255,.98)', borderRightColor: 'rgba(143,190,232,.7)', pointerEvents: 'none', animation: 'orbit-spin 5s linear infinite' }} />
+        <Box aria-hidden sx={{ position: 'absolute', inset: -15, borderRadius: '50%', border: '1.5px solid transparent', borderTopColor: 'rgba(143,190,232,.5)', pointerEvents: 'none', animation: 'orbit-spin 9s linear infinite reverse' }} />
+        <Box sx={{ fontSize: 19, fontWeight: 800, color: '#41546E', pointerEvents: 'none', animation: 'companion-breathe 5s ease-in-out infinite' }}>✦</Box>
       </Box>
 
       {open ? (
