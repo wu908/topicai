@@ -161,10 +161,14 @@ test.describe('intent-driven MVP', () => {
     await expect(page.getByText('处理一条待验证经验', { exact: true }).first()).toBeVisible();
   });
 
-  test('desktop and mobile expose all five primary navigation nodes without overflow', async ({ page }) => {
+  test('desktop and mobile expose all primary navigation nodes without overflow', async ({ page }) => {
     await login(page);
     const nodes = [
-      { label: '今日', path: '/', heading: /^你好，/ },
+      { label: '晨报', path: '/', heading: /^你好，/ },
+      { label: '产出架', path: '/loop', heading: '产出架' },
+      { label: '收件箱', path: '/loop/inbox', heading: '收件箱' },
+      { label: '急稿', path: '/urgent', heading: '急稿' },
+      { label: '周复盘', path: '/loop/review', heading: '周复盘' },
       { label: '内容', path: '/content', heading: '内容' },
       { label: '机会', path: '/opportunities', heading: '机会' },
       { label: '素材', path: '/materials', heading: '素材' },
@@ -180,7 +184,9 @@ test.describe('intent-driven MVP', () => {
         }
         await page.getByRole('link', { name: node.label }).click();
         await page.waitForURL((url) => url.pathname === node.path);
-        await expect(page.getByRole('heading', { name: node.heading, exact: typeof node.heading === 'string' })).toBeVisible();
+        await expect(
+        page.getByRole('heading', { name: node.heading, exact: typeof node.heading === 'string' }).first(),
+      ).toBeVisible();
         await expectNoHorizontalOverflow(page);
 
         if (viewport.width > 390) {

@@ -15,6 +15,9 @@ const ContentPage = React.lazy(() => import('@/pages/Content/ContentPage'));
 const OpportunitiesPage = React.lazy(() => import('@/pages/Opportunities/OpportunitiesPage'));
 const MaterialsPage = React.lazy(() => import('@/pages/Materials/MaterialsPage'));
 const AsyncLoopPage = React.lazy(() => import('@/pages/AsyncLoop/AsyncLoopPage'));
+const InboxPage = React.lazy(() => import('@/pages/Inbox/InboxPage'));
+const ReviewPage = React.lazy(() => import('@/pages/Review/ReviewPage'));
+const UrgentPage = React.lazy(() => import('@/pages/Urgent/UrgentPage'));
 const MePage = React.lazy(() => import('@/pages/Me/MePage'));
 const StarterPage = React.lazy(() => import('@/pages/Starter/StarterPage'));
 const GrowthOnboardingPage = React.lazy(() => import('@/pages/GrowthOnboarding/GrowthOnboardingPage'));
@@ -64,6 +67,9 @@ export default function App() {
             <Route path="/opportunities" element={protectedPage(<OpportunitiesPage />)} />
             <Route path="/materials" element={protectedPage(<MaterialsPage />)} />
             <Route path="/loop" element={protectedPage(<AsyncLoopPage />)} />
+            <Route path="/loop/inbox" element={protectedPage(<InboxPage />)} />
+            <Route path="/loop/review" element={protectedPage(<ReviewPage />)} />
+            <Route path="/urgent" element={protectedPage(<UrgentPage />)} />
             <Route path="/me" element={protectedPage(<MePage />)} />
             <Route path="/onboarding/assessment" element={protectedPage(<StarterPage />)} />
             <Route path="/onboarding/directions" element={protectedPage(<StarterPage />)} />

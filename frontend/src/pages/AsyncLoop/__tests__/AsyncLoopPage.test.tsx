@@ -10,7 +10,6 @@ const pickupDeliverable = vi.fn();
 const discardDeliverable = vi.fn();
 const recordLoopMetric = vi.fn();
 const listLoopMetrics = vi.fn();
-const listWeekly = vi.fn();
 
 vi.mock('@/services/api/v2/asyncLoop', () => ({
   addInboxItem: (...args: unknown[]) => addInboxItem(...args),
@@ -21,7 +20,6 @@ vi.mock('@/services/api/v2/asyncLoop', () => ({
   discardDeliverable: (...args: unknown[]) => discardDeliverable(...args),
   recordLoopMetric: (...args: unknown[]) => recordLoopMetric(...args),
   listLoopMetrics: (...args: unknown[]) => listLoopMetrics(...args),
-  listWeekly: (...args: unknown[]) => listWeekly(...args),
 }));
 
 import AsyncLoopPage from '../AsyncLoopPage';
@@ -65,32 +63,6 @@ describe('AsyncLoopPage', () => {
       total: 1,
     });
     listDeliverables.mockResolvedValue({ items: [readyDeliverable], total: 1 });
-    listLoopMetrics.mockResolvedValue({ items: [], total: 0 });
-    listWeekly.mockResolvedValue({
-      items: [
-        {
-          project_id: 'p1',
-          title: '阳台种菜 30 天，我踩过的 5 个坑',
-          project_status: 'published',
-          published_at: '2026-08-20T08:00:00Z',
-          note_url: null,
-          judgment: {
-            audience_change: '看完能避开五个坑',
-            primary_response: 'save',
-            window_days: 7,
-          },
-          actual: {
-            captured_at: '2026-08-29T08:00:00Z',
-            metrics: { favorites: 41, comments: 6 },
-            result_availability: 'observed',
-          },
-          review: null,
-          observation: null,
-          stage: 'needs_review',
-        },
-      ],
-      total: 1,
-    });
     addInboxItem.mockResolvedValue({ id: 'i2' });
     digestInbox.mockResolvedValue({ thread_id: 't2', deliverables: [readyDeliverable] });
     pickupDeliverable.mockResolvedValue({
@@ -106,43 +78,16 @@ describe('AsyncLoopPage', () => {
     listLoopMetrics.mockResolvedValue({ items: [], total: 0 });
   });
 
-  it('renders inbox, shelf, and metrics sections', async () => {
+  it('renders shelf with picked candidates', async () => {
     render(
       <MemoryRouter>
         <AsyncLoopPage />
       </MemoryRouter>,
     );
-    expect(screen.getByText('收件箱')).toBeTruthy();
     await waitFor(() => {
       expect(screen.getAllByText('阳台种菜 30 天，我踩过的 5 个坑').length).toBeGreaterThan(0);
     });
-    expect(screen.getByText('证伪线度量')).toBeTruthy();
-    expect(screen.getAllByText(/待消化/).length).toBeGreaterThan(0);
-  });
-
-  it('adds an inbox item and reloads', async () => {
-    render(
-      <MemoryRouter>
-        <AsyncLoopPage />
-      </MemoryRouter>,
-    );
-    const input = await screen.findByPlaceholderText(/丢个灵感/);
-    fireEvent.change(input, { target: { value: '想写写授粉这件事' } });
-    fireEvent.click(screen.getByText('丢进去'));
-    await waitFor(() => expect(addInboxItem).toHaveBeenCalled());
-    expect(addInboxItem.mock.calls[0][0].content).toBe('想写写授粉这件事');
-  });
-
-  it('digest triggers production and reloads the shelf', async () => {
-    render(
-      <MemoryRouter>
-        <AsyncLoopPage />
-      </MemoryRouter>,
-    );
-    await screen.findAllByText(/阳台种菜 30 天/);
-    fireEvent.click(screen.getByText('消化生产'));
-    await waitFor(() => expect(digestInbox).toHaveBeenCalled());
-    expect(await screen.findByText(/产出了 1 条新内容/)).toBeTruthy();
+    expect(screen.getAllByText('产出架').length).toBeGreaterThan(0);
   });
 
   it('pickup validates audience change and calls the API', async () => {
@@ -180,7 +125,7 @@ describe('AsyncLoopPage', () => {
 });
 
   it('shows a retryable error when loading fails', async () => {
-    listInbox.mockRejectedValue(new Error('network down'));
+    listDeliverables.mockRejectedValue(new Error('network down'));
     render(
       <MemoryRouter>
         <AsyncLoopPage />

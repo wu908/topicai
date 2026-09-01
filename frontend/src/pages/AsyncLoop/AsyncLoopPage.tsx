@@ -1,4 +1,4 @@
-/** 创作循环（Spec-013 Phase 1）：收件箱 → 产出架/拾取 → 证伪线度量。 */
+/** 产出架（Spec-013/原型对齐）：待决定内容 + 拾取（选择即确认）。 */
 import {
   Alert,
   Box,
@@ -14,25 +14,13 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { extractErrorMessage } from '@/utils/error';
 import PageContainer from '@/components/layout/PageContainer';
-import { Link } from 'react-router-dom';
 import {
-  addInboxItem,
   discardDeliverable,
-  digestInbox,
   listDeliverables,
-  listInbox,
-  listLoopMetrics,
-  listWeekly,
   pickupDeliverable,
-  recordLoopMetric,
 } from '@/services/api/v2/asyncLoop';
-import type { WeeklyRow } from '@/types/contracts/v2/asyncLoop';
 import { openCompanion } from '@/features/companion';
-import type {
-  Deliverable,
-  InboxItem,
-  MetricRecord,
-} from '@/types/contracts/v2/asyncLoop';
+import type { Deliverable } from '@/types/contracts/v2/asyncLoop';
 
 const glassSx = {
   background: 'rgba(255,255,255,.55)',
@@ -49,38 +37,17 @@ const INTENT_LABEL: Record<string, string> = {
   record: '记录',
 };
 
-const KIND_LABEL: Record<string, string> = {
-  text: '文字',
-  image: '图片',
-  voice: '语音',
-  link: '链接',
-  idea: '念头',
-};
-
 const DISCARD_REASONS = ['太俗', '选题不对', '换换口味', '时机不对'];
-
-const STAGE_LABEL: Record<WeeklyRow['stage'], string> = {
-  needs_snapshot: '待回填数据',
-  needs_review: '待盲评',
-  review_insufficient: '数据不足',
-  ready_to_confirm: '待确认结论',
-  confirmed: '已确认',
-};
 
 const makeKey = (prefix: string) =>
   `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
 export default function AsyncLoopPage() {
-  const [items, setItems] = useState<InboxItem[]>([]);
   const [deliverables, setDeliverables] = useState<Deliverable[]>([]);
-  const [metrics, setMetrics] = useState<MetricRecord[]>([]);
-  const [weekly, setWeekly] = useState<WeeklyRow[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  const [draft, setDraft] = useState('');
-  const [draftKind, setDraftKind] = useState('text');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [intent, setIntent] = useState('solve');
   const [audienceChange, setAudienceChange] = useState('');
@@ -88,16 +55,8 @@ export default function AsyncLoopPage() {
   const [discardReason, setDiscardReason] = useState('换换口味');
 
   const reload = useCallback(async () => {
-    const [inbox, shelf, metricRows, weeklyRows] = await Promise.all([
-      listInbox(),
-      listDeliverables('ready'),
-      listLoopMetrics(),
-      listWeekly(60),
-    ]);
-    setItems(inbox.items);
+    const shelf = await listDeliverables('ready');
     setDeliverables(shelf.items);
-    setMetrics(metricRows.items);
-    setWeekly(weeklyRows.items);
   }, []);
 
   useEffect(() => {
@@ -125,26 +84,6 @@ export default function AsyncLoopPage() {
     [reload],
   );
 
-  const addDraft = () =>
-    run(async () => {
-      await addInboxItem({
-        kind: draftKind as InboxItem['kind'],
-        content: draft.trim(),
-        idempotency_key: makeKey('inbox'),
-      });
-      setDraft('');
-    }, '已丢进收件箱。');
-
-  const digest = () =>
-    run(async () => {
-      const result = await digestInbox();
-      setNotice(
-        result.deliverables.length
-          ? `产出了 ${result.deliverables.length} 条新内容。`
-          : '没有可消化的新素材。',
-      );
-    });
-
   const pickup = (d: Deliverable) =>
     run(async () => {
       await pickupDeliverable(d.id, {
@@ -166,12 +105,11 @@ export default function AsyncLoopPage() {
       setSelectedId(null);
     }, '已回到灵感池。');
 
-  const intakeCount = items.filter((i) => i.status === 'intake').length;
 
   return (
     <PageContainer
-      title="创作循环"
-      subtitle={`收件箱 ${intakeCount} 条待消化 · 产出架 ${deliverables.length} 条待决定 · 本周期已发 ${weekly.length}`}
+      title="产出架"
+      subtitle={`挑一条想发的，其余的交给它。${deliverables.length} 条待决定`}
     >
       {error ? (
         <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
@@ -183,62 +121,6 @@ export default function AsyncLoopPage() {
           {notice}
         </Alert>
       ) : null}
-
-      {/* 收件箱 */}
-      <Typography variant="h6" sx={{ mb: 1.5, fontWeight: 700 }}>
-        收件箱
-      </Typography>
-      <Paper sx={{ ...glassSx, p: 3, mb: 3 }}>
-        <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5}>
-          <TextField
-            fullWidth
-            size="small"
-            placeholder="丢个灵感、想法，或一句真实经历…"
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-          />
-          <TextField
-            select
-            size="small"
-            value={draftKind}
-            onChange={(e) => setDraftKind(e.target.value)}
-            sx={{ minWidth: 96 }}
-          >
-            {Object.entries(KIND_LABEL).map(([value, label]) => (
-              <MenuItem key={value} value={value}>
-                {label}
-              </MenuItem>
-            ))}
-          </TextField>
-          <Button
-            variant="contained"
-            disabled={busy || !draft.trim()}
-            onClick={() => void addDraft()}
-          >
-            丢进去
-          </Button>
-          <Button variant="outlined" disabled={busy} onClick={() => void digest()}>
-            消化生产
-          </Button>
-          <Button
-            variant="text"
-            onClick={() => window.location.assign('/content')}
-          >
-            现在就想发？走急稿通道 →
-          </Button>
-        </Stack>
-        {items.length ? (
-          <Stack spacing={0.5} sx={{ mt: 2 }}>
-            {items.slice(0, 5).map((item) => (
-              <Box key={item.id} sx={{ fontSize: 13, color: 'text.secondary' }}>
-                {KIND_LABEL[item.kind]} · {item.title || item.content.slice(0, 30)} ·{' '}
-                {item.status === 'digested' ? '已消化' : '待消化'}
-                {item.consent === 'private' ? ' · 私密' : ''}
-              </Box>
-            ))}
-          </Stack>
-        ) : null}
-      </Paper>
 
       {/* 产出架 + 拾取 */}
       <Typography variant="h6" sx={{ mb: 1.5, fontWeight: 700 }}>
@@ -362,81 +244,6 @@ export default function AsyncLoopPage() {
         </Box>
       )}
 
-      {/* 周复盘：判断 vs 实际（只读聚合，动作走项目工作台的既有门控） */}
-      <Typography variant="h6" sx={{ mb: 1.5, fontWeight: 700 }}>
-        周复盘 · 判断 vs 实际
-      </Typography>
-      <Paper sx={{ ...glassSx, p: 3, mb: 3 }}>
-        {weekly.length === 0 ? (
-          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-            本周期还没有已发布的内容。发布并回填数据后，这里会出现对照行。
-          </Typography>
-        ) : (
-          <Stack spacing={1.5}>
-            {weekly.map((row) => (
-              <Box key={row.project_id} sx={{ borderBottom: '1px solid divider', pb: 1.5 }}>
-                <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
-                  <Link
-                    to={`/content/${row.project_id}`}
-                    style={{ fontWeight: 700, color: 'inherit' }}
-                  >
-                    {row.title}
-                  </Link>
-                  <Chip size="small" label={STAGE_LABEL[row.stage]} />
-                  <Button size="small" color="inherit" onClick={() => openCompanion(`周复盘 · ${row.title}`)}>
-                    问
-                  </Button>
-                </Stack>
-                <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
-                  判断 · {row.judgment.audience_change ?? '未记录'} ｜ 最盼反应 ·{' '}
-                  {row.judgment.primary_response ?? '未记录'} ｜ 实际 ·{' '}
-                  {row.actual.result_availability === 'unavailable'
-                    ? '拿不到数据（也是结论，不补 0）'
-                    : Object.entries(row.actual.metrics)
-                        .filter(([, v]) => v !== null)
-                        .map(([k, v]) => `${k} ${v}`)
-                        .join(' · ') || '尚未回填'}
-                </Typography>
-              </Box>
-            ))}
-          </Stack>
-        )}
-      </Paper>
-
-      {/* 证伪线度量 */}
-      <Typography variant="h6" sx={{ mb: 1.5, fontWeight: 700 }}>
-        证伪线度量
-      </Typography>
-      <Paper sx={{ ...glassSx, p: 3 }}>
-        {metrics.length === 0 ? (
-          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-            还没有记录。拾取时录入耗时、每周录入维护时长，两条证伪线的数据会在这里积累。
-          </Typography>
-        ) : (
-          <Stack spacing={0.5}>
-            {metrics.slice(0, 8).map((m) => (
-              <Box key={m.id} sx={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
-                <span>{m.metric}</span>
-                <b>{m.value}</b>
-              </Box>
-            ))}
-          </Stack>
-        )}
-        <Stack direction="row" spacing={1.5} sx={{ mt: 2 }}>
-          <Button
-            size="small"
-            variant="outlined"
-            disabled={busy}
-            onClick={() =>
-              void run(async () => {
-                await recordLoopMetric({ metric: 'weekly_minutes', value: 0 });
-              })
-            }
-          >
-            记一笔本周维护时长
-          </Button>
-        </Stack>
-      </Paper>
     </PageContainer>
   );
 }

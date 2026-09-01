@@ -4,7 +4,10 @@ import {
   ArticleOutlined,
   FolderOutlined,
   HomeOutlined,
-  AutorenewOutlined,
+  RssFeedOutlined,
+  GridViewOutlined,
+  EditNoteOutlined,
+  InsightsOutlined,
   LightbulbOutlined,
   PersonOutline,
 } from '@mui/icons-material';
@@ -16,11 +19,18 @@ interface NavItem {
   icon: ReactNode;
 }
 
-const NAV_ITEMS: NavItem[] = [
-  { to: '/', label: '今日', icon: <HomeOutlined /> },
+/* 原型对齐（DESIGN.md v3 §6 轴向契约）：创作组 = 原型六屏（成长属
+   Phase 4 门控，暂不显示）；管理组 = 真实功能页入口。 */
+const CREATE_ITEMS: NavItem[] = [
+  { to: '/', label: '晨报', icon: <HomeOutlined /> },
+  { to: '/loop', label: '产出架', icon: <GridViewOutlined /> },
+  { to: '/loop/inbox', label: '收件箱', icon: <RssFeedOutlined /> },
+  { to: '/urgent', label: '急稿', icon: <EditNoteOutlined /> },
+  { to: '/loop/review', label: '周复盘', icon: <InsightsOutlined /> },
+];
+const MANAGE_ITEMS: NavItem[] = [
   { to: '/content', label: '内容', icon: <ArticleOutlined /> },
   { to: '/opportunities', label: '机会', icon: <LightbulbOutlined /> },
-  { to: '/loop', label: '创作循环', icon: <AutorenewOutlined /> },
   { to: '/materials', label: '素材', icon: <FolderOutlined /> },
   { to: '/me', label: '我的', icon: <PersonOutline /> },
 ];
@@ -150,13 +160,39 @@ export default function Sidebar() {
         aria-label="主导航"
         style={{ flex: 1, overflowY: 'auto', padding: '0 8px' }}
       >
-        {NAV_ITEMS.map((item) => (
+        {CREATE_ITEMS.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}
             end={item.to === '/'}
-            // 审计 e54a2643 medium：激活态直接由 NavLink 的匹配结果驱动，
-            // 避免手写 isActive 与 end 语义分叉。
+            className={({ isActive }) =>
+              isActive ? 'v3-sidebar-link active' : 'v3-sidebar-link'}
+            style={({ isActive }) => navLinkStyle(isActive)}
+            aria-label={item.label}
+          >
+            <span
+              style={{
+                width: 18,
+                height: 18,
+                flexShrink: 0,
+                display: 'grid',
+                placeItems: 'center',
+              }}
+              aria-hidden="true"
+            >
+              {item.icon}
+            </span>
+            <span className="v3-sidebar-label">{item.label}</span>
+          </NavLink>
+        ))}
+        <span aria-hidden style={{ display: 'block', margin: '12px 12px 4px', fontSize: 10.5, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--v3-text-ter)' }}>
+          管理
+        </span>
+        {MANAGE_ITEMS.map((item) => (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            end={item.to === '/'}
             className={({ isActive }) =>
               isActive ? 'v3-sidebar-link active' : 'v3-sidebar-link'}
             style={({ isActive }) => navLinkStyle(isActive)}

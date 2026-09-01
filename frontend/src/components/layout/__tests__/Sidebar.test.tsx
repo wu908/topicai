@@ -34,16 +34,17 @@ describe('Sidebar', () => {
     mockAuthState.logout.mockClear();
   });
 
-  it('renders the five primary navigation nodes', () => {
+  it('renders the create and manage navigation groups', () => {
     render(
       <MemoryRouter>
         <Sidebar />
       </MemoryRouter>,
     );
     expect(screen.getByText('TopicAI')).toBeInTheDocument();
-    for (const label of ['今日', '内容', '机会', '素材', '我的']) {
+    for (const label of ['晨报', '产出架', '收件箱', '急稿', '周复盘', '内容', '机会', '素材', '我的']) {
       expect(screen.getByText(label)).toBeInTheDocument();
     }
+    expect(screen.getByText('管理')).toBeInTheDocument();
   });
 
   it('opens the creator state from the user card', () => {
@@ -93,6 +94,6 @@ describe('Sidebar', () => {
       </MemoryRouter>,
     );
     expect(screen.getByRole('link', { name: '内容' })).toHaveClass('active');
-    expect(screen.getByRole('link', { name: '今日' })).not.toHaveClass('active');
+    expect(screen.getByRole('link', { name: '晨报' })).not.toHaveClass('active');
   });
 });
