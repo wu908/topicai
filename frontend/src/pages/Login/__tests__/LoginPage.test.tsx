@@ -57,8 +57,9 @@ describe('LoginPage', () => {
   it('renders the brand panel and the login/register tabs', () => {
     renderPage();
     expect(screen.getByText('TopicAI')).toBeInTheDocument();
-    // "让 AI 成为你的" is split across a <br/> in production; match a prefix.
-    expect(screen.getByText(/让 AI/)).toBeInTheDocument();
+    // 原型化后右品牌面板已移除（DESIGN.md v3 登录=中央玻璃卡）；
+    // 断言改为品牌标语存在。
+    expect(screen.getByText(/把灵感交给它|TopicAI/)).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: '登录' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: '注册' })).toBeInTheDocument();
     expect(screen.getByLabelText('邮箱地址')).toBeInTheDocument();

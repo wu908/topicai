@@ -8,6 +8,7 @@ import {
   GridViewOutlined,
   EditNoteOutlined,
   InsightsOutlined,
+  EmojiEventsOutlined,
   LightbulbOutlined,
   PersonOutline,
 } from '@mui/icons-material';
@@ -27,6 +28,7 @@ const CREATE_ITEMS: NavItem[] = [
   { to: '/loop/inbox', label: '收件箱', icon: <RssFeedOutlined /> },
   { to: '/urgent', label: '急稿', icon: <EditNoteOutlined /> },
   { to: '/loop/review', label: '周复盘', icon: <InsightsOutlined /> },
+  { to: '/growth', label: '成长', icon: <EmojiEventsOutlined /> },
 ];
 const MANAGE_ITEMS: NavItem[] = [
   { to: '/content', label: '内容', icon: <ArticleOutlined /> },

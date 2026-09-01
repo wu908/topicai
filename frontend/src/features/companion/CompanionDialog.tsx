@@ -118,6 +118,20 @@ export default function CompanionDialog() {
     });
   };
 
+  /* 主动缺口/逻辑洞推送（原型一致性；演示文案，接模型后由编排器出） */
+  const proactiveFired = useRef(false);
+  useEffect(() => {
+    if (!open || proactiveFired.current) return;
+    proactiveFired.current = true;
+    const first = window.setTimeout(() => {
+      push('我扫了一遍今天的架子，发现一个缺口：探索位那条还缺一张结果特写配图。要我从素材里挑一张，还是先搁着？（演示）', false);
+    }, 2200);
+    const second = window.setTimeout(() => {
+      push('另有一个逻辑洞：你定了周五拾取，但会挤掉观察窗的一半——要提前到周四吗？（演示）', false);
+    }, 14000);
+    return () => { window.clearTimeout(first); window.clearTimeout(second); };
+  }, [open]);
+
   const submit = () => {
     const text = draft.trim();
     if (!text) return;

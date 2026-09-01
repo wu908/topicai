@@ -122,18 +122,21 @@ export default function AsyncLoopPage() {
         </Alert>
       ) : null}
 
-      {/* 产出架 + 拾取 */}
-      <Typography variant="h6" sx={{ mb: 1.5, fontWeight: 700 }}>
-        产出架
-      </Typography>
+      {/* 产出架 + 拾取（原型双栏：左卡流 / 右粘性拾取面板） */}
       {deliverables.length === 0 ? (
         <Paper sx={{ ...glassSx, p: 4, mb: 3, textAlign: 'center', color: 'text.secondary' }}>
           架子上还没有待决定的内容。丢点素材，点「消化生产」。
         </Paper>
       ) : (
-        <Box sx={{ display: 'grid', gridTemplateColumns: { md: '1fr 1fr' }, gap: 2, mb: 3 }}>
+        <Box sx={{ display: 'grid', gridTemplateColumns: { md: 'minmax(0,1fr) minmax(0,1.05fr)' }, gap: 2, alignItems: 'start', mb: 3 }}>
+          {/* 左：产出卡流 */}
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           {deliverables.map((d) => (
             <Paper key={d.id} sx={{ ...glassSx, p: 3 }}>
+              <Box
+                onClick={() => setSelectedId(selectedId === d.id ? null : d.id)}
+                sx={{ cursor: 'pointer' }}
+              >
               <Stack direction="row" spacing={1} sx={{ mb: 1 }}>
                 {d.content_intent ? (
                   <Chip size="small" label={INTENT_LABEL[d.content_intent]} />
@@ -154,6 +157,7 @@ export default function AsyncLoopPage() {
                 {d.judgment.primary_response ?? '待定'} · 窗口{' '}
                 {d.judgment.window_days ?? 7} 天
               </Box>
+              </Box>
               <Stack direction="row" spacing={1} sx={{ mt: 2 }}>
                 <Button
                   size="small"
@@ -167,7 +171,9 @@ export default function AsyncLoopPage() {
                 </Button>
               </Stack>
 
+              {/* 卡内保留折叠详情仅在移动端（桌面用右栏） */}
               {selectedId === d.id ? (
+                <Box sx={{ display: { md: 'none' } }}>
                 <Stack spacing={1.5} sx={{ mt: 2, pt: 2, borderTop: '1px dashed divider' }}>
                   <Typography variant="caption" sx={{ color: 'text.disabled' }}>
                     事实清单 · 逐条来自你的素材（认领即确认）
@@ -238,9 +244,100 @@ export default function AsyncLoopPage() {
                     </Button>
                   </Stack>
                 </Stack>
+                </Box>
               ) : null}
             </Paper>
           ))}
+          </Box>
+
+          {/* 右：粘性拾取面板（选择即确认） */}
+          <Box sx={{ position: { md: 'sticky' }, top: 16 }}>
+            {(() => {
+              const active = deliverables.find((d) => d.id === selectedId) ?? deliverables[0];
+              if (!active) return null;
+              return (
+                <Paper sx={{ ...glassSx, p: 3 }}>
+                  <Typography variant="caption" sx={{ color: 'text.disabled', display: 'block', mb: 1 }}>
+                    拾取 · 选择即确认
+                  </Typography>
+                  <Typography sx={{ fontWeight: 700, mb: 0.5 }}>{active.title}</Typography>
+                  <Stack spacing={1.5} sx={{ mt: 2, pt: 2, borderTop: '1px dashed divider' }}>
+                    <Typography variant="caption" sx={{ color: 'text.disabled' }}>
+                      事实清单 · 逐条来自你的素材（认领即确认）
+                    </Typography>
+                    {active.facts.map((fact, index) => (
+                      <Box key={index} sx={{ fontSize: 13 }}>
+                        {fact.statement}
+                        <Typography component="span" variant="caption" sx={{ ml: 1, color: 'text.disabled' }}>
+                          {fact.note}
+                        </Typography>
+                      </Box>
+                    ))}
+                    <TextField
+                      size="small"
+                      label="希望读者的变化（必填）"
+                      value={audienceChange}
+                      onChange={(e) => setAudienceChange(e.target.value)}
+                    />
+                    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
+                      <TextField
+                        select
+                        size="small"
+                        label="意图确认"
+                        value={intent}
+                        onChange={(e) => setIntent(e.target.value)}
+                        sx={{ minWidth: 130 }}
+                      >
+                        <MenuItem value="solve">解决</MenuItem>
+                        <MenuItem value="share">分享</MenuItem>
+                        <MenuItem value="record">记录</MenuItem>
+                      </TextField>
+                      <TextField
+                        size="small"
+                        label="提醒时间（可选，ISO）"
+                        value={scheduleAt}
+                        onChange={(e) => setScheduleAt(e.target.value)}
+                        fullWidth
+                      />
+                    </Stack>
+                    <Stack direction="row" spacing={1} sx={{ mt: 1 }} flexWrap="wrap">
+                      <Button
+                        variant="contained"
+                        disabled={busy || !audienceChange.trim()}
+                        onClick={() => void pickup(active)}
+                      >
+                        认领
+                      </Button>
+                      <TextField
+                        select
+                        size="small"
+                        value={discardReason}
+                        onChange={(e) => setDiscardReason(e.target.value)}
+                        sx={{ minWidth: 110 }}
+                      >
+                        {DISCARD_REASONS.map((reason) => (
+                          <MenuItem key={reason} value={reason}>
+                            {reason}
+                          </MenuItem>
+                        ))}
+                      </TextField>
+                      <Button
+                        size="small"
+                        color="inherit"
+                        disabled={busy}
+                        onClick={() => void discard(active)}
+                      >
+                        不选了
+                      </Button>
+                      <Button size="small" color="inherit" onClick={() => openCompanion(`产出架 · ${active.title}`)}>
+                        问它
+                      </Button>
+                    </Stack>
+                  </Stack>
+                </Paper>
+              );
+            })()}
+          </Box>
         </Box>
       )}
 

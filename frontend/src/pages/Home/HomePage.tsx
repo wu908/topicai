@@ -4,6 +4,7 @@ import { Alert, Button, Chip, CircularProgress, Stack, TextField } from '@mui/ma
 import { useNavigate } from 'react-router-dom';
 import PageContainer from '@/components/layout/PageContainer';
 import { getTodayWorkspace, respondToAction } from '@/services/api/v2/projects';
+import { openCompanion } from '@/features/companion';
 import { listInbox, listDeliverables, listLoopMetrics, listWeekly } from '@/services/api/v2/asyncLoop';
 import type { IntentAction, TodayWorkspace } from '@/types/contracts/v2/content';
 import { extractErrorMessage } from '@/utils/error';
@@ -228,6 +229,18 @@ export default function HomePage() {
       <div className="today-inboxrow">
         <input placeholder="有灵感？先丢进收件箱，其他交给它…" readOnly onClick={() => navigate('/loop')} />
         <Button variant="text" onClick={() => navigate('/loop')}>去收件箱 ↗</Button>
+      </div>
+      <div className="today-quickintents">
+        {['另一条先放着，别催我', '周五晚再拾取', '为什么先推这条？'].map((q) => (
+          <Button
+            key={q}
+            size="small"
+            variant="outlined"
+            onClick={() => openCompanion('晨报 · 当前行动')}
+          >
+            {q}
+          </Button>
+        ))}
       </div>
       {action ? (
         <section className="today-action" aria-labelledby="today-action-title">

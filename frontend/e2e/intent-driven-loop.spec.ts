@@ -169,6 +169,7 @@ test.describe('intent-driven MVP', () => {
       { label: '收件箱', path: '/loop/inbox', heading: '收件箱' },
       { label: '急稿', path: '/urgent', heading: '急稿' },
       { label: '周复盘', path: '/loop/review', heading: '周复盘' },
+      { label: '成长', path: '/growth', heading: '成长' },
       { label: '内容', path: '/content', heading: '内容' },
       { label: '机会', path: '/opportunities', heading: '机会' },
       { label: '素材', path: '/materials', heading: '素材' },

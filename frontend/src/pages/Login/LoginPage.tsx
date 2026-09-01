@@ -10,13 +10,6 @@ import { useAuthStore } from '@/store/authStore';
 
 type TabValue = 'login' | 'register';
 
-const FEATURES = [
-  { icon: '1', label: '确认这条内容想给读者带来的变化' },
-  { icon: '2', label: '补齐你亲自经历过的事实和素材' },
-  { icon: '3', label: '逐段确认候选内容与公开范围' },
-  { icon: '4', label: '发布后只保留一个下一轮实验' },
-];
-
 const LoginPage: React.FC = () => {
   const navigate = useNavigate();
   const { login, register, isLoading, error, clearError } = useAuthStore();
@@ -66,19 +59,22 @@ const LoginPage: React.FC = () => {
       style={{
         display: 'flex',
         width: '100%',
-        height: '100vh',
-        overflow: 'hidden',
+        minHeight: '100dvh',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 24,
       }}
     >
-      {/* Left — form */}
       <div
         style={{
-          flex: 1,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          background: 'rgba(255,255,255,.5)',
+          width: 400,
+          borderRadius: 22,
+          border: '1px solid rgba(255,255,255,.8)',
+          outline: '1px solid rgba(23,28,38,.055)',
+          boxShadow: 'inset 0 1px 0 rgba(255,255,255,.8), 0 22px 60px rgba(70,95,130,.14)',
+          background: 'rgba(255,255,255,.55)',
           backdropFilter: 'blur(26px) saturate(155%)',
+          padding: '32px 36px 28px',
           position: 'relative',
         }}
       >
@@ -414,88 +410,7 @@ const LoginPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Right — brand panel */}
-      <aside
-        style={{
-          width: 480,
-          background: 'var(--v3-text)',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'center',
-          padding: 60,
-          color: '#fff',
-          position: 'relative',
-          overflow: 'hidden',
-        }}
-      >
-        <h2
-          style={{
-            fontSize: 32,
-            fontWeight: 700,
-            marginBottom: 12,
-            letterSpacing: 0,
-            lineHeight: 1.25,
-            position: 'relative',
-          }}
-        >
-          让 AI 成为你的
-          <br />
-          内容运营搭档
-        </h2>
-        <p
-          style={{
-            fontSize: 15,
-            color: 'rgba(255,255,255,0.75)',
-            lineHeight: 1.6,
-            position: 'relative',
-            margin: '0 0 28px 0',
-          }}
-        >
-          AI 负责理解意图、找到证据缺口并准备下一步；你只确认事实、表达与不可逆决定。
-        </p>
 
-        <ul
-          style={{
-            listStyle: 'none',
-            padding: 0,
-            margin: 0,
-            position: 'relative',
-          }}
-        >
-          {FEATURES.map((f) => (
-            <li
-              key={f.label}
-              style={{
-                fontSize: 14,
-                color: 'rgba(255,255,255,0.85)',
-                padding: '10px 0',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-                borderBottom: '1px solid rgba(255,255,255,0.1)',
-              }}
-            >
-              <span
-                style={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: 8,
-                  background: 'rgba(255,255,255,0.1)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 14,
-                  flexShrink: 0,
-                }}
-                aria-hidden="true"
-              >
-                {f.icon}
-              </span>
-              {f.label}
-            </li>
-          ))}
-        </ul>
-      </aside>
     </div>
   );
 };

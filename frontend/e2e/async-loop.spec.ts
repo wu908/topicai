@@ -42,10 +42,11 @@ test.describe('async creation loop', () => {
     await expect(shelfTitle.first()).toBeVisible();
     await page.getByRole('button', { name: '拾取' }).click();
     await expect(
-      page.getByText(/事实清单 · 逐条来自你的素材/).or(page.getByText(/认领即确认/)),
+      page.getByText('拾取 · 选择即确认', { exact: true }),
     ).toBeVisible();
     await page
       .getByLabel(/希望读者的变化/)
+      .last()
       .fill('看完能在北阳台种出辣椒');
     await page.getByRole('button', { name: '认领' }).click();
     await expect(page.getByText('已认领。到点会提醒你发布。')).toBeVisible();

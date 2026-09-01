@@ -96,10 +96,10 @@ describe('AsyncLoopPage', () => {
         <AsyncLoopPage />
       </MemoryRouter>,
     );
-    const pickupButton = await screen.findByText('拾取');
-    fireEvent.click(pickupButton);
-    const claim = screen.getByText('认领');
-    fireEvent.click(claim);
+    // 双栏布局：右栏默认展示第一张的拾取面板
+    await screen.findByLabelText(/希望读者的变化/);
+    // 初始无受众变化：认领应禁用（不触发）
+    fireEvent.click(screen.getByText('认领'));
     await waitFor(() => expect(pickupDeliverable).not.toHaveBeenCalled());
     fireEvent.change(await screen.findByLabelText(/希望读者的变化/), {
       target: { value: '看完能避开五个坑' },
@@ -117,7 +117,6 @@ describe('AsyncLoopPage', () => {
         <AsyncLoopPage />
       </MemoryRouter>,
     );
-    fireEvent.click(await screen.findByText('拾取'));
     fireEvent.click(await screen.findByText('不选了'));
     await waitFor(() => expect(discardDeliverable).toHaveBeenCalled());
     expect(discardDeliverable.mock.calls[0][1].reason).toBe('换换口味');

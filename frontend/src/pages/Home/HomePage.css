@@ -147,3 +147,11 @@
   font-size: 13px;
   cursor: pointer;
 }
+
+.today-quickintents {
+  max-width: 860px;
+  margin-top: 10px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
