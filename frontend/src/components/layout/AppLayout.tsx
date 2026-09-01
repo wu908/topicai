@@ -5,6 +5,8 @@
 import React from 'react';
 import { useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
+import { CompanionDialog } from '@/features/companion';
+import CompanionMotion from '@/features/companion/CompanionMotion';
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -21,10 +23,14 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
         display: 'flex',
         height: '100vh',
         overflow: 'hidden',
-        background: 'var(--v3-bg)',
+        // Lumen field (LumenBackground) is the page background; the shell stays
+        // transparent so the field + orbs show through behind every page.
+        background: 'transparent',
       }}
     >
       <Sidebar />
+      <CompanionMotion />
+      <CompanionDialog />
       <main
         className="app-main"
         style={{

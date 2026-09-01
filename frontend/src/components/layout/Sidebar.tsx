@@ -42,7 +42,8 @@ const navLinkStyle = (active: boolean): CSSProperties => ({
 const asideStyle: CSSProperties = {
   width: 'var(--v3-sidebar-width)',
   flexShrink: 0,
-  background: 'var(--v3-bg)',
+  background: 'rgba(255,255,255,.55)',
+  backdropFilter: 'blur(26px) saturate(155%)',
   borderRight: '1px solid var(--v3-border)',
   display: 'flex',
   flexDirection: 'column',
