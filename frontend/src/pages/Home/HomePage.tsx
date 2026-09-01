@@ -199,7 +199,7 @@ export default function HomePage() {
     hour < 5 ? '夜深了' : hour < 12 ? '早上好' : hour < 18 ? '下午好' : '晚上好';
   return (
     <PageContainer
-      title={`${greeting}。${user?.username || '创作者'}，今天只有一件事值得做。`}
+      title={`你好，${user?.username || '创作者'}。${greeting}，今天只有一件事值得做。`}
       subtitle="AI 会先理解这条内容想产生的影响，再安排下一步。"
     >
       {error ? <Alert severity="error" role="alert" action={<Button onClick={() => void load()}>重试</Button>}>{error}</Alert> : null}
