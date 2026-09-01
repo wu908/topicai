@@ -27,6 +27,7 @@ import {
   recordLoopMetric,
 } from '@/services/api/v2/asyncLoop';
 import type { WeeklyRow } from '@/types/contracts/v2/asyncLoop';
+import { openCompanion } from '@/features/companion';
 import type {
   Deliverable,
   InboxItem,
@@ -279,6 +280,9 @@ export default function AsyncLoopPage() {
                 >
                   拾取
                 </Button>
+                <Button size="small" color="inherit" onClick={() => openCompanion(`产出架 · ${d.title}`)}>
+                  问它
+                </Button>
               </Stack>
 
               {selectedId === d.id ? (
@@ -379,6 +383,9 @@ export default function AsyncLoopPage() {
                     {row.title}
                   </Link>
                   <Chip size="small" label={STAGE_LABEL[row.stage]} />
+                  <Button size="small" color="inherit" onClick={() => openCompanion(`周复盘 · ${row.title}`)}>
+                    问
+                  </Button>
                 </Stack>
                 <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
                   判断 · {row.judgment.audience_change ?? '未记录'} ｜ 最盼反应 ·{' '}

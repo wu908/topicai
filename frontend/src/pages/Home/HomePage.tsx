@@ -4,6 +4,7 @@ import { Alert, Button, Chip, CircularProgress, Stack, TextField } from '@mui/ma
 import { useNavigate } from 'react-router-dom';
 import PageContainer from '@/components/layout/PageContainer';
 import { getTodayWorkspace, respondToAction } from '@/services/api/v2/projects';
+import { listInbox, listDeliverables, listLoopMetrics, listWeekly } from '@/services/api/v2/asyncLoop';
 import type { IntentAction, TodayWorkspace } from '@/types/contracts/v2/content';
 import { extractErrorMessage } from '@/utils/error';
 import { readableRef } from '@/utils/labels';
@@ -80,6 +81,9 @@ export default function HomePage() {
   const [rejected, setRejected] = useState(false);
   const [showReject, setShowReject] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
+  const [quiet, setQuiet] = useState<{ ready: number; pending: number; minutes: number; weekly: number }>({
+    ready: 0, pending: 0, minutes: 0, weekly: 0,
+  });
 
   // 审计 e54a2643 medium：卸载后到达的响应不能再写入状态，
   // 并发的后发请求不能被先发响应覆盖。
@@ -94,9 +98,21 @@ export default function HomePage() {
     setError(null);
     try {
       await fetchCurrentUser();
-      const next = await getTodayWorkspace();
+      const [next, inboxRows, deliverableRows, metricRows, weeklyRows] = await Promise.all([
+        getTodayWorkspace(),
+        listInbox().catch(() => ({ items: [], total: 0 })),
+        listDeliverables('ready').catch(() => ({ items: [], total: 0 })),
+        listLoopMetrics('weekly_minutes').catch(() => ({ items: [], total: 0 })),
+        listWeekly(7).catch(() => ({ items: [], total: 0 })),
+      ]);
       if (requestTokenRef.current !== token) return;
       setData(next);
+      setQuiet({
+        ready: deliverableRows.items.length,
+        pending: inboxRows.items.filter((i) => i.status === 'intake').length,
+        minutes: Math.round(metricRows.items[0]?.value ?? 0),
+        weekly: weeklyRows.items.length,
+      });
     } catch (err) {
       if (requestTokenRef.current !== token) return;
       setError(extractErrorMessage(err, '今日行动加载失败，请稍后重试'));
@@ -203,6 +219,16 @@ export default function HomePage() {
       subtitle="AI 会先理解这条内容想产生的影响，再安排下一步。"
     >
       {error ? <Alert severity="error" role="alert" action={<Button onClick={() => void load()}>重试</Button>}>{error}</Alert> : null}
+      <div className="today-quiet" aria-label="安静数据">
+        <span>产出架待决定 <b>{quiet.ready}</b></span>
+        <span>收件箱待消化 <b>{quiet.pending}</b></span>
+        <span>本周维护 <b>{quiet.minutes} 分钟</b></span>
+        <span>本周已发 <b>{quiet.weekly}</b></span>
+      </div>
+      <div className="today-inboxrow">
+        <input placeholder="有灵感？先丢进收件箱，其他交给它…" readOnly onClick={() => navigate('/loop')} />
+        <Button variant="text" onClick={() => navigate('/loop')}>去收件箱 ↗</Button>
+      </div>
       {action ? (
         <section className="today-action" aria-labelledby="today-action-title">
           <div className="today-action-topline">
