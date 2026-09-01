@@ -9,8 +9,11 @@
   margin-top: 24px;
   padding: 28px;
   border: 1px solid var(--v3-border);
-  border-radius: 8px;
+  border-radius: 22px;
   background: var(--v3-surface);
+  backdrop-filter: blur(var(--v3-glass-blur)) saturate(var(--v3-glass-saturate));
+  outline: 1px solid var(--v3-glass-outline);
+  box-shadow: var(--v3-shadow-card);
 }
 
 .today-action-topline,
