@@ -4,6 +4,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { CssBaseline, ThemeProvider } from '@mui/material';
 import AppLayout from '@/components/layout/AppLayout';
 import ErrorBoundary from '@/components/common/ErrorBoundary';
+import LumenBackground from '@/components/common/LumenBackground';
 import LoadingFallback from '@/components/common/LoadingFallback';
 import { useAuthStore } from '@/store/authStore';
 import theme from '@/styles/theme';
@@ -52,6 +53,7 @@ export default function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
+      <LumenBackground />
       <ErrorBoundary>
         <BrowserRouter>
           <Routes>

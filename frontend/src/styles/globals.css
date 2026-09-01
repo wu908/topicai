@@ -21,7 +21,9 @@ body {
   font-weight: var(--weight-regular);
   line-height: var(--leading-normal);
   color: var(--color-text-primary);
-  background: var(--color-bg);
+  /* Lumen field (fixed, z=-2) is the page background; body stays
+     transparent so the gradient field + drifting orbs show through. */
+  background: transparent;
 }
 
 /* clip (not hidden) avoids creating a scroll container, keeping position: sticky working */
