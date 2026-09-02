@@ -1,12 +1,12 @@
 /**
- * Tests for LoginPage — login + register tabs + form + social login.
+ * Tests for LoginPage — 原型中央玻璃卡（hifi-lumen.html 对齐）。
  *
  * Covers:
- * 1. Renders the brand panel + form with 登录/注册 tabs
- * 2. Defaults to the login tab (no username field)
- * 3. Switching to 注册 tab reveals the username field
- * 4. Submitting the form calls login() with email + password
- * 5. Password show/hide toggles input type
+ * 1. 品牌卡（T 标 + TopicAI + 标语）与占位符输入
+ * 2. 默认登录态（无姓名字段），按钮「进入」
+ * 3. 弱化链接切换注册，出现姓名/确认密码字段
+ * 4. 提交登录/注册的参数与导航
+ * 5. store 错误以 role=alert 展示
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -54,51 +54,48 @@ describe('LoginPage', () => {
     storeError = null;
   });
 
-  it('renders the brand panel and the login/register tabs', () => {
+  it('renders the centered glass brand card', () => {
     renderPage();
     expect(screen.getByText('TopicAI')).toBeInTheDocument();
-    // 原型化后右品牌面板已移除（DESIGN.md v3 登录=中央玻璃卡）；
-    // 断言改为品牌标语存在。
-    expect(screen.getByText(/把灵感交给它|TopicAI/)).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: '登录' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: '注册' })).toBeInTheDocument();
-    expect(screen.getByLabelText('邮箱地址')).toBeInTheDocument();
+    expect(screen.getByText('把灵感交给它，把时间还给你。')).toBeInTheDocument();
+    expect(screen.getByLabelText('邮箱')).toBeInTheDocument();
     expect(screen.getByLabelText('密码')).toBeInTheDocument();
   });
 
-  it('shows the login submit button by default', () => {
+  it('shows the pill enter button by default', () => {
     renderPage();
-    expect(screen.getByRole('button', { name: '登录' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '进入' })).toBeInTheDocument();
   });
 
-  it('hides the username field on the login tab', () => {
+  it('hides the username field in login mode', () => {
     renderPage();
     expect(screen.queryByLabelText('姓名')).not.toBeInTheDocument();
   });
 
-  it('switching to 注册 reveals the username field without a multi-platform selector', () => {
+  it('the quiet register link reveals username + confirm fields', () => {
     renderPage();
-    fireEvent.click(screen.getByRole('tab', { name: '注册' }));
+    fireEvent.click(screen.getByRole('button', { name: '没有账号？注册' }));
     expect(screen.getByLabelText('姓名')).toBeInTheDocument();
+    expect(screen.getByLabelText('确认密码')).toBeInTheDocument();
     expect(screen.queryByLabelText('你的主要创作平台')).not.toBeInTheDocument();
   });
 
-  it('switching to 注册 clears any prior error', () => {
+  it('switching to register clears any prior error', () => {
     storeError = 'old error';
     renderPage();
-    fireEvent.click(screen.getByRole('tab', { name: '注册' }));
+    fireEvent.click(screen.getByRole('button', { name: '没有账号？注册' }));
     expect(clearErrorMock).toHaveBeenCalled();
   });
 
   it('submits the login form with email + password and navigates to /', async () => {
     renderPage();
-    fireEvent.change(screen.getByLabelText('邮箱地址'), {
+    fireEvent.change(screen.getByLabelText('邮箱'), {
       target: { value: 'a@b.com' },
     });
     fireEvent.change(screen.getByLabelText('密码'), {
       target: { value: 'hunter2hunter2' },
     });
-    fireEvent.click(screen.getByRole('button', { name: '登录' }));
+    fireEvent.click(screen.getByRole('button', { name: '进入' }));
 
     await waitFor(() => {
       expect(loginMock).toHaveBeenCalledWith('a@b.com', 'hunter2hunter2');
@@ -111,9 +108,9 @@ describe('LoginPage', () => {
 
   it('submits the register form with email + username + password', async () => {
     renderPage();
-    fireEvent.click(screen.getByRole('tab', { name: '注册' }));
+    fireEvent.click(screen.getByRole('button', { name: '没有账号？注册' }));
 
-    fireEvent.change(screen.getByLabelText('邮箱地址'), {
+    fireEvent.change(screen.getByLabelText('邮箱'), {
       target: { value: 'a@b.com' },
     });
     fireEvent.change(screen.getByLabelText('姓名'), {
@@ -122,7 +119,6 @@ describe('LoginPage', () => {
     fireEvent.change(screen.getByLabelText('密码'), {
       target: { value: 'hunter2hunter2' },
     });
-    // 审计修复 2026-08-16 UX-M8：注册表单新增确认密码字段。
     fireEvent.change(screen.getByLabelText('确认密码'), {
       target: { value: 'hunter2hunter2' },
     });
@@ -145,23 +141,12 @@ describe('LoginPage', () => {
   it('does NOT navigate when login throws (error rendered from store)', async () => {
     loginMock.mockRejectedValueOnce(new Error('500'));
     renderPage();
-    fireEvent.change(screen.getByLabelText('邮箱地址'), { target: { value: 'a@b.com' } });
+    fireEvent.change(screen.getByLabelText('邮箱'), { target: { value: 'a@b.com' } });
     fireEvent.change(screen.getByLabelText('密码'), { target: { value: 'hunter2hunter2' } });
-    fireEvent.click(screen.getByRole('button', { name: '登录' }));
+    fireEvent.click(screen.getByRole('button', { name: '进入' }));
     await waitFor(() => {
       expect(loginMock).toHaveBeenCalled();
     });
     expect(navigateMock).not.toHaveBeenCalled();
-  });
-
-  it('password show/hide toggle changes the input type', () => {
-    renderPage();
-    const passwordInput = screen.getByLabelText('密码') as HTMLInputElement;
-    expect(passwordInput.type).toBe('password');
-    // The show/hide button's accessible name is its aria-label (显示密码),
-    // not the visible text (显示). Use the aria-label to be explicit.
-    fireEvent.click(screen.getByRole('button', { name: '显示密码' }));
-    const passwordInputAfter = screen.getByLabelText('密码') as HTMLInputElement;
-    expect(passwordInputAfter.type).toBe('text');
   });
 });

@@ -87,7 +87,7 @@ describe('AsyncLoopPage', () => {
     await waitFor(() => {
       expect(screen.getAllByText('阳台种菜 30 天，我踩过的 5 个坑').length).toBeGreaterThan(0);
     });
-    expect(screen.getAllByText('产出架').length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/产出架/).length).toBeGreaterThan(0);
   });
 
   it('pickup validates audience change and calls the API', async () => {

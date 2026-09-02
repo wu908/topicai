@@ -15,7 +15,7 @@ async function login(page: Page) {
   await page.goto('/login');
   await page.locator('#login-email').fill(email);
   await page.locator('#login-password').fill(password);
-  await page.getByRole('button', { name: '登录', exact: true }).click();
+  await page.getByRole('button', { name: '进入', exact: true }).click();
   await page.waitForURL((url) => url.pathname === '/', { timeout: 15_000 });
 }
 

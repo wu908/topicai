@@ -1,8 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowForward, AutoAwesomeOutlined, Check, Pause } from '@mui/icons-material';
-import { Alert, Button, Chip, CircularProgress, Stack, TextField } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
-import PageContainer from '@/components/layout/PageContainer';
 import { getTodayWorkspace, respondToAction } from '@/services/api/v2/projects';
 import { openCompanion } from '@/features/companion';
 import { listInbox, listDeliverables, listLoopMetrics, listWeekly } from '@/services/api/v2/asyncLoop';
@@ -10,13 +7,6 @@ import type { IntentAction, TodayWorkspace } from '@/types/contracts/v2/content'
 import { extractErrorMessage } from '@/utils/error';
 import { readableRef } from '@/utils/labels';
 import { useAuthStore } from '@/store/authStore';
-import './HomePage.css';
-
-const intentLabels = {
-  solve: '解决',
-  share: '分享',
-  record: '记录',
-} as const;
 
 const modeLabels = {
   guided: '引导模式',
@@ -199,9 +189,10 @@ export default function HomePage() {
 
   if (loading) {
     return (
-      <PageContainer title="今日" subtitle="先完成一个真正能推进内容的动作">
-        <div className="today-loading"><CircularProgress size={24} /></div>
-      </PageContainer>
+      <div className="letter">
+        <p className="kicker">晨报 · 加载中</p>
+        <h1>你好，{user?.username || '创作者'}。<span className="dim">正在整理今天唯一值得做的一件事…</span></h1>
+      </div>
     );
   }
 
@@ -214,102 +205,93 @@ export default function HomePage() {
   const hour = new Date().getHours();
   const greeting =
     hour < 5 ? '夜深了' : hour < 12 ? '早上好' : hour < 18 ? '下午好' : '晚上好';
+  const dateLine = new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' });
+  const primaryLabel = isCancelled
+    ? '手动继续'
+    : isDeferred
+      ? '回到对应页面'
+      : action?.expected_state_change.source === 'series_opportunity'
+        ? '查看并确认机会'
+        : action ? actionLabels[action.action_type] : '开始一条内容';
   return (
-    <PageContainer
-      title={`你好，${user?.username || '创作者'}。${greeting}，今天只有一件事值得做。`}
-      subtitle="AI 会先理解这条内容想产生的影响，再安排下一步。"
-    >
-      {error ? <Alert severity="error" role="alert" action={<Button onClick={() => void load()}>重试</Button>}>{error}</Alert> : null}
-      <div className="today-quiet" aria-label="安静数据">
-        <span>产出架待决定 <b>{quiet.ready}</b></span>
-        <span>收件箱待消化 <b>{quiet.pending}</b></span>
-        <span>本周维护 <b>{quiet.minutes} 分钟</b></span>
-        <span>本周已发 <b>{quiet.weekly}</b></span>
-      </div>
-      <div className="today-inboxrow">
-        <input placeholder="有灵感？先丢进收件箱，其他交给它…" readOnly onClick={() => navigate('/loop')} />
-        <Button variant="text" onClick={() => navigate('/loop')}>去收件箱 ↗</Button>
-      </div>
-      <div className="today-quickintents">
-        {['另一条先放着，别催我', '周五晚再拾取', '为什么先推这条？'].map((q) => (
-          <Button
-            key={q}
-            size="small"
-            variant="outlined"
-            onClick={() => openCompanion('晨报 · 当前行动')}
-          >
-            {q}
-          </Button>
-        ))}
-      </div>
-      {action ? (
-        <section className="today-action" aria-labelledby="today-action-title">
-          <div className="today-action-topline">
-            <span className="today-eyebrow"><AutoAwesomeOutlined fontSize="small" /> 现在先做</span>
-            {action.content_intent ? <Chip size="small" label={`${intentLabels[action.content_intent]}内容`} /> : null}
-          </div>
-          <h2 id="today-action-title">{isCancelled ? 'AI 不再推进这条建议' : isDeferred ? '这件事已暂缓' : action.title}</h2>
-          <p className="today-action-reason">
+    <div>
+      {error ? <p className="login-err" role="alert">{error} <button type="button" className="attr" style={{ marginLeft: 8 }} onClick={() => void load()}>重试</button></p> : null}
+      <div className="letter">
+        <p className="kicker">{dateLine}</p>
+        <h1>
+          你好，{user?.username || '创作者'}。{greeting}，今天只有一件事值得做。
+          <span className="dim">
             {isCancelled
               ? terminalReason || '你可以继续手动处理；项目发生变化后，AI 才会重新判断。'
               : isDeferred
-                ? '它仍会保留在对应内容项目中，你可以稍后继续。'
-                : action.reason}
-          </p>
-          {!isCancelled ? <p className="today-action-outcome"><strong>完成后</strong> {outcomeLabels[action.action_type]}</p> : null}
-          <div className="today-action-meta">
-            <span>预计 {action.estimated_effort_minutes} 分钟</span>
-            <span>{modeLabels[action.automation_level]}</span>
-            {action.human_gate_type ? <span>需要你确认</span> : <span>可直接继续</span>}
-            {action.expires_at && !isCancelled ? <span>建议有效至 {new Date(action.expires_at).toLocaleDateString('zh-CN')}</span> : null}
+                ? '这件事已暂缓——它仍会保留在对应内容项目中，你可以稍后继续。'
+                : action?.reason ?? 'AI 会先理解这条内容想产生的影响，再安排下一步。'}
+          </span>
+        </h1>
+        <div className="cards">
+          <div className="acard glass" onClick={startAction} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter') startAction(); }}>
+            <p className="kicker">今天唯一要做的事 · 约 {action?.estimated_effort_minutes ?? 3} 分钟</p>
+            <h3>{isCancelled ? 'AI 不再推进这条建议' : isDeferred ? '这件事已暂缓' : action?.title ?? '开始一条内容'}</h3>
+            <p>{action ? outcomeLabels[action.action_type] : '去内容页创建一个项目，AI 会逐篇安排下一步。'}</p>
+            <p className="go">{primaryLabel} →</p>
+            <div className="cta" onClick={(e) => e.stopPropagation()}>
+              <button type="button" className="btn btn-primary btn-sm" disabled={busy} onClick={startAction}>{primaryLabel}</button>
+              {!isDeferred && !isCancelled ? <button type="button" className="btn btn-text" disabled={busy} onClick={() => void deferAction()}>暂不做</button> : null}
+              {!isDeferred && !isCancelled ? <button type="button" className="btn btn-text" disabled={busy} onClick={() => setShowReject(true)}>不适合我</button> : null}
+              {!isCancelled ? <button type="button" className="btn btn-text" onClick={() => navigate(actionPath)}>手动继续</button> : null}
+              <button type="button" className="askbtn" onClick={() => openCompanion('晨报 · 当前行动')}>问它</button>
+            </div>
+            {action ? (
+              <div className="judge" style={{ marginTop: 14 }}>
+                <span><b>AI 依据</b> {action.evidence_refs.length ? action.evidence_refs.map(readableRef).join('；') : '当前项目状态'}</span>
+                <span><b>还不知道</b> {action.unknown_refs.length ? action.unknown_refs.map(readableRef).join('；') : '没有新增缺口'}</span>
+                <span>{modeLabels[action.automation_level]} · {action.human_gate_type ? '需要你确认' : '可直接继续'}{action.expires_at && !isCancelled ? ` · 建议有效至 ${new Date(action.expires_at).toLocaleDateString('zh-CN')}` : ''}</span>
+              </div>
+            ) : null}
+            {showReject && !isCancelled ? (
+              <div className="judge" style={{ marginTop: 14 }} onClick={(e) => e.stopPropagation()}>
+                <textarea
+                  className="lm-input"
+                  style={{ height: 'auto', minHeight: 64, padding: '10px 14px' }}
+                  placeholder="为什么这条建议不适合你"
+                  aria-label="为什么这条建议不适合你"
+                  value={rejectReason}
+                  onChange={(event) => setRejectReason(event.target.value)}
+                />
+                <div className="cta">
+                  <button type="button" className="btn btn-primary btn-sm" disabled={busy || !rejectReason.trim()} onClick={() => void rejectAction()}>停止这条建议</button>
+                  <button type="button" className="btn btn-text" disabled={busy} onClick={() => setShowReject(false)}>返回</button>
+                </div>
+              </div>
+            ) : null}
           </div>
-          <div className="today-evidence-grid">
-            <div><strong>AI 依据</strong>{action.evidence_refs.length ? <ul>{action.evidence_refs.map((item) => <li key={item}>{readableRef(item)}</li>)}</ul> : <p>当前项目状态</p>}</div>
-            <div><strong>还不知道</strong>{action.unknown_refs.length ? <ul>{action.unknown_refs.map((item) => <li key={item}>{readableRef(item)}</li>)}</ul> : <p>没有新增缺口</p>}</div>
+          <div className="acard glass quiet" aria-label="安静数据">
+            <div className="row"><span>本周已发</span><b>{quiet.weekly}</b></div>
+            <div className="row"><span>本周维护时长</span><b>{quiet.minutes} 分钟</b></div>
+            <div className="row"><span>产出架待决定</span><b>{quiet.ready}</b></div>
+            <div className="row"><span>收件箱待消化</span><b>{quiet.pending}</b></div>
+            <div className="row"><span>已完成发布项目</span><b>{data?.creator_state?.completed_project_count ?? 0}</b></div>
           </div>
-          <div className="today-action-controls">
-            <Button variant="contained" startIcon={<ArrowForward />} disabled={busy} onClick={startAction}>
-              {isCancelled
-                ? '手动继续'
-                : isDeferred
-                ? '回到对应页面'
-                : action.expected_state_change.source === 'series_opportunity'
-                  ? '查看并确认机会'
-                  : actionLabels[action.action_type]}
-            </Button>
-            {!isDeferred && !isCancelled ? <Button variant="text" startIcon={<Pause />} disabled={busy} onClick={() => void deferAction()}>暂不做</Button> : null}
-            {!isDeferred && !isCancelled ? <Button variant="text" color="inherit" disabled={busy} onClick={() => setShowReject(true)}>不适合我</Button> : null}
-            {!isCancelled ? <Button variant="text" onClick={() => navigate(actionPath)}>
-              手动继续
-            </Button> : null}
-          </div>
-          {showReject && !isCancelled ? (
-            <Stack spacing={1.5} className="today-reject-form">
-              <TextField
-                label="为什么这条建议不适合你"
-                value={rejectReason}
-                onChange={(event) => setRejectReason(event.target.value)}
-                multiline
-                minRows={2}
-              />
-              <Stack direction="row" spacing={1}>
-                <Button color="error" disabled={busy || !rejectReason.trim()} onClick={() => void rejectAction()}>停止这条建议</Button>
-                <Button color="inherit" disabled={busy} onClick={() => setShowReject(false)}>返回</Button>
-              </Stack>
-            </Stack>
-          ) : null}
-          <div className="today-trust-note"><Check fontSize="small" /> AI 只会准备到发布前；发布、公开范围和长期经验都需要你确认。</div>
-        </section>
-      ) : (
-        <Alert severity="info">目前没有可执行行动，先去内容页创建一个项目。</Alert>
-      )}
-      {data?.creator_state ? (
-        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} className="today-state-row">
-          <span>已完成 {data.creator_state.completed_project_count} 个发布项目</span>
-          <span>默认使用引导模式</span>
-          <Button size="small" onClick={() => navigate('/content')}>查看内容项目</Button>
-        </Stack>
-      ) : null}
-    </PageContainer>
+        </div>
+        <div className="cta" style={{ marginTop: 26 }}>
+          <input
+            className="lm-input"
+            style={{ flex: 1, marginBottom: 0, maxWidth: 520, borderRadius: 9999, height: 44 }}
+            placeholder="有灵感？先丢进收件箱，其他交给它…"
+            aria-label="有灵感？先丢进收件箱，其他交给它…"
+            readOnly
+            onClick={() => navigate('/loop/inbox')}
+          />
+          <button type="button" className="askbtn" onClick={() => navigate('/loop/inbox')}>去收件箱 ↗</button>
+          {['另一条先放着，别催我', '周五晚再拾取', '为什么先推这条？'].map((q) => (
+            <button type="button" key={q} className="askbtn" onClick={() => openCompanion('晨报 · 当前行动')}>{q}</button>
+          ))}
+        </div>
+      </div>
+      <div className="weekfoot">
+        <span>AI 只会准备到发布前；发布、公开范围和长期经验都需要你确认。</span>
+        <span><button type="button" className="btn-text" style={{ cursor: 'pointer' }} onClick={() => navigate('/content')}>查看内容项目</button></span>
+      </div>
+    </div>
   );
 }

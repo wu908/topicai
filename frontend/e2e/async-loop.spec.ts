@@ -15,7 +15,7 @@ async function login(page: Page) {
   await page.goto('/login');
   await page.locator('#login-email').fill(email);
   await page.locator('#login-password').fill(password);
-  await page.getByRole('button', { name: '登录', exact: true }).click();
+  await page.getByRole('button', { name: '进入', exact: true }).click();
   await page.waitForURL((url) => url.pathname === '/', { timeout: 15_000 });
 }
 
@@ -65,7 +65,7 @@ test.describe('async creation loop', () => {
     test.setTimeout(60_000);
     await login(page);
     await page.goto('/loop/review');
-    await expect(page.getByRole('heading', { name: '周复盘', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '看看这一周，哪些判断被证实了。', exact: true })).toBeVisible();
     await expect(
       page
         .getByText(/本周期还没有已发布的内容|待回填数据|待盲评|数据不足|待确认结论|已确认/)

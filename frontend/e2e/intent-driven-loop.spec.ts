@@ -15,7 +15,7 @@ async function login(page: Page) {
   await page.goto('/login');
   await page.locator('#login-email').fill(email);
   await page.locator('#login-password').fill(password);
-  await page.getByRole('button', { name: '登录', exact: true }).click();
+  await page.getByRole('button', { name: '进入', exact: true }).click();
   await page.waitForURL((url) => url.pathname === '/', { timeout: 15_000 });
 }
 
@@ -165,11 +165,11 @@ test.describe('intent-driven MVP', () => {
     await login(page);
     const nodes = [
       { label: '晨报', path: '/', heading: /^你好，/ },
-      { label: '产出架', path: '/loop', heading: '产出架' },
-      { label: '收件箱', path: '/loop/inbox', heading: '收件箱' },
-      { label: '急稿', path: '/urgent', heading: '急稿' },
-      { label: '周复盘', path: '/loop/review', heading: '周复盘' },
-      { label: '成长', path: '/growth', heading: '成长' },
+      { label: '产出架', path: '/loop', heading: '挑一条想发的，其余的交给它。' },
+      { label: '收件箱', path: '/loop/inbox', heading: '想到什么，丢进来，就去忙别的。' },
+      { label: '急稿', path: '/urgent', heading: '三步，十分钟内见成品。' },
+      { label: '周复盘', path: '/loop/review', heading: '看看这一周，哪些判断被证实了。' },
+      { label: '成长', path: '/growth', heading: '你养成它，它养成你的创作者生涯。' },
       { label: '内容', path: '/content', heading: '内容' },
       { label: '机会', path: '/opportunities', heading: '机会' },
       { label: '素材', path: '/materials', heading: '素材' },

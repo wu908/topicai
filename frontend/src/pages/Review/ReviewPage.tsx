@@ -1,36 +1,26 @@
-/** 周复盘（原型对齐）：判断 vs 实际，一屏周度批确认入口。 */
-import {
-  Box,
-  Button,
-  Chip,
-  Paper,
-  Stack,
-  Typography,
-} from '@mui/material';
+/** 周复盘（原型 hifi-lumen.html wrow 对齐）：判断 vs 实际，聚合只读；确认走项目工作台门控。 */
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 
 import { extractErrorMessage } from '@/utils/error';
-import PageContainer from '@/components/layout/PageContainer';
 import { listWeekly } from '@/services/api/v2/asyncLoop';
 import type { WeeklyRow } from '@/types/contracts/v2/asyncLoop';
 import { openCompanion } from '@/features/companion';
 
-const glassSx = {
-  background: 'rgba(255,255,255,.55)',
-  backdropFilter: 'blur(26px) saturate(155%)',
-  border: '1px solid rgba(255,255,255,.8)',
-  outline: '1px solid rgba(23,28,38,.055)',
-  borderRadius: '22px',
-  boxShadow: 'inset 0 1px 0 rgba(255,255,255,.8), 0 22px 60px rgba(70,95,130,.14)',
-} as const;
+const STAGES: Array<{ key: WeeklyRow['stage']; label: string }> = [
+  { key: 'needs_snapshot', label: '待回填数据' },
+  { key: 'needs_review', label: '待盲评' },
+  { key: 'review_insufficient', label: '数据不足' },
+  { key: 'ready_to_confirm', label: '待确认结论' },
+  { key: 'confirmed', label: '已确认' },
+];
 
-const STAGE_LABEL: Record<WeeklyRow['stage'], string> = {
-  needs_snapshot: '待回填数据',
-  needs_review: '待盲评',
-  review_insufficient: '数据不足',
-  ready_to_confirm: '待确认结论',
-  confirmed: '已确认',
+const STAGE_NOTE: Record<WeeklyRow['stage'], string> = {
+  needs_snapshot: '拿不到数据也是结论 · 不补 0',
+  needs_review: '先盲评，再看数据',
+  review_insufficient: '数据不足 · 继续观察',
+  ready_to_confirm: '判断 vs 实际 · 等你确认',
+  confirmed: '判断已沉淀为经验',
 };
 
 export default function ReviewPage() {
@@ -49,55 +39,59 @@ export default function ReviewPage() {
     return () => window.clearTimeout(timer);
   }, [reload]);
 
+  const published = weekly.length;
+  const confirmed = weekly.filter((r) => r.stage === 'confirmed').length;
+
   return (
-    <PageContainer
-      title="周复盘"
-      subtitle="每周一次，一次几分钟——看看这一周哪些判断被证实了。"
-    >
-      {error ? (
-        <Typography variant="body2" color="error" sx={{ mb: 2 }}>
-          {error}
-        </Typography>
-      ) : null}
-      <Paper sx={{ ...glassSx, p: 3 }}>
+    <div>
+      {error ? <p className="login-err" role="alert">{error}</p> : null}
+      <p className="kicker">周复盘 · 每周一次，一次几分钟</p>
+      <h1 className="pg">看看这一周，哪些判断被证实了。</h1>
+      <p className="pg-sub">本周已发 {published} 篇 · 已确认 {confirmed} 篇</p>
+
+      <div style={{ marginTop: 14 }}>
         {weekly.length === 0 ? (
-          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-            本周期还没有已发布的内容。发布并回填数据后，这里会出现对照行。
-          </Typography>
+          <p className="pg-sub">本周期还没有已发布的内容。发布并回填数据后，这里会出现对照行。</p>
         ) : (
-          <Stack spacing={1.5}>
-            {weekly.map((row) => (
-              <Box key={row.project_id} sx={{ borderBottom: '1px solid divider', pb: 1.5 }}>
-                <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
-                  <Link
-                    to={`/content/${row.project_id}`}
-                    style={{ fontWeight: 700, color: 'inherit' }}
-                  >
-                    {row.title}
-                  </Link>
-                  <Chip size="small" label={STAGE_LABEL[row.stage]} />
-                  <Button size="small" color="inherit" onClick={() => openCompanion(`周复盘 · ${row.title}`)}>
-                    问
-                  </Button>
-                </Stack>
-                <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
-                  判断 · {row.judgment.audience_change ?? '未记录'} ｜ 最盼反应 ·{' '}
-                  {row.judgment.primary_response ?? '未记录'} ｜ 实际 ·{' '}
-                  {row.actual.result_availability === 'unavailable'
-                    ? '拿不到数据（也是结论，不补 0）'
-                    : Object.entries(row.actual.metrics)
-                        .filter(([, v]) => v !== null)
-                        .map(([k, v]) => `${k} ${v}`)
-                        .join(' · ') || '尚未回填'}
-                </Typography>
-              </Box>
-            ))}
-          </Stack>
+          weekly.map((row) => (
+            <div className="wrow" key={row.project_id}>
+              <div>
+                <h3>
+                  <Link to={`/content/${row.project_id}`} style={{ color: 'inherit' }}>{row.title}</Link>
+                </h3>
+                <p className="jl">
+                  判断 · <b>{row.judgment.primary_response ?? '未记录'}</b> ｜ 实际 ·{' '}
+                  <b>
+                    {row.actual.result_availability === 'unavailable'
+                      ? '截图缺失'
+                      : Object.entries(row.actual.metrics)
+                          .filter(([, v]) => v !== null)
+                          .map(([k, v]) => `${k} ${v}`)
+                          .join(' · ') || '尚未回填'}
+                  </b>
+                </p>
+              </div>
+              <p className="jl">{STAGE_NOTE[row.stage]}</p>
+              <div className="concl" aria-label={`当前阶段：${STAGES.find((s) => s.key === row.stage)?.label}`}>
+                {STAGES.map((s) => (
+                  <span key={s.key} className={`cpill${s.key === row.stage ? ' on' : ''}`}>{s.label}</span>
+                ))}
+              </div>
+              <button type="button" className="askbtn" onClick={() => openCompanion(`周复盘 · ${row.title}`)}>
+                问
+              </button>
+            </div>
+          ))
         )}
-      </Paper>
-      <Typography variant="caption" sx={{ display: 'block', mt: 2, color: 'text.secondary' }}>
-        确认动作走项目工作台的既有门控（盲评 → 观察 → 经验），本文只做聚合展示。
-      </Typography>
-    </PageContainer>
+      </div>
+
+      <div className="review-cta">
+        <Link to="/content" className="btn btn-primary" style={{ textDecoration: 'none' }}>去项目工作台确认</Link>
+        <span className="note">确认后，有效经验才会进入它的成长 · 盲评 → 观察 → 经验</span>
+      </div>
+      <div className="weekfoot">
+        <span>它从本周学到（待你确认）· 只有你确认过的结论才会沉淀</span>
+      </div>
+    </div>
   );
 }

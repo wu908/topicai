@@ -93,7 +93,7 @@ describe('HomePage', () => {
     });
 
     render(<MemoryRouter><HomePage /></MemoryRouter>);
-    expect(await screen.findByText('你已确认的内容系列')).toBeInTheDocument();
+    expect(await screen.findByText(/你已确认的内容系列/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '查看并确认机会' }));
     expect(navigateMock).toHaveBeenCalledWith('/opportunities');
   });
