@@ -2,14 +2,14 @@
 # All versions pinned for reproducible builds
 
 # Web Framework
-fastapi==0.115.6
-uvicorn[standard]==0.34.0
-pydantic==2.10.5
-pydantic-settings==2.7.1
+fastapi==0.141.1
+uvicorn[standard]==0.52.4
+pydantic==2.13.5
+pydantic-settings==2.15.0
 
 # Database
-sqlalchemy==2.0.36
-aiosqlite==0.20.0
+sqlalchemy==2.0.52
+aiosqlite==0.22.1
 
 # LLM / AI
 openai==1.58.1
@@ -18,13 +18,13 @@ openai==1.58.1
 httpx==0.28.1
 
 # Authentication
-PyJWT==2.8.0
+PyJWT==2.13.0
 bcrypt==4.0.1
 email-validator==2.3.0
 passlib[bcrypt]==1.7.4
 
 # Scheduling
-apscheduler==3.11.0
+apscheduler==3.11.3
 
 # Monitoring
-sentry-sdk==2.19.2
+sentry-sdk==2.68.1
