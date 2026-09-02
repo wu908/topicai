@@ -1,6 +1,7 @@
 /**
- * AppLayout — V3 design (topicai-v3-login-meta.html).
- * Three-column layout: 200px sidebar | 780px main | 280px right panel.
+ * AppLayout — Lumen 悬浮玻璃外壳（原型 hifi-lumen.html 对齐）。
+ * 侧栏固定悬浮；主区透明，露出 LumenBackground 背景场。
+ * E2E 契约：.app-main / .app-main-content 几何断言保留。
  */
 import React from 'react';
 import { useLocation } from 'react-router-dom';
@@ -17,36 +18,21 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   const isProjectWorkspace = location.pathname.startsWith('/content/');
 
   return (
-    <div
-      className="app-shell"
-      style={{
-        display: 'flex',
-        height: '100vh',
-        overflow: 'hidden',
-        // Lumen field (LumenBackground) is the page background; the shell stays
-        // transparent so the field + orbs show through behind every page.
-        background: 'transparent',
-      }}
-    >
+    <div className="app-shell lm-body" style={{ minHeight: '100vh', background: 'transparent' }}>
       <Sidebar />
       <CompanionMotion />
       <CompanionDialog />
       <main
-        className="app-main"
-        style={{
-          flex: 1,
-          minWidth: 0,
-          overflowY: 'auto',
-          background: 'var(--v3-surface)',
-        }}
+        className="app-main lm-main"
+        style={{ overflowY: 'auto', height: '100vh', background: 'transparent' }}
       >
         <div
-          className="app-main-content"
-          style={{
-            padding: isProjectWorkspace ? '24px 28px 48px' : '32px 40px 60px',
-            maxWidth: isProjectWorkspace ? 'none' : 'var(--v3-main-max-width)',
-            margin: '0 auto',
-          }}
+          className="app-main-content lm-content"
+          style={
+            isProjectWorkspace
+              ? { maxWidth: 'none', padding: '24px 28px 48px' }
+              : undefined
+          }
         >
           {children}
         </div>

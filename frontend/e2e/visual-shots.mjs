@@ -20,7 +20,7 @@ await page.goto(`${BASE}/login`);
 await page.locator('#login-email').fill(email);
 await page.locator('#login-password').fill(password);
 await page.screenshot({ path: '../docs/prototypes/screenshots/lumen-app-login.png' });
-await page.getByRole('button', { name: '登录', exact: true }).click();
+await page.getByRole('button', { name: '进入', exact: true }).click();
 await page.waitForURL((url) => url.pathname === '/', { timeout: 15_000 });
 await page.waitForTimeout(800);
 

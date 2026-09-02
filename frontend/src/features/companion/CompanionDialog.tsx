@@ -193,7 +193,7 @@ export default function CompanionDialog() {
         >
           {/* π 形灯框（底部开放不闭合）：玻璃底渐隐 + 左右/顶灯带 */}
           <Box sx={{ position: 'relative', borderRadius: '24px 24px 0 0', overflow: 'hidden', px: 3, pb: 3 }}>
-            <Box className="companion-framebg" sx={{ position: 'absolute', inset: 0, background: 'rgba(255,255,255,.34)', backdropFilter: 'blur(30px) saturate(160%)', border: '1px solid rgba(255,255,255,.75)', borderBottom: 'none', borderRadius: '24px 24px 0 0', maskImage: 'linear-gradient(180deg,#000 70%,transparent 100%)', WebkitMaskImage: 'linear-gradient(180deg,#000 70%,transparent 100%)', opacity: zen ? 0.06 : 1, transition: 'opacity 1.2s ease' }} />
+            <Box className="companion-framebg" sx={{ position: 'absolute', inset: 0, background: 'rgba(255,255,255,.45)', backdropFilter: 'blur(30px) saturate(160%)', border: '1px solid rgba(255,255,255,.75)', borderBottom: 'none', borderRadius: '24px 24px 0 0', maskImage: 'linear-gradient(180deg,#000 70%,transparent 100%)', WebkitMaskImage: 'linear-gradient(180deg,#000 70%,transparent 100%)', opacity: zen ? 0.06 : 1, transition: 'opacity 1.2s ease' }} />
             {['left', 'right'].map((side) => (
               <Box key={side} className="companion-strip" sx={{ position: 'absolute', top: 12, bottom: 26, width: 2, [side]: 0, borderRadius: 2, overflow: 'hidden', background: 'rgba(255,255,255,.55)', opacity: zen ? 0.06 : 1, transition: 'opacity 1.2s ease' }}>
                 <Box sx={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '40%', background: 'linear-gradient(180deg,transparent,#FFFFFF 38%,#8FBEE8 72%,transparent)', animation: side === 'right' ? 'companion-flow 3s cubic-bezier(.45,.05,.35,1) 1.5s infinite' : 'companion-flow 3s cubic-bezier(.45,.05,.35,1) infinite' }} />
@@ -228,6 +228,10 @@ export default function CompanionDialog() {
                   </Box>
                 ))
               )}
+            </Box>
+            <Box className="companion-winfoot" sx={{ position: 'relative', display: 'flex', justifyContent: 'space-between', pb: 1, fontSize: 10.5, color: '#AEB6C4', opacity: zen ? 0.06 : 1, transition: 'opacity 1.2s ease' }}>
+              <span>上下文 · {context}</span>
+              <span>它只提议，决定权在你</span>
             </Box>
           </Box>
 

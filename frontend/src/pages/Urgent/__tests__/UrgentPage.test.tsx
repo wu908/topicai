@@ -20,9 +20,9 @@ describe('UrgentPage', () => {
 
   it('creates project without intent when left empty', async () => {
     render(<MemoryRouter><UrgentPage /></MemoryRouter>);
-    fireEvent.change(screen.getByLabelText('标题'), { target: { value: '阳台辣椒结果了' } });
-    fireEvent.change(screen.getByLabelText('真实经历'), { target: { value: '早上浇水时发现了三个果。' } });
-    fireEvent.click(screen.getByText('创建并进入内容工作台'));
+    fireEvent.change(screen.getByLabelText('这篇想说什么？'), { target: { value: '阳台辣椒结果了' } });
+    fireEvent.change(screen.getByLabelText('一句真实经历（它只基于这个写，不编）'), { target: { value: '早上浇水时发现了三个果。' } });
+    fireEvent.click(screen.getByText('生成成品，进入发布检查'));
     await waitFor(() => expect(createProject).toHaveBeenCalled());
     const call = createProject.mock.calls[0][0];
     expect(call.title).toBe('阳台辣椒结果了');
@@ -39,22 +39,20 @@ describe('UrgentPage', () => {
         </Routes>
       </MemoryRouter>,
     );
-    fireEvent.change(screen.getByLabelText('标题'), { target: { value: '阳台辣椒结果了' } });
-    fireEvent.change(screen.getByLabelText('真实经历'), { target: { value: '早上浇水时发现了三个果。' } });
-    // 意图选择
-    const select = screen.getByLabelText(/意图/);
-    fireEvent.mouseDown(select);
-    fireEvent.click(screen.getByText('记录 · 记下这个变化'));
-    fireEvent.click(screen.getByText('创建并进入内容工作台'));
+    fireEvent.change(screen.getByLabelText('这篇想说什么？'), { target: { value: '阳台辣椒结果了' } });
+    fireEvent.change(screen.getByLabelText('一句真实经历（它只基于这个写，不编）'), { target: { value: '早上浇水时发现了三个果。' } });
+    // 意图芯片
+    fireEvent.click(screen.getByRole('button', { name: '记录 · 记下这个变化' }));
+    fireEvent.click(screen.getByText('生成成品，进入发布检查'));
     await waitFor(() => expect(confirmProjectIntent).toHaveBeenCalled());
     expect(await screen.findByText('工作台 p1')).toBeTruthy();
   });
 
   it('disables submit until title and experience present', () => {
     render(<MemoryRouter><UrgentPage /></MemoryRouter>);
-    expect((screen.getByText('创建并进入内容工作台') as HTMLButtonElement).disabled).toBe(true);
-    fireEvent.change(screen.getByLabelText('标题'), { target: { value: 't' } });
-    fireEvent.change(screen.getByLabelText('真实经历'), { target: { value: 'e' } });
-    expect((screen.getByText('创建并进入内容工作台') as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByText('生成成品，进入发布检查') as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText('这篇想说什么？'), { target: { value: 't' } });
+    fireEvent.change(screen.getByLabelText('一句真实经历（它只基于这个写，不编）'), { target: { value: 'e' } });
+    expect((screen.getByText('生成成品，进入发布检查') as HTMLButtonElement).disabled).toBe(false);
   });
 });
