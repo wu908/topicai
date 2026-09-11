@@ -19,7 +19,10 @@ services:
         PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
     container_name: topicai-backend
     ports:
-      - "8000:8000"
+      # localhost-only: the frontend nginx proxies /api to backend:8000 on the
+      # compose network; publishing on 0.0.0.0 would expose the raw API (and
+      # /docs) bypassing host firewalls, which Docker rules normally do.
+      - "127.0.0.1:8000:8000"
     volumes:
       - topicai_data:/app/data
       - topicai_logs:/app/logs
