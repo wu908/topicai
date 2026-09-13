@@ -1,5 +1,6 @@
 /** 产出架（原型 hifi-lumen.html 双栏对齐）：左卡流 / 右粘性拾取面板。 */
 import { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 import { extractErrorMessage } from '@/utils/error';
 import {
@@ -32,6 +33,7 @@ const fmtDay = (iso: string | null): string =>
   iso ? new Date(iso).toLocaleDateString('zh-CN', { weekday: 'long' }) : '待定';
 
 export default function AsyncLoopPage() {
+  const navigate = useNavigate();
   const [deliverables, setDeliverables] = useState<Deliverable[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -107,6 +109,12 @@ export default function AsyncLoopPage() {
           <div className="big">❧</div>
           <h3>架子上还没有待决定的内容。丢点素材，点「消化生产」。</h3>
           <p>它会在夜里安静消化，变成待发布的产出，不打扰你。</p>
+          {/* UX 审计 2026-09-13 B5：空态提到「消化生产」按钮在收件箱，给出直达入口。 */}
+          <div className="row" style={{ justifyContent: 'center', marginTop: 14 }}>
+            <button type="button" className="btn btn-primary btn-sm" onClick={() => navigate('/loop/inbox')}>
+              去收件箱丢素材 →
+            </button>
+          </div>
         </div>
       ) : (
         <div className="columns">

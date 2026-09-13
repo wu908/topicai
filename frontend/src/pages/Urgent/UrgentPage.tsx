@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { extractErrorMessage } from '@/utils/error';
-import { createProject, confirmProjectIntent } from '@/services/api/v2/projects';
+import { createProject, confirmProjectIntent, getProjectNextAction, respondToAction } from '@/services/api/v2/projects';
 
 const makeKey = (prefix: string) =>
   `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
@@ -44,6 +44,21 @@ export default function UrgentPage() {
           expected_project_version: project.version,
           idempotency_key: makeKey('urgent-intent'),
         });
+      }
+      // UX 审计 B1：第 2 步的真实经历直接回填为关键问题的回答——用户落地即
+      // 处于"确认这段经历"步，不再被重复问同一个问题。回填失败不阻断创建。
+      try {
+        const action = await getProjectNextAction(project.id);
+        if (action?.action_type === 'answer_key_question' && experience.trim()) {
+          await respondToAction(action.id, {
+            decision: 'accept',
+            response_payload: { answer: experience.trim() },
+            expected_action_version: action.version,
+            idempotency_key: `urgent-answer-${action.id}-${action.version}`,
+          });
+        }
+      } catch {
+        // 预填失败仅失去一次自动回填，落地后手动补答即可。
       }
       navigate(`/content/${project.id}`);
     } catch (err) {
