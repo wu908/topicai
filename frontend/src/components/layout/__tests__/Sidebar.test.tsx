@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -41,10 +41,31 @@ describe('Sidebar', () => {
       </MemoryRouter>,
     );
     expect(screen.getByText('TopicAI')).toBeInTheDocument();
+    // 桌面组 + 移动组常驻 DOM（CSS 控制显隐），高频标签会出现两次。
     for (const label of ['晨报', '产出架', '收件箱', '急稿', '周复盘', '内容', '机会', '素材', '我的']) {
-      expect(screen.getByText(label)).toBeInTheDocument();
+      expect(screen.getAllByText(label).length).toBeGreaterThanOrEqual(1);
     }
     expect(screen.getByText('管理')).toBeInTheDocument();
+    // 移动端底栏：4 个高频入口 + 更多按钮（D9 修复）。
+    expect(screen.getByRole('button', { name: '更多导航' })).toBeInTheDocument();
+  });
+
+  it('opens the mobile more sheet with the remaining links and logout', () => {
+    render(
+      <MemoryRouter>
+        <Sidebar />
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: '更多导航' }));
+    const sheet = screen.getByLabelText('更多导航面板');
+    expect(sheet).toBeInTheDocument();
+    for (const label of ['急稿', '周复盘', '成长', '内容', '机会', '素材']) {
+      expect(within(sheet).getAllByText(label).length).toBeGreaterThanOrEqual(1);
+    }
+    // 此前移动端没有任何退出途径（UX 审计 D9）。
+    expect(within(sheet).getByRole('button', { name: '退出登录' })).toBeInTheDocument();
+    fireEvent.click(within(sheet).getByRole('button', { name: '退出登录' }));
+    expect(mockAuthState.logout).toHaveBeenCalledTimes(1);
   });
 
   it('opens the creator state from the user card', () => {
@@ -93,7 +114,10 @@ describe('Sidebar', () => {
         <Sidebar />
       </MemoryRouter>,
     );
-    expect(screen.getByRole('link', { name: '内容' })).toHaveClass('active');
-    expect(screen.getByRole('link', { name: '晨报' })).not.toHaveClass('active');
+    expect(screen.getAllByRole('link', { name: '内容' })[0]).toHaveClass('active');
+    // 晨报在桌面组与移动组各渲染一次，两组都必须保持非激活。
+    for (const link of screen.getAllByRole('link', { name: '晨报' })) {
+      expect(link).not.toHaveClass('active');
+    }
   });
 });
