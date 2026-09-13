@@ -7,6 +7,7 @@ from app.api.v2.async_loop import router as async_loop_router
 from app.api.v2.auth import router as auth_router
 from app.api.v2.calibration import router as calibration_router
 from app.api.v2.candidate_review import router as candidate_review_router
+from app.api.v2.companion import router as companion_router
 from app.api.v2.content_genome import router as content_genome_router
 from app.api.v2.content_opportunities import router as content_opportunities_router
 from app.api.v2.creator_rules import router as creator_rules_router
@@ -18,7 +19,6 @@ from app.api.v2.materials import router as materials_router
 from app.api.v2.onboarding import router as onboarding_router
 from app.api.v2.projects import router as projects_router
 from app.api.v2.publish_checks import router as publish_checks_router
-from app.api.v2.companion import router as companion_router
 from app.api.v2.settings import router as settings_router
 from app.api.v2.starter import router as starter_router
 from app.models.common import ApiResponse
