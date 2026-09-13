@@ -79,7 +79,7 @@ body {
     right: 0;
     bottom: 72px;
     z-index: 1199;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     gap: 4px;
     padding: 10px 8px 12px;
     background: var(--v3-sidebar-bg);
@@ -102,6 +102,12 @@ body {
   .v3-sidebar-user,
   .v3-sidebar-footer {
     display: none !important;
+  }
+
+  /* 悬浮球避开 72px 底栏与「更多」面板（第二轮 C1：球压更多按钮）。 */
+  .companion-root {
+    bottom: 88px !important;
+    right: 20px !important;
   }
 
   .v3-sidebar-nav {
