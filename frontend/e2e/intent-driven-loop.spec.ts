@@ -175,15 +175,24 @@ test.describe('intent-driven MVP', () => {
       { label: '素材', path: '/materials', heading: '素材' },
       { label: '我的', path: '/me', heading: '我的' },
     ];
+    // 移动端底栏（D9 收敛后）：4 个高频入口常驻，其余经「更多」面板到达。
+    const mobileBarLabels = ['晨报', '产出架', '收件箱', '我的'];
 
     for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
+      const isMobile = viewport.width <= 390;
       await page.setViewportSize(viewport);
       await page.goto('/');
       for (const node of nodes) {
-        for (const { label } of nodes) {
-          await expect(page.getByRole('link', { name: label })).toBeVisible();
+        const viaSheet = isMobile && !mobileBarLabels.includes(node.label);
+        if (viaSheet) {
+          await page.getByRole('button', { name: '更多导航' }).click();
+          await expect(page.getByLabel('更多导航面板')).toBeVisible();
         }
-        await page.getByRole('link', { name: node.label }).click();
+        // 桌面组与移动组同时存在于 DOM（CSS 控制显隐），可见性按当前视口断言。
+        for (const { label } of nodes.filter((n) => !viaSheet || mobileBarLabels.includes(n.label) || n.label === node.label)) {
+          await expect(page.getByRole('link', { name: label }).first()).toBeVisible();
+        }
+        await page.getByRole('link', { name: node.label }).first().click();
         await page.waitForURL((url) => url.pathname === node.path);
         await expect(
         page.getByRole('heading', { name: node.heading, exact: typeof node.heading === 'string' }).first(),
@@ -197,7 +206,8 @@ test.describe('intent-driven MVP', () => {
           expect(main).not.toBeNull();
           expect(sidebar!.x + sidebar!.width).toBeLessThanOrEqual(main!.x + 1);
         } else {
-          const links = await page.locator('.v3-sidebar-link').evaluateAll((items) =>
+          // 底栏（移动组）内的链接必须一个不叠一个。
+          const links = await page.locator('.v3-nav-mobile .v3-sidebar-link').evaluateAll((items) =>
             items.map((item) => item.getBoundingClientRect()).map(({ x, width }) => ({ x, width })),
           );
           for (let index = 1; index < links.length; index += 1) {
