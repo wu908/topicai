@@ -264,11 +264,10 @@ export default function OpportunitiesPage() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [manualOpen, setManualOpen] = useState(false);
-  const [manualTrigger, setManualTrigger] = useState<'user_keyword' | 'user_url' | 'official_inspiration'>('user_keyword');
+  // D7 瘦身：来源类型固定 user_keyword，有效期交给后端默认——
+  // 用户只需要回答"你想到了什么"。
+  const manualTrigger = 'user_keyword' as const;
   const [manualText, setManualText] = useState('');
-  const [manualUrl, setManualUrl] = useState('');
-  const [manualAuthority, setManualAuthority] = useState('');
-  const [manualExpiresAt, setManualExpiresAt] = useState('');
   const [submittingManual, setSubmittingManual] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // 审计修复 2026-08-16 UX-H7/L6：生成/保存成功后给出明确反馈。
@@ -327,9 +326,6 @@ export default function OpportunitiesPage() {
       const payload = {
         trigger: manualTrigger,
         pasted_text: manualText.trim(),
-        original_url: manualUrl.trim() || undefined,
-        authoritative_source: manualAuthority.trim() || undefined,
-        expires_at: manualExpiresAt ? new Date(manualExpiresAt).toISOString() : undefined,
       };
       const signature = JSON.stringify(payload);
       if (!manualKeyRef.current || manualKeyRef.current.signature !== signature) {
@@ -339,9 +335,6 @@ export default function OpportunitiesPage() {
       manualKeyRef.current = null;
       setItems((current) => [created, ...current]);
       setManualText('');
-      setManualUrl('');
-      setManualAuthority('');
-      setManualExpiresAt('');
       setManualOpen(false);
       setNotice('来源已保存，核验完成后即可据此创建内容。');
     } catch (err) {
@@ -350,9 +343,7 @@ export default function OpportunitiesPage() {
       setSubmittingManual(false);
     }
   };
-  const manualReady = manualText.trim()
-    && (manualTrigger !== 'user_url' || manualUrl.trim())
-    && (manualTrigger !== 'official_inspiration' || manualAuthority.trim());
+  const manualReady = Boolean(manualText.trim());
   const visible = items.filter((item) => (
     (filter === 'all' || item.status === filter)
     && (sourceFilter === 'all' || item.opportunity_type === sourceFilter)
@@ -396,15 +387,8 @@ export default function OpportunitiesPage() {
           </div>
           {manualOpen ? (
             <section className="operations-form">
-              <TextField select label="来源类型" value={manualTrigger} onChange={(event) => setManualTrigger(event.target.value as typeof manualTrigger)} fullWidth>
-                <MenuItem value="user_keyword">关键词</MenuItem>
-                <MenuItem value="user_url">来源链接</MenuItem>
-                <MenuItem value="official_inspiration">官方创作灵感</MenuItem>
-              </TextField>
+              {/* D7 瘦身：一个输入框回答"你想到什么了"，其余由系统默认。 */}
               <TextField label="关键词或原始内容" value={manualText} onChange={(event) => setManualText(event.target.value)} multiline minRows={2} fullWidth />
-              {manualTrigger === 'user_url' ? <TextField label="原始链接" value={manualUrl} onChange={(event) => setManualUrl(event.target.value)} fullWidth /> : null}
-              {manualTrigger === 'official_inspiration' ? <TextField label="发布方" value={manualAuthority} onChange={(event) => setManualAuthority(event.target.value)} fullWidth /> : null}
-              <TextField label="有效期至" type="datetime-local" value={manualExpiresAt} onChange={(event) => setManualExpiresAt(event.target.value)} InputLabelProps={{ shrink: true }} fullWidth />
               <div className="operations-row-actions">
                 <Button variant="contained" disabled={submittingManual || !manualReady} onClick={() => void submitManual()}>保存并等待核验</Button>
               </div>

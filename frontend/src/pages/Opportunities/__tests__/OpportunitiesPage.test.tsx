@@ -214,31 +214,23 @@ describe('OpportunitiesPage', () => {
     })));
   });
 
-  it('lets the user submit an official inspiration manually', async () => {
+  it('lets the user submit a manual source with a single field (D7 slim)', async () => {
     render(<MemoryRouter><OpportunitiesPage /></MemoryRouter>);
 
     fireEvent.click(await screen.findByRole('button', { name: '手动添加来源' }));
-    fireEvent.mouseDown(screen.getByLabelText('来源类型'));
-    fireEvent.click(await screen.findByRole('option', { name: '官方创作灵感' }));
     fireEvent.change(screen.getByLabelText('关键词或原始内容'), {
       target: { value: '官方发布的新主题方向' },
-    });
-    fireEvent.change(screen.getByLabelText('发布方'), {
-      target: { value: '小红书官方' },
-    });
-    fireEvent.change(screen.getByLabelText('有效期至'), {
-      target: { value: '2026-08-07T00:00' },
     });
     fireEvent.click(screen.getByRole('button', { name: '保存并等待核验' }));
 
     await waitFor(() => expect(api.createContentOpportunity).toHaveBeenCalledWith(
       expect.objectContaining({
-        trigger: 'official_inspiration',
+        trigger: 'user_keyword',
         pasted_text: '官方发布的新主题方向',
-        authoritative_source: '小红书官方',
-        expires_at: new Date('2026-08-07T00:00').toISOString(),
       }),
     ));
+    // 瘦身后不再收集有效期（系统默认）。
+    expect(api.createContentOpportunity.mock.calls[0][0].expires_at).toBeUndefined();
   });
 
   // 审计 e54a2643 security：用户提交的来源 URL 直接进 href，javascript:/data:
