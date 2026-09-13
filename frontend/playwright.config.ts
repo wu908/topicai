@@ -57,7 +57,9 @@ export default defineConfig({
         E2E_DATA_DIR: e2eDataDir,
         DATABASE_URL: `sqlite+aiosqlite:///${toPosix(path.join(e2eDataDir, 'e2e.db'))}`,
         OBJECT_STORAGE_ROOT: toPosix(path.join(e2eDataDir, 'objects')),
-        JWT_SECRET_KEY: 'e2e-secret-key-for-local-run-2026',
+        // Per-run secret: the E2E backend serves a throwaway database that is
+        // recreated for every run, so nothing needs to stay valid across runs.
+        JWT_SECRET_KEY: `e2e-secret-key-${Date.now()}`,
         AUTH_RATE_LIMIT_PER_MINUTE: '100',
         AI_ENABLED: 'false',
       },

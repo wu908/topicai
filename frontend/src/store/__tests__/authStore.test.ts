@@ -101,7 +101,7 @@ describe('authStore.fetchCurrentUser', () => {
     useAuthStore.setState({ isAuthenticated: true });
     mockedRefreshToken.mockResolvedValue({
       code: 200,
-      data: { access_token: 'new-access', refresh_token: 'refresh', token_type: 'bearer' },
+      data: { access_token: 'new-access', refresh_token: `refresh-${Date.now()}`, token_type: 'bearer' },
       message: 'success',
       meta: {},
     });

@@ -49,12 +49,34 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import re
 import sqlite3
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+#: Identifiers interpolated into DDL/PRAGMA statements must be plain
+#: SQLite identifiers; anything else is a programming error, not input.
+_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+#: Allowed characters for a DDL type fragment (the part after
+#: ``ADD COLUMN``), e.g. ``TEXT NOT NULL DEFAULT ''``. Kept narrow so the
+#: interpolation in :func:`_ensure_columns` cannot smuggle SQL.
+_DDL_TYPE_RE = re.compile(r"^[A-Za-z0-9 '_(),]*$")
+
+
+def _quote_identifier(name: str) -> str:
+    """Validate and double-quote a SQLite identifier for DDL/PRAGMA use.
+
+    Migration runners interpolate internally-defined table and column
+    names into statements SQLite cannot parameterize; validating and
+    quoting here keeps those interpolations safe by construction.
+    """
+    if not _IDENTIFIER_RE.fullmatch(name):
+        raise ValueError(f"invalid identifier: {name!r}")
+    return f'"{name}"'
 
 DEFAULT_MIGRATIONS_DIR = Path(__file__).resolve().parent
 
@@ -108,8 +130,13 @@ def _already_applied(conn: sqlite3.Connection) -> dict[str, str]:
 
 def _existing_columns(conn: sqlite3.Connection, table: str) -> set[str]:
     """Return the column names of ``table`` (empty set if the table does
-    not exist — ``PRAGMA table_info`` returns no rows for missing tables)."""
-    return {row[1] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+    not exist — the table-valued PRAGMA returns no rows for missing
+    tables)."""
+    _quote_identifier(table)  # validation guard for downstream DDL use
+    rows = conn.execute(
+        "SELECT name FROM pragma_table_info(?)", (table,)
+    ).fetchall()
+    return {row[0] for row in rows}
 
 
 def _replace_marked_expression(sql: str, marker: str, replacement: str) -> str:

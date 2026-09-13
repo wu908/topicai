@@ -104,3 +104,6 @@ frontend/test-shots/
 
 # E2E throwaway database (managed by playwright webServer)
 backend/data/e2e/
+
+# UX audit evidence screenshots (34MB, regenerable; report in repo references by path)
+docs/reviews/ux-audit-2026-09-13/screenshots/

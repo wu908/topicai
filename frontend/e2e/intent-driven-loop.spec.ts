@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 const runId = Date.now();
 const email = `intent-loop-${runId}@test.com`;
-const password = 'Intent-loop-pw-123';
+const password = `Intent-loop-pw-${runId}`;
 
 test.beforeAll(async ({ request }) => {
   const response = await request.post('http://127.0.0.1:8765/api/v2/auth/register', {
