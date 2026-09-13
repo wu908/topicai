@@ -164,7 +164,7 @@ export default function CompanionDialog() {
   };
 
   return createPortal(
-    <Box ref={rootRef} aria-label="AI 对话" sx={{ position: 'fixed', zIndex: 1300, right: 44, bottom: 44, pointerEvents: 'none' }}>
+    <Box ref={rootRef} aria-label="AI 对话" className="companion-root" sx={{ position: 'fixed', zIndex: 1300, right: 44, bottom: 44, pointerEvents: 'none' }}>
       {/* 悬浮球（可拖拽） */}
       <Box
         aria-label="对话悬浮球"
