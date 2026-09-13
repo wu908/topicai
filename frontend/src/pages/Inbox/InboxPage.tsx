@@ -10,6 +10,7 @@ import {
   recordLoopMetric,
 } from '@/services/api/v2/asyncLoop';
 import type { InboxItem, MetricRecord } from '@/types/contracts/v2/asyncLoop';
+import { loopMetricLabel } from '@/features/content/labels';
 
 const KIND_EMOJI: Record<string, string> = {
   text: '✎',
@@ -34,6 +35,8 @@ export default function InboxPage() {
   const [draft, setDraft] = useState('');
   const [draftKind, setDraftKind] = useState('text');
   const [isPrivate, setIsPrivate] = useState(false);
+  const [loggingMinutes, setLoggingMinutes] = useState(false);
+  const [minutesInput, setMinutesInput] = useState('');
 
   const reload = useCallback(async () => {
     const [inbox, metricRows] = await Promise.all([
@@ -154,24 +157,64 @@ export default function InboxPage() {
         ) : (
           metrics.slice(0, 8).map((m) => (
             <div className="ritem" key={m.id}>
-              <span className="t">{m.metric}</span>
+              <span className="t">{loopMetricLabel(m.metric)}</span>
               <span className="m"><b style={{ color: 'var(--ink)' }}>{m.value}</b></span>
             </div>
           ))
         )}
         <div className="cta">
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm"
-            disabled={busy}
-            onClick={() =>
-              void run(async () => {
-                await recordLoopMetric({ metric: 'weekly_minutes', value: 0 });
-              })
-            }
-          >
-            记一笔本周维护时长
-          </button>
+          {loggingMinutes ? (
+            <span className="row" style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
+              <input
+                className="lm-input"
+                style={{ maxWidth: 120, height: 34, padding: '0 10px' }}
+                type="number"
+                min={1}
+                max={600}
+                aria-label="本周维护分钟数"
+                placeholder="分钟数"
+                value={minutesInput}
+                onChange={(e) => setMinutesInput(e.target.value)}
+                autoFocus
+              />
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                disabled={busy || !Number(minutesInput)}
+                onClick={() =>
+                  void run(async () => {
+                    await recordLoopMetric({
+                      metric: 'weekly_minutes',
+                      value: Math.max(1, Math.min(600, Math.round(Number(minutesInput)))),
+                    });
+                    setLoggingMinutes(false);
+                    setMinutesInput('');
+                  }, '已记下本周维护时长。')
+                }
+              >
+                记下
+              </button>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() => {
+                  setLoggingMinutes(false);
+                  setMinutesInput('');
+                }}
+              >
+                取消
+              </button>
+            </span>
+          ) : (
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              disabled={busy}
+              onClick={() => setLoggingMinutes(true)}
+            >
+              记一笔本周维护时长
+            </button>
+          )}
         </div>
       </div>
     </div>

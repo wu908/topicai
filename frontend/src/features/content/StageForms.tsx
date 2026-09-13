@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { METRIC_LABELS, PRIMARY_RESPONSE_LABELS } from '@/features/content/labels';
 import {
   Alert,
   Box,
@@ -332,12 +333,10 @@ interface HypothesisFormProps extends WorkspaceFormProps {
   lockHypothesis: (projectId: string, input: HypothesisLockInput) => Promise<unknown>;
 }
 
-const behaviorOptions = [
-  ['save', '收藏'],
-  ['comment', '评论'],
-  ['profile_visit', '主页访问'],
-  ['follow', '关注'],
-] as const;
+const behaviorOptions = Object.entries(PRIMARY_RESPONSE_LABELS) as [
+  ExpectedBehavior & keyof typeof PRIMARY_RESPONSE_LABELS,
+  string,
+][];
 
 export function HypothesisForm({
   workspace,
@@ -847,14 +846,10 @@ interface SnapshotFormProps extends WorkspaceFormProps {
   }) => Promise<SnapshotExtractionProposal>;
 }
 
-const metricFields = [
-  ['views', '浏览'],
-  ['likes', '点赞'],
-  ['favorites', '收藏'],
-  ['comments', '评论'],
-  ['shares', '分享'],
-  ['follows_gained', '新增关注'],
-] as const;
+const metricFields = Object.entries(METRIC_LABELS) as [
+  keyof typeof METRIC_LABELS,
+  string,
+][];
 
 export function SnapshotForm({
   workspace,
