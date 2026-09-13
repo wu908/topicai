@@ -6,6 +6,7 @@ import { extractErrorMessage } from '@/utils/error';
 import { listWeekly } from '@/services/api/v2/asyncLoop';
 import type { WeeklyRow } from '@/types/contracts/v2/asyncLoop';
 import { openCompanion } from '@/features/companion';
+import { metricLabel, primaryResponseLabel } from '@/features/content/labels';
 
 const STAGES: Array<{ key: WeeklyRow['stage']; label: string }> = [
   { key: 'needs_snapshot', label: '待回填数据' },
@@ -60,13 +61,19 @@ export default function ReviewPage() {
                   <Link to={`/content/${row.project_id}`} style={{ color: 'inherit' }}>{row.title}</Link>
                 </h3>
                 <p className="jl">
-                  判断 · <b>{row.judgment.primary_response ?? '未记录'}</b> ｜ 实际 ·{' '}
+                  判断 ·{' '}
+                  <b>
+                    {row.judgment.primary_response
+                      ? primaryResponseLabel(row.judgment.primary_response)
+                      : '未记录'}
+                  </b>{' '}
+                  ｜ 实际 ·{' '}
                   <b>
                     {row.actual.result_availability === 'unavailable'
                       ? '截图缺失'
                       : Object.entries(row.actual.metrics)
                           .filter(([, v]) => v !== null)
-                          .map(([k, v]) => `${k} ${v}`)
+                          .map(([k, v]) => `${metricLabel(k)} ${v}`)
                           .join(' · ') || '尚未回填'}
                   </b>
                 </p>

@@ -102,19 +102,19 @@ export default function GrowthPage() {
                 type="button"
                 className={`switch${state?.autopilotEligible ? '' : ' off'}`}
                 aria-pressed={Boolean(state?.autopilotEligible)}
-                aria-label="自主准备开关（写接口需新规格）"
-                onClick={() => setTrustNote('信任写接口属 Phase 4，需新规格批准；当前只读。')}
+                aria-label="自主准备开关（即将开放）"
+                onClick={() => setTrustNote('该能力将随后续版本开放，当前为展示状态。')}
               >
                 <i />
               </button>
             </div>
             <div className="trust">
               <div className="t"><b>探索位 · 每批 1 条</b><span>落选不计入成长分</span></div>
-              <button type="button" className="switch" aria-pressed onClick={() => setTrustNote('信任写接口属 Phase 4，需新规格批准；当前只读。')} aria-label="探索位开关（写接口需新规格）"><i /></button>
+              <button type="button" className="switch" aria-pressed onClick={() => setTrustNote('该能力将随后续版本开放，当前为展示状态。')} aria-label="探索位开关"><i /></button>
             </div>
             <div className="trust">
               <div className="t"><b>私密素材参与生产</b><span>永不——标记私密后不出本地</span></div>
-              <button type="button" className="switch off" aria-pressed={false} aria-label="私密素材参与生产（永不）"><i /></button>
+              <button type="button" className="switch off" aria-pressed={false} aria-label="私密素材参与生产开关（保持关闭）"><i /></button>
             </div>
             {trustNote ? <p className="hint" style={{ fontSize: 11.5, color: 'var(--faint)', marginTop: 10 }}>{trustNote}</p> : null}
             <p className="hint" style={{ fontSize: 11.5, color: 'var(--faint)', marginTop: 10 }}>

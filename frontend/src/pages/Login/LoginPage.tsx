@@ -115,7 +115,7 @@ const LoginPage: React.FC = () => {
           </button>
         </form>
 
-        <p className="login-hint">本地单机 · 数据不出你的电脑（素材授权默认最小）</p>
+        <p className="login-hint">素材授权默认最小 · 数据随时可导出带走</p>
         <button
           type="button"
           className="login-alt"
