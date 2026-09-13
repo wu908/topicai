@@ -58,10 +58,20 @@ describe('InboxPage', () => {
     expect(await screen.findByText(/产出了 1 条新内容/)).toBeTruthy();
   });
 
-  it('records a weekly minutes metric', async () => {
+  it('records a weekly minutes metric through the inline input', async () => {
     render(<InboxPage />);
     await screen.findByText('证伪线度量');
+    // 记一笔 now asks for the minutes instead of silently recording 0.
     fireEvent.click(screen.getByText('记一笔本周维护时长'));
-    await waitFor(() => expect(recordLoopMetric).toHaveBeenCalled());
+    const input = await screen.findByLabelText('本周维护分钟数');
+    fireEvent.change(input, { target: { value: '45' } });
+    fireEvent.click(screen.getByText('记下'));
+    await waitFor(() =>
+      expect(recordLoopMetric).toHaveBeenCalledWith({
+        metric: 'weekly_minutes',
+        value: 45,
+      }),
+    );
+    expect(await screen.findByText('已记下本周维护时长。')).toBeTruthy();
   });
 });

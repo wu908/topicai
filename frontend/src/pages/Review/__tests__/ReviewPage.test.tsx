@@ -27,7 +27,9 @@ describe('ReviewPage', () => {
     render(<MemoryRouter><ReviewPage /></MemoryRouter>);
     expect(await screen.findByText('阳台种菜 30 天')).toBeTruthy();
     expect(screen.getByText('待盲评')).toBeTruthy();
-    expect(screen.getByText(/favorites 41/)).toBeTruthy();
+    // Metric keys render through the Chinese label map, never raw.
+    expect(screen.getByText(/收藏 41/)).toBeTruthy();
+    expect(screen.queryByText(/favorites 41/)).toBeNull();
   });
 
   it('shows empty note when no publications', async () => {
