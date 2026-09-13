@@ -145,15 +145,18 @@ export default function HomePage() {
   };
 
   const actionPath = resolveActionPath(data?.action);
+  // 手动继续落在 '/'（晨报自身）时等于原地不动，用户会当作死按钮——
+  // 兜底去内容列表，那里总有可继续的项目。
+  const continuePath = actionPath === '/' ? '/content' : actionPath;
 
-  const deferAction = async () => {
+  const deferAction = async (reason = 'user_deferred_from_today') => {
     if (!data?.action) return;
     setBusy(true);
     setError(null);
     try {
       await respondToAction(data.action.id, {
         decision: 'defer',
-        response_payload: { reason: 'user_deferred_from_today' },
+        response_payload: { reason },
         expected_action_version: data.action.version,
         idempotency_key: `today-defer-${data.action.id}-${data.action.version}`,
       });
@@ -238,7 +241,7 @@ export default function HomePage() {
               <button type="button" className="btn btn-primary btn-sm" disabled={busy} onClick={startAction}>{primaryLabel}</button>
               {!isDeferred && !isCancelled ? <button type="button" className="btn btn-text" disabled={busy} onClick={() => void deferAction()}>暂不做</button> : null}
               {!isDeferred && !isCancelled ? <button type="button" className="btn btn-text" disabled={busy} onClick={() => setShowReject(true)}>不适合我</button> : null}
-              {!isCancelled ? <button type="button" className="btn btn-text" onClick={() => navigate(actionPath)}>手动继续</button> : null}
+              {!isCancelled ? <button type="button" className="btn btn-text" onClick={() => navigate(continuePath)}>手动继续</button> : null}
               <button type="button" className="askbtn" onClick={() => openCompanion('晨报 · 当前行动')}>问它</button>
             </div>
             {action ? (
@@ -283,9 +286,18 @@ export default function HomePage() {
             onClick={() => navigate('/loop/inbox')}
           />
           <button type="button" className="askbtn" onClick={() => navigate('/loop/inbox')}>去收件箱 ↗</button>
-          {['另一条先放着，别催我', '周五晚再拾取', '为什么先推这条？'].map((q) => (
-            <button type="button" key={q} className="askbtn" onClick={() => openCompanion('晨报 · 当前行动')}>{q}</button>
-          ))}
+          {/* 快捷回应接真实 defer 动作；「为什么先推这条」在悬浮球接入真实
+              模型前不展示——按钮承诺的回答当前给不出来（宁可少不能假）。 */}
+          {action && !isDeferred && !isCancelled ? (
+            <>
+              <button type="button" className="askbtn" disabled={busy} onClick={() => void deferAction('another_deferred_no_rush')}>
+                另一条先放着，别催我
+              </button>
+              <button type="button" className="askbtn" disabled={busy} onClick={() => void deferAction('scheduled_pickup_friday')}>
+                周五晚再拾取
+              </button>
+            </>
+          ) : null}
         </div>
       </div>
       <div className="weekfoot">
