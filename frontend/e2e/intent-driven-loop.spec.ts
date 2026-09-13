@@ -188,8 +188,13 @@ test.describe('intent-driven MVP', () => {
           await page.getByRole('button', { name: '更多导航' }).click();
           await expect(page.getByLabel('更多导航面板')).toBeVisible();
         }
-        // 桌面组与移动组同时存在于 DOM（CSS 控制显隐），可见性按当前视口断言。
-        for (const { label } of nodes.filter((n) => !viaSheet || mobileBarLabels.includes(n.label) || n.label === node.label)) {
+        // 桌面组与移动组同时存在于 DOM（CSS 控制显隐），按当前视口断言应见集合。
+        const visibleLabels = isMobile
+          ? viaSheet
+            ? [...mobileBarLabels, node.label]
+            : mobileBarLabels
+          : nodes.map((n) => n.label);
+        for (const label of visibleLabels) {
           await expect(page.getByRole('link', { name: label }).first()).toBeVisible();
         }
         await page.getByRole('link', { name: node.label }).first().click();
