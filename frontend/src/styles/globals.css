@@ -78,7 +78,9 @@ body {
     left: 0;
     right: 0;
     bottom: 72px;
-    z-index: 1199;
+    /* 面板展开时盖住悬浮球（z 1300），否则球会拦截面板右侧链接的点击。
+       面板是瞬态层：路由变化即收起，球随即恢复。 */
+    z-index: 1301;
     grid-template-columns: repeat(3, 1fr);
     gap: 4px;
     padding: 10px 8px 12px;
