@@ -49,7 +49,7 @@ test.describe('async creation loop', () => {
       .last()
       .fill('看完能在北阳台种出辣椒');
     await page.getByRole('button', { name: '认领' }).click();
-    await expect(page.getByText('已认领。到点会提醒你发布。')).toBeVisible();
+    await expect(page.getByText('已认领。这条产出会在 7 天观察窗内等你发布。')).toBeVisible();
 
     // 4. 拾取后卡片离开货架（ready 清零）
     await expect(
