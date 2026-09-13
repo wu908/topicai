@@ -16,6 +16,9 @@ import { createPortal } from 'react-dom';
 import { Box } from '@mui/material';
 import { gsap } from 'gsap';
 
+import { askCompanion } from '@/services/api/v2/companion';
+import { extractErrorMessage } from '@/utils/error';
+
 const BOOT_KEY = 'topicai-companion-booted';
 const ZEN_DELAY = 12_000;
 
@@ -30,6 +33,7 @@ export default function CompanionDialog() {
   const [context, setContext] = useState('全局');
   const [messages, setMessages] = useState<Array<{ me: boolean; text: string }>>([]);
   const [draft, setDraft] = useState('');
+  const [asking, setAsking] = useState(false);
 
   const mounted = useRef(false);
   const zenTimer = useRef<number | null>(null);
@@ -134,15 +138,24 @@ export default function CompanionDialog() {
 
   const submit = () => {
     const text = draft.trim();
-    if (!text) return;
+    if (!text || asking) return;
     setDraft('');
     push(text, true);
-    window.setTimeout(() => {
-      push(
-        '收到。（演示回复）接入真实模型后这里由带出处的编排器作答：可执行改提醒、换口味、重新生成等可逆操作；拾取、发布与长期经验仍需你亲手确认。',
-        false,
-      );
-    }, 600);
+    setAsking(true);
+    askCompanion({ context, question: text })
+      .then((response) => {
+        const answer = response?.data?.answer?.trim();
+        push(
+          answer ||
+            '这次没有生成回答。稍后再问一次，或者换个说法描述你的问题。',
+          false,
+        );
+      })
+      .catch((err: unknown) => {
+        // 诚实失败：AI 不可用时明说，而不是给一段假装思考的罐头文案。
+        push(extractErrorMessage(err, 'AI 暂时无法回答，请稍后再试。'), false);
+      })
+      .finally(() => setAsking(false));
   };
 
   const close = () => {
@@ -219,7 +232,7 @@ export default function CompanionDialog() {
             <Box ref={threadRef} className="companion-thread" sx={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: 12, maxHeight: 380, overflowY: 'auto', pt: 1, pb: 2 }}>
               {messages.length === 0 ? (
                 <Box sx={{ fontSize: 13.5, lineHeight: 1.75, color: '#454E5C', background: 'rgba(255,255,255,.62)', border: '1px solid rgba(255,255,255,.8)', borderRadius: '16px 16px 16px 5px', px: 1.75, py: 1.4, alignSelf: 'flex-start' }}>
-                  就「{context}」说吧——它会带着这一条的事实与出处回答。
+                  就「{context}」聊两句——它只提议，决定权在你。
                 </Box>
               ) : (
                 messages.map((message, index) => (
@@ -242,10 +255,11 @@ export default function CompanionDialog() {
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
               onKeyDown={(event) => { if (event.key === 'Enter') submit(); }}
-              placeholder="问它，或说你的想法…"
+              placeholder={asking ? 'AI 正在回答…' : '问它，或说你的想法…'}
+              disabled={asking}
               style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', fontSize: 13, color: '#191E26', fontFamily: 'inherit' }}
             />
-            <Box component="button" type="button" onClick={submit} sx={{ width: 44, height: 44, borderRadius: '50%', border: 'none', background: '#191E26', color: '#fff', cursor: 'pointer', fontSize: 15, '&:hover': { background: '#0E131B' }, '&:active': { transform: 'scale(.93)' } }}>↑</Box>
+            <Box component="button" type="button" onClick={submit} disabled={asking || !draft.trim()} sx={{ width: 44, height: 44, borderRadius: '50%', border: 'none', background: '#191E26', color: '#fff', cursor: asking || !draft.trim() ? 'default' : 'pointer', fontSize: 15, opacity: asking || !draft.trim() ? 0.45 : 1, '&:hover': { background: '#0E131B' }, '&:active': { transform: 'scale(.93)' } }}>↑</Box>
           </Box>
         </Box>
       ) : null}
