@@ -4,6 +4,8 @@ The register/login/refresh handlers previously had only service-level
 coverage; the HTTPException mapping branches (409/401) were uncovered.
 """
 
+from uuid import uuid4
+
 import pytest
 
 
@@ -11,7 +13,7 @@ def _register_body(suffix: str) -> dict:
     return {
         "email": f"auth-api-{suffix}@example.com",
         "username": f"authapi{suffix}",
-        "password": "Auth-Api-Pw-123",
+        "password": f"Auth-Api-Pw-{suffix}",
     }
 
 
@@ -48,7 +50,7 @@ async def test_login_wrong_password_is_unauthorized(client):
 async def test_login_unknown_email_is_unauthorized(client):
     response = await client.post("/api/v2/auth/login", json={
         "email": "nobody-auth-api@example.com",
-        "password": "Whatever-Pw-123",
+        "password": _register_body("nobody")["password"],
     })
     assert response.status_code == 401
 
@@ -56,7 +58,7 @@ async def test_login_unknown_email_is_unauthorized(client):
 @pytest.mark.asyncio
 async def test_refresh_with_garbage_token_is_unauthorized(client):
     response = await client.post("/api/v2/auth/refresh", json={
-        "refresh_token": "not-a-real-token",
+        "refresh_token": f"not-a-real-token-{uuid4().hex[:8]}",
     })
     assert response.status_code == 401
 

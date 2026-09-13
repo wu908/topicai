@@ -98,7 +98,7 @@ describe('auth service refresh bypasses the stale access token', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     const { refreshToken } = await import('../auth');
-    const response = await refreshToken({ refresh_token: 'refresh-jwt' });
+    const response = await refreshToken({ refresh_token: `refresh-jwt-${Date.now()}` });
 
     expect(response.data.access_token).toBe('new');
     const init = fetchMock.mock.calls[0][1];
