@@ -15,6 +15,7 @@ import {
   updateUserSettings,
 } from '@/services/api/v2/projects';
 import { useAuthStore } from '@/store/authStore';
+import { changePassword } from '@/services/api/auth';
 import type { CreatorState, HumanGate, UserSettings } from '@/types/contracts/v2/content';
 import { extractErrorMessage } from '@/utils/error';
 import { humanizeGoal, isKnownGoalEnum } from '@/utils/labels';
@@ -64,6 +65,12 @@ export default function MePage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // 改密码（UX 审计 2026-09-13 D8：此前没有任何账户资料/密码管理入口）。
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const [pwBusy, setPwBusy] = useState(false);
+  const [pwNotice, setPwNotice] = useState<{ ok: boolean; text: string } | null>(null);
   // 审计修复 2026-08-16 UX-L8：信任条件长段落默认折叠。
   const [showTrustDetail, setShowTrustDetail] = useState(false);
   const aiAvailable = Boolean(settings?.ai.enabled && settings.ai.configured);
@@ -115,6 +122,25 @@ export default function MePage() {
       setError(extractErrorMessage(err, '操作没有完成，请稍后重试'));
     } finally {
       setBusy(false);
+    }
+  };
+
+  const submitPasswordChange = async () => {
+    setPwBusy(true);
+    setPwNotice(null);
+    try {
+      await changePassword({
+        current_password: currentPassword,
+        new_password: newPassword,
+      });
+      setPwNotice({ ok: true, text: '密码已更新，下次登录请使用新密码。' });
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmNewPassword('');
+    } catch (err) {
+      setPwNotice({ ok: false, text: extractErrorMessage(err, '密码更新失败，请稍后重试') });
+    } finally {
+      setPwBusy(false);
     }
   };
 
@@ -193,6 +219,37 @@ export default function MePage() {
               <TextField label="小红书账号备注" value={accountReference} onChange={(event) => setAccountReference(event.target.value)} helperText="仅用于区分账号，不要填写密码或令牌" />
               <div className="operations-row-actions">
                 <Button variant="contained" startIcon={<SaveOutlined />} disabled={busy || !goalValid || !contentStrategy.trim()} onClick={() => void saveSettings()}>保存设置</Button>
+              </div>
+            </Stack>
+          </section>
+          <section className="operations-row">
+            <div className="operations-row-header"><div><h2>账户</h2><p className="operations-row-copy">修改登录密码。当前密码用于确认是你本人操作。</p></div></div>
+            <Stack spacing={2}>
+              <TextField label="当前密码" type="password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} />
+              <TextField
+                label="新密码（至少 8 位）"
+                type="password"
+                value={newPassword}
+                onChange={(event) => setNewPassword(event.target.value)}
+                helperText={newPassword && newPassword === currentPassword ? '新密码不能与当前密码相同' : undefined}
+              />
+              <TextField
+                label="再输入一次新密码"
+                type="password"
+                value={confirmNewPassword}
+                onChange={(event) => setConfirmNewPassword(event.target.value)}
+                error={Boolean(confirmNewPassword) && confirmNewPassword !== newPassword}
+                helperText={confirmNewPassword && confirmNewPassword !== newPassword ? '两次输入的新密码不一致' : undefined}
+              />
+              {pwNotice ? <Alert severity={pwNotice.ok ? 'success' : 'error'}>{pwNotice.text}</Alert> : null}
+              <div className="operations-row-actions">
+                <Button
+                  variant="contained"
+                  disabled={pwBusy || !currentPassword || newPassword.length < 8 || newPassword === currentPassword || confirmNewPassword !== newPassword}
+                  onClick={() => void submitPasswordChange()}
+                >
+                  更新密码
+                </Button>
               </div>
             </Stack>
           </section>

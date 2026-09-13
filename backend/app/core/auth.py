@@ -421,3 +421,34 @@ class AuthManager:
         if not self._db:
             await db.close()
         return user
+
+    async def change_password(
+        self, user_id: str, current_password: str, new_password: str
+    ) -> None:
+        """Replace a user's password after verifying the current one.
+
+        Raises:
+            AuthenticationException: If the current password does not match
+                (same generic message as login — no user enumeration).
+        """
+        from app.core.database import Database
+        from app.core.exceptions import AuthenticationException
+
+        db = self._db or Database(self.settings.database_url)
+        if not self._db:
+            await db.init_db()
+
+        user = await db.fetch_one(
+            "SELECT * FROM users WHERE id = :id AND credentials_revoked_at IS NULL",
+            {"id": user_id},
+        )
+        if not user or not self.verify_password(current_password, user["password_hash"]):
+            if not self._db:
+                await db.close()
+            raise AuthenticationException("当前密码不正确")
+
+        password_hash = self.hash_password(new_password)
+        await db.update("users", {"password_hash": password_hash}, {"id": user_id})
+
+        if not self._db:
+            await db.close()
