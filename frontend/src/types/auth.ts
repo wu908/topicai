@@ -44,3 +44,8 @@ export interface RefreshTokenResponse {
   refresh_token: string;
   token_type: string;
 }
+
+export interface PasswordChangeRequest {
+  current_password: string;
+  new_password: string;
+}

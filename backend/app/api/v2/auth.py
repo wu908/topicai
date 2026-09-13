@@ -116,3 +116,37 @@ async def me(user: dict = Depends(get_current_user)):
         "message": "success",
         "meta": {},
     }
+
+
+class PasswordChangeRequest(BaseModel):
+    current_password: str
+    new_password: str = Field(min_length=8, max_length=128)
+
+
+@router.post("/password", response_model=ApiResponse)
+async def change_password(
+    req: Request, body: PasswordChangeRequest, user: dict = Depends(get_current_user)
+):
+    from app.core.auth import AuthManager
+    from app.core.exceptions import AuthenticationException
+
+    if body.current_password == body.new_password:
+        from fastapi import HTTPException as _HTTPException
+
+        raise _HTTPException(status_code=422, detail="新密码不能与当前密码相同")
+
+    try:
+        await AuthManager(db=req.app.state.db).change_password(
+            user_id=user["id"],
+            current_password=body.current_password,
+            new_password=body.new_password,
+        )
+    except AuthenticationException as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
+
+    return {
+        "code": 200,
+        "data": None,
+        "message": "密码已更新，下次登录请使用新密码",
+        "meta": {},
+    }

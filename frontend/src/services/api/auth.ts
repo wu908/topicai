@@ -12,6 +12,7 @@ import type {
   RefreshTokenRequest,
   RefreshTokenResponse,
   User,
+  PasswordChangeRequest,
 } from '@/types/auth';
 
 /** Register a new user */
@@ -48,5 +49,11 @@ export async function refreshToken(data: RefreshTokenRequest): Promise<ApiRespon
 /** Get current authenticated user */
 export async function getCurrentUser(): Promise<ApiResponse<{ user: User }>> {
   const response = await apiClient.get<ApiResponse<{ user: User }>>('/auth/me');
+  return response.data;
+}
+
+/** Change the authenticated user's password (Bearer token required). */
+export async function changePassword(data: PasswordChangeRequest): Promise<ApiResponse<null>> {
+  const response = await apiClient.post<ApiResponse<null>>('/auth/password', data);
   return response.data;
 }
