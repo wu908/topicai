@@ -11,6 +11,44 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+# ---------------------------------------------------------------------------
+# RequestValidationError → user-facing message mapping.
+#
+# Audit 2026-09-13: production used to return a bare "请求参数校验失败" with
+# no field guidance — e.g. a reserved-domain email was indistinguishable
+# from every other 422. The mapped message is built ONLY from code-defined
+# field names (loc tail) and pydantic's error-type enum; never from
+# `msg`/`input`/`ctx`, so no user data or library internals can leak into
+# the client-facing text. Unknown fields keep the generic message.
+# ---------------------------------------------------------------------------
+
+_VALIDATION_FIELD_LABELS = {
+    "email": "邮箱",
+    "username": "姓名",
+    "password": "密码",
+    "refresh_token": "登录凭证",
+}
+
+_VALIDATION_GENERIC_MESSAGE = "请求参数校验失败"
+
+
+def _validation_user_message(errors: list[dict]) -> str:
+    for err in errors:
+        loc = err.get("loc") or []
+        field = str(loc[-1]) if loc else ""
+        etype = str(err.get("type", ""))
+        label = _VALIDATION_FIELD_LABELS.get(field, "")
+        if field == "email" and etype.startswith("value_error"):
+            return "邮箱格式不正确，请检查后重试"
+        if etype == "missing" and label:
+            return f"缺少必填项：{label}"
+        if etype == "string_too_short" and label:
+            return f"{label}长度不足，请检查后重试"
+        if label:
+            return f"{label}格式不正确，请检查后重试"
+    return _VALIDATION_GENERIC_MESSAGE
+
+
 class AppException(Exception):
     def __init__(
         self,
@@ -171,15 +209,20 @@ def setup_exception_handlers(app: "FastAPI") -> None:
     async def validation_handler(request: Request, exc: RequestValidationError):
         from config.settings import get_settings
 
+        errors = jsonable_encoder(exc.errors())
         meta = {"error_code": "VALIDATION_ERROR", "timestamp": utc_now()}
         if not get_settings().is_production:
-            meta["errors"] = jsonable_encoder(exc.errors())
+            meta["errors"] = errors
+        # Field-level guidance is derived from code-defined field names and
+        # pydantic's type enum only — safe to expose in production (the
+        # unsanitized errors array stays dev-only, per D5).
+        message = _validation_user_message(errors)
         return JSONResponse(
             status_code=422,
             content={
                 "code": 422,
                 "data": None,
-                "message": "请求参数校验失败",
+                "message": message,
                 "meta": meta,
             },
         )
