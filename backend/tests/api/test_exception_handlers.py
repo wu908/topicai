@@ -224,3 +224,116 @@ async def test_validation_error_in_dev_keeps_errors_for_debug(monkeypatch, clien
     assert isinstance(errors, list) and len(errors) > 0, (
         f"dev meta missing detailed errors: {meta!r}"
     )
+
+
+# ==================== Field-level validation messages (2026-09-13) ====================
+
+
+def test_validation_user_message_mapping():
+    """The mapping uses only loc field names and pydantic's type enum —
+    never msg/input/ctx — so no user data or library internals can leak."""
+    from app.core.exceptions import _validation_user_message
+
+    assert (
+        _validation_user_message(
+            [{"type": "value_error", "loc": ["body", "email"], "msg": "x", "input": "bad"}]
+        )
+        == "邮箱格式不正确，请检查后重试"
+    )
+    assert (
+        _validation_user_message([{"type": "missing", "loc": ["body", "username"]}])
+        == "缺少必填项：姓名"
+    )
+    assert (
+        _validation_user_message([{"type": "string_too_short", "loc": ["body", "password"]}])
+        == "密码长度不足，请检查后重试"
+    )
+    # Known field, generic type.
+    assert (
+        _validation_user_message([{"type": "string_type", "loc": ["body", "password"]}])
+        == "密码格式不正确，请检查后重试"
+    )
+    # Unknown field → generic message (backward compatible).
+    assert (
+        _validation_user_message([{"type": "int_type", "loc": ["body", "age"]}])
+        == "请求参数校验失败"
+    )
+    # Empty errors → generic message.
+    assert _validation_user_message([]) == "请求参数校验失败"
+
+
+def _build_email_validation_app():
+    """A route shaped like the real register endpoint: EmailStr + required
+    username, so reserved-domain / malformed emails hit value_error."""
+    from fastapi import FastAPI
+    from pydantic import BaseModel, EmailStr
+
+    from app.core.exceptions import setup_exception_handlers
+
+    app = FastAPI()
+    setup_exception_handlers(app)
+
+    class RegisterBody(BaseModel):
+        email: EmailStr
+        username: str
+        password: str
+
+    @app.post("/register")
+    async def register(body: RegisterBody):
+        return {"email": body.email}
+
+    return app
+
+
+@pytest.mark.asyncio
+async def test_validation_error_production_names_the_field(monkeypatch, client):
+    """Production 422 must say WHICH field failed (e.g. reserved-domain
+    email) while still never echoing pydantic internals."""
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    _reset_settings_singleton()
+    try:
+        app = _build_email_validation_app()
+        from httpx import ASGITransport, AsyncClient
+        async with AsyncClient(
+            transport=ASGITransport(app=app, raise_app_exceptions=False),
+            base_url="http://test",
+        ) as c:
+            r = await c.post(
+                "/register",
+                json={
+                    "email": "qa.tourist0912@topicai.test",
+                    "username": "体验员",
+                    "password": "Tourist-0912-pw",
+                },
+            )
+    finally:
+        _reset_settings_singleton()
+
+    assert r.status_code == 422
+    body = r.json()
+    assert body["message"] == "邮箱格式不正确，请检查后重试"
+    # The user's input value must not be echoed back.
+    assert "topicai.test" not in body["message"]
+    assert "errors" not in body["meta"] or body["meta"]["errors"] in (None, [], "")
+
+
+@pytest.mark.asyncio
+async def test_validation_error_production_missing_field_named(monkeypatch, client):
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    _reset_settings_singleton()
+    try:
+        app = _build_email_validation_app()
+        from httpx import ASGITransport, AsyncClient
+        async with AsyncClient(
+            transport=ASGITransport(app=app, raise_app_exceptions=False),
+            base_url="http://test",
+        ) as c:
+            r = await c.post(
+                "/register",
+                json={"email": "qa.tourist0912@gmail.com", "password": "Tourist-0912-pw"},
+            )
+    finally:
+        _reset_settings_singleton()
+
+    assert r.status_code == 422
+    assert r.json()["message"] == "缺少必填项：姓名"
