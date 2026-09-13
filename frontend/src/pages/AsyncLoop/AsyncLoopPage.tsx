@@ -42,7 +42,6 @@ export default function AsyncLoopPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [intent, setIntent] = useState('solve');
   const [audienceChange, setAudienceChange] = useState('');
-  const [scheduleAt, setScheduleAt] = useState('');
 
   const reload = useCallback(async () => {
     const shelf = await listDeliverables('ready');
@@ -79,12 +78,11 @@ export default function AsyncLoopPage() {
       await pickupDeliverable(d.id, {
         content_intent: intent as 'solve' | 'share' | 'record',
         audience_change: audienceChange.trim(),
-        schedule_at: scheduleAt.trim() || undefined,
         idempotency_key: makeKey('pickup'),
       });
       setSelectedId(null);
       setAudienceChange('');
-    }, '已认领。到点会提醒你发布。');
+    }, '已认领。这条产出会在 7 天观察窗内等你发布。');
 
   const discard = (d: Deliverable, reason: string) =>
     run(async () => {
@@ -124,7 +122,7 @@ export default function AsyncLoopPage() {
               <div
                 key={d.id}
                 className="card deliv glass"
-                onClick={() => setSelectedId(d.id)}
+                onClick={() => { setSelectedId(d.id); setAudienceChange(d.judgment.audience_change || ''); if (d.content_intent) setIntent(d.content_intent); }}
               >
                 <div className="tags">
                   {d.content_intent ? <span className="tag">{INTENT_LABEL[d.content_intent]}</span> : null}
@@ -146,7 +144,7 @@ export default function AsyncLoopPage() {
                   <button
                     type="button"
                     className="btn btn-ghost btn-sm"
-                    onClick={() => setSelectedId(selectedId === d.id ? null : d.id)}
+                    onClick={() => { if (selectedId === d.id) { setSelectedId(null); } else { setSelectedId(d.id); setAudienceChange(d.judgment.audience_change || ''); } }}
                   >
                     拾取
                   </button>
@@ -218,14 +216,6 @@ export default function AsyncLoopPage() {
                     </button>
                   ))}
                 </div>
-                <input
-                  className="lm-input"
-                  style={{ marginTop: 10 }}
-                  aria-label="提醒时间（可选，ISO）"
-                  placeholder="提醒时间（可选，ISO）"
-                  value={scheduleAt}
-                  onChange={(e) => setScheduleAt(e.target.value)}
-                />
               </div>
               <div className="cta">
                 <button
