@@ -4,9 +4,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const createProject = vi.fn();
 const confirmProjectIntent = vi.fn();
+const getProjectNextAction = vi.fn();
+const respondToAction = vi.fn();
 vi.mock('@/services/api/v2/projects', () => ({
   createProject: (...a: unknown[]) => createProject(...a),
   confirmProjectIntent: (...a: unknown[]) => confirmProjectIntent(...a),
+  getProjectNextAction: (...a: unknown[]) => getProjectNextAction(...a),
+  respondToAction: (...a: unknown[]) => respondToAction(...a),
 }));
 
 import UrgentPage from '../UrgentPage';
@@ -16,6 +20,8 @@ describe('UrgentPage', () => {
     vi.clearAllMocks();
     createProject.mockResolvedValue({ id: 'p1', version: 1, title: '' });
     confirmProjectIntent.mockResolvedValue({});
+    getProjectNextAction.mockResolvedValue({ id: 'a1', action_type: 'answer_key_question', version: 1 });
+    respondToAction.mockResolvedValue({});
   });
 
   it('creates project without intent when left empty', async () => {
@@ -55,4 +61,44 @@ describe('UrgentPage', () => {
     fireEvent.change(screen.getByLabelText('一句真实经历（它只基于这个写，不编）'), { target: { value: 'e' } });
     expect((screen.getByText('生成成品，进入发布检查') as HTMLButtonElement).disabled).toBe(false);
   });
+});
+
+it('backfills the urgent experience as the key-question answer (B1)', async () => {
+  render(
+    <MemoryRouter initialEntries={['/urgent']}>
+      <Routes>
+        <Route path="/urgent" element={<UrgentPage />} />
+        <Route path="/content/:projectId" element={<div>工作台 p1</div>} />
+      </Routes>
+    </MemoryRouter>,
+  );
+  fireEvent.change(screen.getByLabelText('这篇想说什么？'), { target: { value: '阳台辣椒结果了' } });
+  fireEvent.change(screen.getByLabelText('一句真实经历（它只基于这个写，不编）'), { target: { value: '早上浇水时发现了三个果。' } });
+  fireEvent.click(screen.getByRole('button', { name: '记录 · 记下这个变化' }));
+  fireEvent.click(screen.getByText('生成成品，进入发布检查'));
+  await waitFor(() =>
+    expect(respondToAction).toHaveBeenCalledWith(
+      'a1',
+      expect.objectContaining({
+        decision: 'accept',
+        response_payload: { answer: '早上浇水时发现了三个果。' },
+      }),
+    ),
+  );
+});
+
+it('still navigates when the experience backfill fails (B1 non-blocking)', async () => {
+  getProjectNextAction.mockRejectedValue(new Error('network down'));
+  render(
+    <MemoryRouter initialEntries={['/urgent']}>
+      <Routes>
+        <Route path="/urgent" element={<UrgentPage />} />
+        <Route path="/content/:projectId" element={<div>工作台 p1</div>} />
+      </Routes>
+    </MemoryRouter>,
+  );
+  fireEvent.change(screen.getByLabelText('这篇想说什么？'), { target: { value: '阳台辣椒结果了' } });
+  fireEvent.change(screen.getByLabelText('一句真实经历（它只基于这个写，不编）'), { target: { value: '早上浇水时发现了三个果。' } });
+  fireEvent.click(screen.getByText('生成成品，进入发布检查'));
+  await waitFor(() => expect(screen.getByText('工作台 p1')).toBeTruthy());
 });
