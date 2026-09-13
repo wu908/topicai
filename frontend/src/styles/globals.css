@@ -38,6 +38,17 @@ body {
   }
 }
 
+/* 移动端底栏（UX 审计 2026-09-13 D9）：桌面的完整分组在窄屏改为
+   4 个高频入口 + 「更多」面板，避免 9+ 项文字挤压重叠。 */
+.v3-nav-desktop {
+  display: contents;
+}
+
+.v3-nav-mobile,
+.v3-more-sheet {
+  display: none;
+}
+
 @media (max-width: 720px) {
   .app-shell {
     height: 100dvh !important;
@@ -46,6 +57,34 @@ body {
   .app-main-content {
     max-width: none !important;
     padding: 24px 16px 96px !important;
+  }
+
+  .v3-nav-desktop {
+    display: none !important;
+  }
+
+  .v3-nav-mobile {
+    display: grid !important;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    width: 100%;
+    padding: 6px 8px !important;
+    overflow: visible !important;
+  }
+
+  .v3-more-sheet {
+    display: grid !important;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 72px;
+    z-index: 1199;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 4px;
+    padding: 10px 8px 12px;
+    background: var(--v3-sidebar-bg);
+    border-top: 1px solid var(--v3-border);
+    box-shadow: 0 -12px 30px rgba(70, 95, 130, 0.12);
   }
 
   .v3-sidebar {
@@ -66,11 +105,9 @@ body {
   }
 
   .v3-sidebar-nav {
-    display: grid !important;
-    grid-auto-flow: column;
-    grid-auto-columns: minmax(0, 1fr);
+    display: block !important;
     width: 100%;
-    padding: 6px 8px !important;
+    padding: 0 !important;
     overflow: visible !important;
   }
 
@@ -81,6 +118,11 @@ body {
     gap: 3px !important;
     padding: 6px 2px !important;
     font-size: 11px !important;
+  }
+
+  .v3-more-btn .ico {
+    display: flex;
+    justify-content: center;
   }
 
   .v3-sidebar-label {
