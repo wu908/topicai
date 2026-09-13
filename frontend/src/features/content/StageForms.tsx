@@ -6,6 +6,7 @@ import {
   Button,
   Checkbox,
   Chip,
+  Collapse,
   FormControlLabel,
   FormGroup,
   MenuItem,
@@ -170,6 +171,9 @@ export function ProjectCreateForm({
   const [goal, setGoal] = useState<ContentProject['primary_goal']>('stable_publish');
   const [intent, setIntent] = useState<ContentIntent | ''>('');
   const [audienceChange, setAudienceChange] = useState('');
+  // 表单瘦身（UX 审计 2026-09-13 第七节）：只保留标题必填，
+  // 其余字段全部可选并默认折叠——AI 会在意图确认步对话式补齐。
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   const submit = () =>
     onCommand(async () => {
@@ -201,45 +205,60 @@ export function ProjectCreateForm({
           required
           fullWidth
         />
-        <TextField
-          label="你想到的读者（可留空）"
-          inputProps={{ 'aria-label': '目标读者' }}
-          value={audience}
-          onChange={(event) => setAudience(event.target.value)}
-          fullWidth
-          multiline
-          minRows={2}
-        />
-        <TextField
-          select
-          label="这条内容更像什么"
-          value={intent}
-          onChange={(event) => setIntent(event.target.value as ContentIntent | '')}
-          helperText="先选一个大致方向，进入项目后仍可纠正。"
-        >
-          <MenuItem value="">不确定，让 AI 先判断</MenuItem>
-          <MenuItem value="solve">解决：教会一个方法</MenuItem>
-          <MenuItem value="share">分享：表达经历或观点</MenuItem>
-          <MenuItem value="record">记录：留下过程和变化</MenuItem>
-        </TextField>
-        <TextField
-          label="希望读者发生什么变化（可留空）"
-          value={audienceChange}
-          onChange={(event) => setAudienceChange(event.target.value)}
-          multiline
-          minRows={2}
-          placeholder="例如：看完后愿意试一次，或想继续关注我的变化"
-        />
-        <TextField
-          select
-          label="本轮目标"
-          value={goal}
-          onChange={(event) => setGoal(event.target.value as ContentProject['primary_goal'])}
-        >
-          <MenuItem value="stable_publish">稳定更新</MenuItem>
-          <MenuItem value="follower_growth">涨粉验证</MenuItem>
-          <MenuItem value="experiment">内容实验</MenuItem>
-        </TextField>
+        <Box>
+          <Button
+            type="button"
+            variant="text"
+            size="small"
+            onClick={() => setShowAdvanced((value) => !value)}
+            aria-expanded={showAdvanced}
+          >
+            {showAdvanced ? '收起更多选项' : '更多选项（读者、方向、目标——都可以留空，AI 会先判断）'}
+          </Button>
+        </Box>
+        <Collapse in={showAdvanced}>
+          <Stack spacing={2}>
+            <TextField
+              label="你想到的读者（可留空）"
+              inputProps={{ 'aria-label': '目标读者' }}
+              value={audience}
+              onChange={(event) => setAudience(event.target.value)}
+              fullWidth
+              multiline
+              minRows={2}
+            />
+            <TextField
+              select
+              label="这条内容更像什么"
+              value={intent}
+              onChange={(event) => setIntent(event.target.value as ContentIntent | '')}
+              helperText="先选一个大致方向，进入项目后仍可纠正。"
+            >
+              <MenuItem value="">不确定，让 AI 先判断</MenuItem>
+              <MenuItem value="solve">解决：教会一个方法</MenuItem>
+              <MenuItem value="share">分享：表达经历或观点</MenuItem>
+              <MenuItem value="record">记录：留下过程和变化</MenuItem>
+            </TextField>
+            <TextField
+              label="希望读者发生什么变化（可留空）"
+              value={audienceChange}
+              onChange={(event) => setAudienceChange(event.target.value)}
+              multiline
+              minRows={2}
+              placeholder="例如：看完后愿意试一次，或想继续关注我的变化"
+            />
+            <TextField
+              select
+              label="本轮目标"
+              value={goal}
+              onChange={(event) => setGoal(event.target.value as ContentProject['primary_goal'])}
+            >
+              <MenuItem value="stable_publish">稳定更新</MenuItem>
+              <MenuItem value="follower_growth">涨粉验证</MenuItem>
+              <MenuItem value="experiment">内容实验</MenuItem>
+            </TextField>
+          </Stack>
+        </Collapse>
         <Box>
           <Button
             variant="contained"
@@ -355,6 +374,9 @@ export function HypothesisForm({
   const [basis, setBasis] = useState('');
   const [uncertainties, setUncertainties] = useState('');
   const [observationWindow, setObservationWindow] = useState<number | string>(7);
+  // 表单瘦身（UX 审计 2026-09-13 第七节）：判断依据/不确定点/附加反应
+  // 属可选深化，默认折叠，减少锁定发布意图时的填写负担。
+  const [showAdvanced, setShowAdvanced] = useState(false);
   // 审计 e54a2643 medium：audienceChange 种子只在挂载时执行，切换项目时同步。
   const [prevProjectId, setPrevProjectId] = useState(workspace.project.id);
   if (prevProjectId !== workspace.project.id) {
@@ -457,47 +479,62 @@ export function HypothesisForm({
           ))}
         </TextField>
         <Box>
-          <Typography variant="body2" color="text.secondary" mb={0.5}>
-            附加反应（最多 2 项）
-          </Typography>
-          <FormGroup row>
-            {behaviorOptions.filter(([value]) => value !== primaryResponse).map(([value, label]) => (
-              <FormControlLabel
-                key={value}
-                label={label}
-                control={
-                  <Checkbox
-                    checked={supportingResponses.includes(value)}
-                    disabled={!supportingResponses.includes(value) && supportingResponses.length >= 2}
-                    onChange={(_, checked) =>
-                      setSupportingResponses((current) =>
-                        checked
-                          ? [...current, value]
-                          : current.filter((item) => item !== value),
-                      )
+          <Button
+            type="button"
+            variant="text"
+            size="small"
+            onClick={() => setShowAdvanced((value) => !value)}
+            aria-expanded={showAdvanced}
+          >
+            {showAdvanced ? '收起高级选项' : '高级（可选）：附加反应与判断依据'}
+          </Button>
+        </Box>
+        <Collapse in={showAdvanced}>
+          <Stack spacing={2}>
+            <Box>
+              <Typography variant="body2" color="text.secondary" mb={0.5}>
+                附加反应（最多 2 项）
+              </Typography>
+              <FormGroup row>
+                {behaviorOptions.filter(([value]) => value !== primaryResponse).map(([value, label]) => (
+                  <FormControlLabel
+                    key={value}
+                    label={label}
+                    control={
+                      <Checkbox
+                        checked={supportingResponses.includes(value)}
+                        disabled={!supportingResponses.includes(value) && supportingResponses.length >= 2}
+                        onChange={(_, checked) =>
+                          setSupportingResponses((current) =>
+                            checked
+                              ? [...current, value]
+                              : current.filter((item) => item !== value),
+                          )
+                        }
+                      />
                     }
                   />
-                }
-              />
-            ))}
-          </FormGroup>
-        </Box>
-        <TextField
-          label="你为什么这样判断（可选）"
-          value={basis}
-          onChange={(e) => setBasis(e.target.value)}
-          placeholder="每行一项"
-          multiline
-          minRows={2}
-        />
-        <TextField
-          label="你还不确定什么（可选）"
-          value={uncertainties}
-          onChange={(e) => setUncertainties(e.target.value)}
-          placeholder="每行一项"
-          multiline
-          minRows={2}
-        />
+                ))}
+              </FormGroup>
+            </Box>
+            <TextField
+              label="你为什么这样判断（可选）"
+              value={basis}
+              onChange={(e) => setBasis(e.target.value)}
+              placeholder="每行一项"
+              multiline
+              minRows={2}
+            />
+            <TextField
+              label="你还不确定什么（可选）"
+              value={uncertainties}
+              onChange={(e) => setUncertainties(e.target.value)}
+              placeholder="每行一项"
+              multiline
+              minRows={2}
+            />
+          </Stack>
+        </Collapse>
         <TextField
           label="观察窗口（天）"
           value={observationWindow}

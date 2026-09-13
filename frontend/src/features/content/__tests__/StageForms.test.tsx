@@ -93,6 +93,8 @@ describe('HypothesisForm', () => {
     render(form('solve'));
 
     expect(screen.getByRole('combobox', { name: '主要反应' })).toHaveTextContent('收藏');
+    // 附加反应在默认折叠的「高级」区，先展开（表单瘦身 2026-09-13）。
+    fireEvent.click(screen.getByRole('button', { name: /高级（可选）/ }));
     const comment = screen.getByRole('checkbox', { name: '评论' });
     const profileVisit = screen.getByRole('checkbox', { name: '主页访问' });
     const follow = screen.getByRole('checkbox', { name: '关注' });
@@ -126,6 +128,7 @@ describe('HypothesisForm', () => {
     fireEvent.change(screen.getByLabelText('创作者视角或经历锚点'), {
       target: { value: '我第一次公开复盘失败经历时的转变' },
     });
+    fireEvent.click(screen.getByRole('button', { name: /高级（可选）/ }));
     fireEvent.click(screen.getByRole('checkbox', { name: '评论' }));
     fireEvent.click(screen.getByRole('checkbox', { name: '关注' }));
     fireEvent.change(screen.getByLabelText('你为什么这样判断（可选）'), {

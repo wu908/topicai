@@ -108,7 +108,7 @@ describe('AsyncLoopPage', () => {
     await waitFor(() => expect(pickupDeliverable).toHaveBeenCalled());
     expect(pickupDeliverable.mock.calls[0][0]).toBe('d1');
     expect(pickupDeliverable.mock.calls[0][1].audience_change).toBe('看完能避开五个坑');
-    expect(await screen.findByText('已认领。到点会提醒你发布。')).toBeTruthy();
+    expect(await screen.findByText('已认领。这条产出会在 7 天观察窗内等你发布。')).toBeTruthy();
   });
 
   it('discard sends the chosen reason', async () => {
