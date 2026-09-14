@@ -98,6 +98,12 @@ DIGEST_SYSTEM_PROMPT = (
 )
 
 
+#: 从用户贴的参考里读出来的写法，最多取这么多条作为写作约束。
+#: 这里不套 R4 的样本数门槛：参考是用户自己指认的"我想做成这样"，用它是因为
+#: 用户这么说了，而不是因为系统推断出它有效——两件事需要的谨慎程度不同。
+_MAX_STYLE_HINTS = 3
+
+
 OUTLINE = [
     {"step": "hook", "label": "钩子：一个具体结果或翻车瞬间"},
     {"step": "point", "label": "要点：你的事实与做法，逐条展开"},
@@ -321,7 +327,25 @@ class ProductionService:
                               {"reason": "ready_7d_not_picked"})
         return len(stale)
 
-    async def _draft_from_ai(self, item: Any) -> _Draft | None:
+    async def _style_hints(self, owner: str) -> list[str]:
+        """用户贴的参考里常见的写法，用来约束草稿结构。
+
+        读不到锚点（还没贴参考）就返回空——没有偏好时不假装有偏好。
+        """
+        row = await self.db.fetch_one(
+            "SELECT structure_habits_json FROM reference_anchors WHERE owner_user_id=:owner",
+            {"owner": owner},
+        )
+        if row is None:
+            return []
+        habits = json.loads(row["structure_habits_json"] or "[]")
+        return [
+            str(item.get("value", "")).strip()
+            for item in habits
+            if str(item.get("value", "")).strip()
+        ][:_MAX_STYLE_HINTS]
+
+    async def _draft_from_ai(self, owner: str, item: Any) -> _Draft | None:
         """让模型把一条真实素材整理成草稿；失败返回 None（由调用方降级）。
 
         事实（facts）刻意不由模型产出：它只写标题/正文/大纲/判断草案，
@@ -330,10 +354,21 @@ class ProductionService:
         from app.core.llm import LLMClient, wrap_user_input
 
         llm = self.llm or LLMClient()
+        hints = await self._style_hints(owner)
+        # 写法和素材一样是不可信文本（用户粘贴、经模型转述），同样包裹起来。
+        style_block = (
+            "参考写法（用户贴的参考里常见的写法，尽量贴合，"
+            "但不得因此写出素材里没有的事实）：\n"
+            + "\n".join(f"- {wrap_user_input(hint)}" for hint in hints)
+            + "\n"
+            if hints
+            else ""
+        )
         prompt = (
             f"素材标题：{wrap_user_input(item['title'] or '（无标题）')}\n"
             f"素材正文：{wrap_user_input(item['content'])}\n"
-            f"素材类型：{item['kind']}"
+            f"素材类型：{item['kind']}\n"
+            f"{style_block}"
         )
         try:
             return await asyncio.to_thread(
@@ -354,7 +389,7 @@ class ProductionService:
         deliverable_id = str(uuid.uuid4())
         ts = now()
         content = item["content"]
-        draft = await self._draft_from_ai(item)
+        draft = await self._draft_from_ai(owner, item)
         if draft is not None:
             title = draft.title
             body_text = draft.body_text

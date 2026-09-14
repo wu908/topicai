@@ -1,5 +1,7 @@
 """Async creation loop (Spec-013 Phase 1) service contracts."""
 
+import json
+
 import pytest
 
 from app.core.exceptions import IdempotencyConflictException
@@ -412,3 +414,124 @@ async def test_model_draft_still_goes_through_precheck(test_db):
         "WHERE owner_user_id='loop-user' AND event_type='needs_input'"
     )
     assert events, "预检未过必须留 needs_input 事件，而不是死路"
+
+
+# ==================== 参考写法进入草稿生成（冷启动锚点 R7d） ====================
+
+
+async def _store_anchor(db, habits, capability="structured_llm") -> None:
+    """直接写入锚点：这里测的是"写法有没有被用上"，不是锚点怎么推出来的。"""
+    import json as _json
+
+    from app.services.v2_utils import now
+
+    await db.insert(
+        "reference_anchors",
+        {
+            "id": "anchor-1",
+            "owner_user_id": "loop-user",
+            "topics_json": "[]",
+            "structure_habits_json": _json.dumps(
+                [
+                    {
+                        "value": value,
+                        "evidence_refs": ["reference_note:n1", "reference_note:n2"],
+                        "sample_count": 2,
+                        "confidence": "medium",
+                        "limitations": [],
+                    }
+                    for value in habits
+                ],
+                ensure_ascii=False,
+            ),
+            "audience_json": None,
+            "rejected_json": "[]",
+            "source_handles_json": "@某人",
+            "reference_note_count": 2,
+            "capability": capability,
+            "limitations_json": "[]",
+            "ai_trace_id": None,
+            "version": 1,
+            "created_at": now(),
+            "updated_at": now(),
+        },
+    )
+
+
+@pytest.mark.asyncio
+async def test_digest_follows_the_style_read_from_the_references(test_db):
+    """用户贴的参考里读出来的写法，要真的进到生成提示词里。"""
+    from app.services.async_loop import ProductionService
+
+    await insert_user(test_db)
+    await _store_anchor(test_db, ["开头先抛出核心结论，再展开说明", "收尾用一句经验总结点题"])
+    await InboxService(test_db).add("loop-user", _item("with-reference"))
+    llm = _StubLLM(draft=_ai_draft())
+
+    await ProductionService(test_db, llm=llm).digest("loop-user")
+
+    prompt = llm.calls[0]["prompt"]
+    assert "开头先抛出核心结论，再展开说明" in prompt
+    assert "收尾用一句经验总结点题" in prompt
+    # 约束必须写明不得因此编造事实，否则"贴合写法"会变成"编内容"的借口
+    assert "不得因此写出素材里没有的事实" in prompt
+
+
+@pytest.mark.asyncio
+async def test_digest_without_references_promises_nothing(test_db):
+    """没贴参考时提示词里不能出现"参考写法"——没有偏好就不假装有。"""
+    from app.services.async_loop import ProductionService
+
+    await insert_user(test_db)
+    await InboxService(test_db).add("loop-user", _item("no-reference"))
+    llm = _StubLLM(draft=_ai_draft())
+
+    await ProductionService(test_db, llm=llm).digest("loop-user")
+
+    assert "参考写法" not in llm.calls[0]["prompt"]
+
+
+@pytest.mark.asyncio
+async def test_at_most_three_style_hints_reach_the_model(test_db):
+    """写法再多也只送三条：约束越堆越长，模型越容易顾此失彼。"""
+    from app.services.async_loop import ProductionService
+
+    await insert_user(test_db)
+    await _store_anchor(
+        test_db,
+        ["写法一", "写法二", "写法三", "写法四", "写法五"],
+    )
+    await InboxService(test_db).add("loop-user", _item("many-references"))
+    llm = _StubLLM(draft=_ai_draft())
+
+    await ProductionService(test_db, llm=llm).digest("loop-user")
+
+    prompt = llm.calls[0]["prompt"]
+    assert "写法三" in prompt
+    assert "写法四" not in prompt
+
+
+@pytest.mark.asyncio
+async def test_the_fallback_draft_is_not_rewritten_by_reference_style(test_db):
+    """模型不可用时仍然产出可用的确定性骨架——写法不参与，也不该悄悄改变它。"""
+    from app.services.async_loop import ProductionService
+
+    await insert_user(test_db)
+    await _store_anchor(test_db, ["开头先抛出核心结论，再展开说明"])
+    item, _ = await InboxService(test_db).add("loop-user", _item("fallback-with-reference"))
+    llm = _StubLLM(error=RuntimeError("model is down"))
+
+    result = await ProductionService(test_db, llm=llm).digest("loop-user")
+
+    d = result["deliverables"][0]
+    assert d["outline"] == OUTLINE
+    assert "[请在发布前补充并确认具体细节" in d["body_text"]
+    assert "开头先抛出核心结论" not in d["body_text"]
+    assert d["facts"][0]["source_inbox_id"] == item["id"]
+    # 生成来源记在 ready 事件的详情里，按事件断言才真正证明走了降级路径。
+    event = await test_db.fetch_one(
+        "SELECT detail_json FROM production_events WHERE deliverable_id=:id "
+        "AND event_type='ready'",
+        {"id": d["id"]},
+    )
+    assert json.loads(event["detail_json"])["draft_source"] == "deterministic_fallback"
