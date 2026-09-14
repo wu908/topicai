@@ -7,6 +7,7 @@ import json
 from typing import Any
 
 from app.services.creator_rule import CreatorRuleService
+from app.services.creator_state import CreatorStateService
 from app.services.v2_utils import effective_intent_status
 
 
@@ -500,6 +501,25 @@ class ContentGenomeService:
             if not source_ref.startswith("observation:"):
                 continue
             observation_id = source_ref.removeprefix("observation:")
+            # R4 门槛：1 个样本只能算"观察到"。达到跨内容验证（≥2 个同类样本）
+            # 之前不当作 AI 的参考经验——界面承诺"不凭一篇内容下结论"，
+            # 这里就是让那句话成立的地方。
+            evidence_count = int(insight.get("evidence_count") or 1)
+            if evidence_count < CreatorStateService.EVIDENCE_FOR_CROSS_CONTENT:
+                nodes.append(
+                    {
+                        "id": f"validated-insight-pending:{observation_id}",
+                        "node_type": "pending_observation",
+                        "observation_id": observation_id,
+                        "statement": insight.get("statement", ""),
+                        "project_id": insight.get("project_id"),
+                        "evidence_count": evidence_count,
+                        "needed": CreatorStateService.EVIDENCE_FOR_CROSS_CONTENT,
+                        "status": "pending_validation",
+                        "reason_codes": ["needs_corroboration"],
+                    }
+                )
+                continue
             observation = observations_by_id.get(observation_id)
             status = (
                 "applicable"
