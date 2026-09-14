@@ -30,6 +30,8 @@ const api = vi.hoisted(() => ({
   decideHumanGate: vi.fn(),
   confirmProjectIntent: vi.fn(),
   classifyRetrospectiveIntent: vi.fn(),
+  dismissStartInference: vi.fn(),
+  startProject: vi.fn(),
 }));
 
 vi.mock('@/services/api/v2/projects', () => api);
@@ -103,6 +105,9 @@ const legacyPublishedProject: ContentProject = {
   ...project,
   status: 'published',
   intent_status: 'legacy_unclassified',
+  start_inferred_intent: null,
+  start_inferred_question: null,
+  start_inference_confidence: null,
   content_intent: null,
   retrospective_intent: null,
   version: 4,
@@ -713,6 +718,36 @@ describe('ContentPage', () => {
       // 选择框不能停在已不存在的旧选项上，必须同步到新的首个选项。
       expect(screen.getByRole('combobox', { name: '下一步' }))
         .toHaveTextContent('进行有界实验'),
+    );
+  });
+});
+
+describe('推断横幅（R2）', () => {
+  it('renders the inferred intent from the project and can be dismissed', async () => {
+    // 复用完整夹具：只覆盖推断相关字段，避免手写 mock 缺失导致工作台抛错。
+    api.getCalibrationWorkspace.mockResolvedValue({
+      ...workspace,
+      project: {
+        ...project,
+        intent_status: 'candidate' as const,
+        content_intent: 'share' as const,
+        start_inferred_intent: 'share' as const,
+        start_inferred_question: '这组插画里你最想先给大家看哪一张？',
+        start_inference_confidence: 'high' as const,
+      },
+      next_action: {
+        action_type: 'create_version',
+        title: '这组插画里你最想先给大家看哪一张？',
+      },
+    } as unknown as CalibrationWorkspace);
+    renderPage('/content/p1');
+
+    // 刷新后横幅仍在——数据来自项目本身，不是路由 state
+    expect(await screen.findByText(/我理解这是「分享」内容/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: '不对，我自己选' }));
+    await waitFor(() =>
+      expect(api.dismissStartInference).toHaveBeenCalledWith('p1'),
     );
   });
 });

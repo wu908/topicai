@@ -147,3 +147,61 @@ async def test_start_rejects_unknown_or_foreign_inbox_item(test_db):
             "u1",
             ProjectStartRequest(inbox_item_id="nope", idempotency_key="start-4"),
         )
+
+
+# ==================== R2：推断必须被状态机用上，且可被一句话撤销 ====================
+
+
+@pytest.mark.asyncio
+async def test_inference_skips_the_duplicate_intent_confirmation(test_db):
+    """有 AI 推断时不该再问一次「确认这是一条 X 内容吗」——那是重复提问。"""
+    from app.services.intent_orchestrator import IntentOrchestratorService
+
+    await _seed_user(test_db)
+    llm = _StubLLM(payload=_payload("share", "这组插画里你最想先给大家看哪一张？"))
+    started = await ProjectStartService(test_db, llm=llm).start(
+        "u1",
+        ProjectStartRequest(raw_input="我画了一组水彩插画想发出来", idempotency_key="r2-1"),
+    )
+
+    action = await IntentOrchestratorService(test_db).ensure_project_action("u1", started.project_id)
+    assert action["action_type"] == "answer_key_question", "有推断就应直接进入取素材"
+    assert action["title"] == "这组插画里你最想先给大家看哪一张？"
+    assert "哪个瞬间" not in action["title"]
+
+
+@pytest.mark.asyncio
+async def test_dismissing_the_inference_restores_the_confirmation_step(test_db):
+    """用户说「不对，我自己选」→ 清掉推断 → 回到既有的意图确认步骤。"""
+    from app.services.content_project import ContentProjectService
+    from app.services.intent_orchestrator import IntentOrchestratorService
+
+    await _seed_user(test_db)
+    llm = _StubLLM(payload=_payload("share"))
+    started = await ProjectStartService(test_db, llm=llm).start(
+        "u1",
+        ProjectStartRequest(raw_input="随便说点什么", idempotency_key="r2-2"),
+    )
+
+    await ContentProjectService(test_db).dismiss_start_inference(
+        "u1", started.project_id
+    )
+
+    action = await IntentOrchestratorService(test_db).ensure_project_action("u1", started.project_id)
+    assert action["action_type"] == "confirm_intent", "撤销推断后必须回到用户自己定"
+
+
+@pytest.mark.asyncio
+async def test_no_inference_still_asks_the_user_to_confirm(test_db):
+    """模型不可用（没有推断）时行为不变：仍然让用户确认意图。"""
+    from app.services.intent_orchestrator import IntentOrchestratorService
+
+    await _seed_user(test_db)
+    llm = _StubLLM(error=RuntimeError("model down"))
+    started = await ProjectStartService(test_db, llm=llm).start(
+        "u1",
+        ProjectStartRequest(raw_input="随便说点什么", idempotency_key="r2-3"),
+    )
+
+    action = await IntentOrchestratorService(test_db).ensure_project_action("u1", started.project_id)
+    assert action["action_type"] == "confirm_intent"

@@ -354,6 +354,19 @@ class Database:
                             ),
                         ],
                     )
+                elif version == "053_project_start_inference":
+                    await ensure_columns(
+                        "content_projects",
+                        [
+                            ("start_inferred_intent", "TEXT"),
+                            ("start_inferred_question", "TEXT"),
+                            (
+                                "start_inference_confidence",
+                                "TEXT CHECK (start_inference_confidence IS NULL OR "
+                                "start_inference_confidence IN ('high','medium','low'))",
+                            ),
+                        ],
+                    )
                 elif version == "052_auto_digest_setting":
                     await ensure_columns(
                         "users",

@@ -61,6 +61,7 @@ import {
   extractSnapshotMetrics,
   listMaterials,
   addMaterialUsage,
+  dismissStartInference,
   startProject,
 } from '@/services/api/v2/projects';
 import type {
@@ -114,14 +115,36 @@ export default function ContentPage() {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
   const location = useLocation();
-  // 「开始一条内容」带过来的推断结果：呈现给用户，允许一句话纠正。
-  const inference = (location.state as { inference?: {
+  // 推断横幅的数据源：优先项目本身（刷新/重进都还在），导航 state 只用于
+  // 刚创建那一刻（此时工作台尚未加载完项目）。推断不是用户确认，
+  // 所以「不对，我自己选」必须能一键撤销。
+  const navInference = (location.state as { inference?: {
     intent: string | null; intent_label: string; reason: string;
     confidence: 'high' | 'medium' | 'low'; next_question: string;
     source: 'ai' | 'deterministic_fallback';
   } } | null)?.inference;
   const [projects, setProjects] = useState<ContentProject[]>([]);
   const [workspace, setWorkspace] = useState<CalibrationWorkspace | null>(null);
+
+  // 推断横幅的数据源：优先项目本身（刷新/重进都还在），导航 state 只用于
+  // 刚创建那一刻（此时工作台尚未加载完项目）。
+  const projectInferredIntent = workspace?.project.start_inferred_intent ?? null;
+  const inference =
+    !navInference && projectInferredIntent
+      ? {
+          intent: projectInferredIntent,
+          intent_label:
+            projectInferredIntent === 'solve'
+              ? '解决'
+              : projectInferredIntent === 'record'
+                ? '记录'
+                : '分享',
+          reason: '这是开始这条内容时我理解的意图——不对的话你说了算。',
+          confidence: workspace?.project.start_inference_confidence ?? 'medium',
+          next_question: workspace?.project.start_inferred_question ?? '',
+          source: 'ai' as const,
+        }
+      : navInference;
   const [materials, setMaterials] = useState<Material[]>([]);
   const [materialsOpen, setMaterialsOpen] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -388,9 +411,15 @@ export default function ContentPage() {
           <span className="act">
             <button
               type="button"
+              disabled={busy}
               onClick={() => {
-                // 「不对」= 清掉推断，回到既有的意图确认步骤，由用户定。
+                // 「不对」= 撤销推断（服务端清空）→ 状态机回到意图确认步骤。
                 navigate(location.pathname, { replace: true, state: null });
+                if (workspace) {
+                  void runCommand(async () => {
+                    await dismissStartInference(workspace.project.id);
+                  });
+                }
               }}
             >
               不对，我自己选

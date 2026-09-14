@@ -403,6 +403,12 @@ class IntentOrchestratorService:
     async def _derive_action(self, owner_user_id: str, project: dict[str, Any]) -> str:
         intent_status = effective_intent_status(project)
         if intent_status not in {"working_confirmed", "locked", "retrospective"}:
+            # R2：「开始一条内容」时 AI 已经推断过意图，且用户看得到纠正入口
+            # （工作台顶部的推断横幅）。此时再问一次「确认这是一条 X 内容吗」
+            # 是重复提问——直接进入取素材那一步。用户点「不对，我自己选」
+            # 会清空该列，于是回到既有的确认步骤。
+            if project.get("start_inferred_intent"):
+                return "answer_key_question"
             return "confirm_intent"
         if not project.get("current_version_id"):
             return "answer_key_question"
@@ -642,6 +648,10 @@ class IntentOrchestratorService:
     def _action_spec(self, action_type: str, project: dict[str, Any] | None) -> dict[str, Any]:
         intent = resolved_action_intent(project)
         config = INTENT_CONFIG.get(intent or "", _UNRESOLVED_INTENT_CONFIG)
+        # R2：推断出的问题是"针对这条材料"的（例如展示作品类不会被问转折），
+        # 优先于按意图固定的通用问题。
+        if project and (project.get("start_inferred_question") or "").strip():
+            config = {**config, "question": project["start_inferred_question"].strip()}
         audience = (project or {}).get("target_audience") or "目标读者尚未确认"
         project_id = (project or {}).get("id", "")
         # With no confirmed or classified intent there is nothing to confirm yet:

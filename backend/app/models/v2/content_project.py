@@ -32,6 +32,11 @@ class ContentProjectCreate(BaseModel):
     audience_change: str | None = Field(default=None, max_length=1000)
     status: ProjectStatus = ProjectStatus.PREPARING
     planned_publish_at: str | None = None
+    # 「开始一条内容」的推断结果（R2）：状态机据此跳过重复的意图确认，
+    # 并用推断出的问题替代按意图固定的问题。刻意与 intent_status 分离。
+    start_inferred_intent: ContentIntent | None = None
+    start_inferred_question: str | None = Field(default=None, max_length=300)
+    start_inference_confidence: Literal["high", "medium", "low"] | None = None
     opportunity_id: str | None = None
     starter_sprint_id: str | None = None
     idempotency_key: str = Field(min_length=1, max_length=200)

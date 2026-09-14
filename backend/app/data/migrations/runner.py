@@ -609,6 +609,15 @@ _INTENT_MODEL_CONTENT_PROJECTS_SQL = """
                                             'legacy_unclassified','retrospective'
                                         )),
         audience_change             TEXT,
+        -- 「开始一条内容」的推断结果（R2）。刻意与 intent_status 分离：
+        -- 推断不是用户确认，用户点「不对，我自己选」时清空即可回退。
+        start_inferred_intent       TEXT
+                                        CHECK (start_inferred_intent IS NULL OR
+                                               start_inferred_intent IN ('solve','share','record')),
+        start_inferred_question     TEXT,
+        start_inference_confidence  TEXT
+                                        CHECK (start_inference_confidence IS NULL OR
+                                               start_inference_confidence IN ('high','medium','low')),
         material_requirements_json  TEXT NOT NULL DEFAULT '[]',
         expected_responses_json     TEXT NOT NULL DEFAULT '[]',
         success_signals_json        TEXT NOT NULL DEFAULT '[]',
@@ -1120,6 +1129,22 @@ def apply(
                         (
                             "snapshot_id",
                             "TEXT REFERENCES performance_snapshots_v2(id)",
+                        ),
+                    ],
+                )
+                conn.executescript(sql)
+            elif version == "053_project_start_inference":
+                # 「开始一条内容」的推断结果（R2）：状态机据此跳过重复的意图确认。
+                _ensure_columns(
+                    conn,
+                    "content_projects",
+                    [
+                        ("start_inferred_intent", "TEXT"),
+                        ("start_inferred_question", "TEXT"),
+                        (
+                            "start_inference_confidence",
+                            "TEXT CHECK (start_inference_confidence IS NULL OR "
+                            "start_inference_confidence IN ('high','medium','low'))",
                         ),
                     ],
                 )
