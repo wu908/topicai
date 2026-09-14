@@ -49,29 +49,34 @@ export default function ReferenceAnchorPage() {
   const [error, setError] = useState<string | null>(null);
   const [composing, setComposing] = useState(false);
   const [rewriting, setRewriting] = useState(false);
+  // 读数期间输入的正文已被清空，条数必须单独记住，否则会显示"正在读这 0 条参考"。
+  const [readingCount, setReadingCount] = useState(0);
   const [draftTopics, setDraftTopics] = useState('');
   const [draftHabits, setDraftHabits] = useState('');
   const [draftAudience, setDraftAudience] = useState('');
   const importKeyRef = useRef<{ signature: string; key: string } | null>(null);
-  // 卸载后到达的响应不能再写状态。
-  const aliveRef = useRef(true);
+  // StrictMode 会在挂载后立刻"清理再挂载"一次。一次性布尔锁会在那次清理里被永久置为
+  // false，页面于是永远停在加载态（真实浏览器里就是这样暴露出来的）。改用递增令牌：
+  // 只有过期请求会被丢弃，第二次挂载照常生效——与 GrowthOnboardingPage 同一套写法。
+  const requestTokenRef = useRef(0);
   useEffect(() => () => {
-    aliveRef.current = false;
+    requestTokenRef.current = -1;
   }, []);
 
   const parsed = useMemo(() => parseReferences(text), [text]);
 
   const load = useCallback(async () => {
+    const token = (requestTokenRef.current += 1);
     setError(null);
     try {
       const next = await getReferenceAnchor();
-      if (!aliveRef.current) return;
+      if (requestTokenRef.current !== token) return;
       setAnchor(next);
     } catch (err) {
-      if (!aliveRef.current) return;
+      if (requestTokenRef.current !== token) return;
       setError(extractErrorMessage(err, '读取参考失败'));
     } finally {
-      if (aliveRef.current) setLoading(false);
+      if (requestTokenRef.current === token) setLoading(false);
     }
   }, []);
 
@@ -82,7 +87,10 @@ export default function ReferenceAnchorPage() {
 
   const handleRead = async () => {
     if (!parsed.items.length || parsed.problems.length) return;
+    const token = (requestTokenRef.current += 1);
+    const count = parsed.items.length;
     setError(null);
+    setReadingCount(count);
     setReading(true);
     try {
       const signature = text;
@@ -90,6 +98,7 @@ export default function ReferenceAnchorPage() {
         importKeyRef.current = { signature, key: `reference-import:${Date.now()}` };
       }
       const result = await importReferences(parsed.items, importKeyRef.current.key);
+      if (requestTokenRef.current !== token) return;
       if (result.failure_count > 0) {
         const firstFailure = result.item_results.find((item) => item.status === 'failed');
         setError(`有 ${result.failure_count} 条没能导入：${firstFailure?.error ?? '检查一下来源和标题'}`);
@@ -100,28 +109,32 @@ export default function ReferenceAnchorPage() {
       setComposing(false);
       // 这一跳会读内容本身：模型可用时通常十几秒。
       const next = await getReferenceAnchor();
-      if (!aliveRef.current) return;
+      if (requestTokenRef.current !== token) return;
       setAnchor(next);
     } catch (err) {
-      if (!aliveRef.current) return;
+      if (requestTokenRef.current !== token) return;
       setError(extractErrorMessage(err, '这次没读出来，稍后再试一次'));
     } finally {
-      if (aliveRef.current) setReading(false);
+      if (requestTokenRef.current === token) setReading(false);
     }
   };
 
   const act = async (command: () => Promise<ReferenceAnchor>) => {
+    const token = (requestTokenRef.current += 1);
     setBusy(true);
     setError(null);
     try {
       const next = await command();
-      if (aliveRef.current) setAnchor(next);
+      if (requestTokenRef.current === token) setAnchor(next);
     } catch (err) {
-      if (!aliveRef.current) return;
+      if (requestTokenRef.current !== token) return;
+      // 409 说明本地读数已经过期：先复位忙碌态，再从服务端拉一次真实的。
+      setBusy(false);
       setError(extractErrorMessage(err, '操作没有完成，请重试'));
-      await load();
+      void load();
+      return;
     } finally {
-      if (aliveRef.current) setBusy(false);
+      if (requestTokenRef.current === token) setBusy(false);
     }
   };
 
@@ -178,7 +191,7 @@ export default function ReferenceAnchorPage() {
         <section className="anchor-section" aria-labelledby="anchor-reading-title">
           <div className="anchor-block-head">
             <CircularProgress size={18} />
-            <h2 id="anchor-reading-title">正在读这 {parsed.items.length || anchor?.reference_count} 条参考…</h2>
+            <h2 id="anchor-reading-title">正在读这 {readingCount} 条参考…</h2>
           </div>
           <p className="anchor-note" role="status">
             这一步会读内容本身，通常十几秒。你可以先去做别的——读数会留下来，回来直接看。

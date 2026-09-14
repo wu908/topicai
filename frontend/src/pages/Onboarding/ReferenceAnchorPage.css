@@ -98,6 +98,9 @@
 .anchor-block li {
   display: grid;
   gap: 4px;
+  /* 网格子项默认会被拉伸：不加这一条，MUI 按钮会撑满整行、文字居中，
+     看起来不属于任何一条结论。让每个子项按自身宽度靠左。 */
+  justify-items: start;
   padding-bottom: 10px;
   border-bottom: 1px solid var(--v3-glass-outline, rgba(23, 28, 38, 0.055));
 }

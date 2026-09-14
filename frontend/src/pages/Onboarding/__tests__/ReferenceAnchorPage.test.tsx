@@ -1,3 +1,4 @@
+import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -69,13 +70,18 @@ const reading = anchor({
 });
 
 function renderPage() {
+  // 必须包在 StrictMode 里渲染：这个页面曾经在 StrictMode 的"挂载→清理→再挂载"
+  // 下被一次性布尔锁卡死在加载态（真实浏览器里才暴露出来）。默认渲染不会触发这条
+  // 路径，测试就会变成一张漏网。
   return render(
-    <MemoryRouter initialEntries={['/onboarding/reference']}>
-      <Routes>
-        <Route path="/onboarding/reference" element={<ReferenceAnchorPage />} />
-        <Route path="/content" element={<div>内容页</div>} />
-      </Routes>
-    </MemoryRouter>,
+    <React.StrictMode>
+      <MemoryRouter initialEntries={['/onboarding/reference']}>
+        <Routes>
+          <Route path="/onboarding/reference" element={<ReferenceAnchorPage />} />
+          <Route path="/content" element={<div>内容页</div>} />
+        </Routes>
+      </MemoryRouter>
+    </React.StrictMode>,
   );
 }
 
