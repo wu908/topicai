@@ -2,9 +2,10 @@
 
 import pytest
 
-from app.models.v2.async_loop import InboxItemCreate
+from app.models.v2.async_loop import DiscardRequest, InboxItemCreate
 from app.services.async_loop import (
     InboxService,
+    PickupService,
     ProductionService,
 )
 from app.services.content_project import ContentProjectService
@@ -153,3 +154,113 @@ async def test_private_consent_item_never_reaches_shelf_via_api(client):
     assert digest["deliverables"] == []
     shelf = (await client.get("/api/v2/loop/deliverables")).json()["data"]
     assert shelf["total"] == 0
+
+
+# ==================== 灵感池（第六轮） ====================
+
+
+async def _seed_pooled(test_db, suffix="pool", *, discard=True):
+    """造一条落在灵感池里的产出：丢弃或过期。"""
+    import datetime
+
+    d = await _seed_ready(test_db, suffix)
+    if discard:
+        await PickupService(test_db).discard(
+            "u1", d["id"], DiscardRequest(reason="换换口味", idempotency_key=f"drop-{suffix}")
+        )
+    else:
+        past = (datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=8)).isoformat()
+        await test_db.execute(
+            "UPDATE deliverables SET expire_at=:past WHERE id=:id",
+            {"past": past, "id": d["id"]},
+        )
+    return d
+
+
+@pytest.mark.asyncio
+async def test_pool_query_returns_discarded_and_expired(client, test_db):
+    """池 = expired ∪ discarded，一次查出来。"""
+    discarded = await _seed_pooled(test_db, "pd", discard=True)
+    expired = await _seed_pooled(test_db, "pe", discard=False)
+
+    pooled = (await client.get("/api/v2/loop/deliverables?status=expired,discarded")).json()
+    ids = {item["id"] for item in pooled["data"]["items"]}
+    assert discarded["id"] in ids
+    assert expired["id"] in ids
+
+    # 架上不应再出现它们
+    shelf = {item["id"] for item in
+             (await client.get("/api/v2/loop/deliverables")).json()["data"]["items"]}
+    assert discarded["id"] not in shelf
+    assert expired["id"] not in shelf
+
+
+@pytest.mark.asyncio
+async def test_unknown_status_is_rejected_not_silently_empty(client, test_db):
+    response = await client.get("/api/v2/loop/deliverables?status=bogus")
+    assert response.status_code == 400
+    assert "unknown deliverable status" in response.json()["message"]
+
+
+@pytest.mark.asyncio
+async def test_restore_puts_pooled_item_back_on_shelf(client, test_db):
+    d = await _seed_pooled(test_db, "restore", discard=True)
+
+    restored = await client.post(f"/api/v2/loop/deliverables/{d['id']}:restore")
+    assert restored.status_code == 200
+    assert restored.json()["data"]["status"] == "ready"
+    assert restored.json()["data"]["attribution"] is None
+    assert restored.json()["data"]["expire_at"]
+
+    shelf = {item["id"] for item in
+             (await client.get("/api/v2/loop/deliverables")).json()["data"]["items"]}
+    assert d["id"] in shelf
+    pool = {item["id"] for item in
+            (await client.get(
+                "/api/v2/loop/deliverables?status=expired,discarded")).json()["data"]["items"]}
+    assert d["id"] not in pool
+
+
+@pytest.mark.asyncio
+async def test_restore_rejects_ready_item(client, test_db):
+    """架上待决定的产出不能走 restore（避免语义混乱）。"""
+    d = await _seed_ready(test_db, "ready-restore")
+    response = await client.post(f"/api/v2/loop/deliverables/{d['id']}:restore")
+    assert response.status_code == 400
+    assert "only pooled deliverables can be restored" in response.json()["message"]
+
+
+@pytest.mark.asyncio
+async def test_delete_removes_pooled_item_permanently(client, test_db):
+    d = await _seed_pooled(test_db, "del", discard=True)
+    response = await client.delete(f"/api/v2/loop/deliverables/{d['id']}")
+    assert response.status_code == 200
+    assert response.json()["data"]["id"] == d["id"]
+
+    pool = {item["id"] for item in
+            (await client.get(
+                "/api/v2/loop/deliverables?status=expired,discarded")).json()["data"]["items"]}
+    assert d["id"] not in pool
+
+
+@pytest.mark.asyncio
+async def test_delete_rejects_ready_item(client, test_db):
+    d = await _seed_ready(test_db, "ready-del")
+    response = await client.delete(f"/api/v2/loop/deliverables/{d['id']}")
+    assert response.status_code == 400
+    assert "only pooled deliverables can be deleted" in response.json()["message"]
+
+
+@pytest.mark.asyncio
+async def test_pool_actions_are_owner_scoped(client_as_u2, test_db):
+    """u2 不能恢复或删除 u1 的池内条目（404 = 不泄漏存在性）。"""
+    d = await _seed_pooled(test_db, "owner", discard=True)
+    assert (await client_as_u2.post(
+        f"/api/v2/loop/deliverables/{d['id']}:restore")).status_code == 404
+    assert (await client_as_u2.delete(
+        f"/api/v2/loop/deliverables/{d['id']}")).status_code == 404
+    # u1 的条目原样留在池里
+    pool = {item["id"] for item in
+            (await client_as_u2.get(
+                "/api/v2/loop/deliverables?status=expired,discarded")).json()["data"]["items"]}
+    assert d["id"] not in pool
