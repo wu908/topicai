@@ -721,15 +721,18 @@ async def test_growth_creator_completes_confirmed_learning_loop(
         item["source_ref"] == observation_ref
         for item in completed["creator_state"]["validated_insights"]
     )
-    assert completed["content_genome"]["insight_context"] == [
-        {
-            "source_ref": observation_ref,
-            "statement": plan["experiment_item"],
-            "project_id": project["id"],
-            "scope": learning["observation"]["scope"],
-            "reason": "user_confirmed_review_insight",
-        }
+    # R4：一次观察还不够格当"已验证经验"——界面承诺"不凭一篇内容下结论"，
+    # 所以这里断言它**没有**进入生成上下文，而是以待验证观察出现。
+    assert completed["content_genome"]["insight_context"] == []
+    pending = [
+        node
+        for node in completed["content_genome"]["nodes"]
+        if node.get("node_type") == "pending_observation"
     ]
+    assert len(pending) == 1
+    assert pending[0]["statement"] == plan["experiment_item"]
+    assert pending[0]["evidence_count"] == 1
+    assert pending[0]["needed"] == 2
     unrelated_genome = await client.get(
         "/api/v2/content-genome", params={"content_intent": "share"}
     )
@@ -739,7 +742,11 @@ async def test_growth_creator_completes_confirmed_learning_loop(
         "SELECT evidence_refs_json FROM ai_traces_v2 WHERE id=:id",
         {"id": completed["orchestrated_action"]["ai_trace_id"]},
     )
-    assert observation_ref in json.loads(manage_trace["evidence_refs_json"])
+    # R4 后这条观察是"待验证"：它不再是 AI 的证据（`待验证 != 已验证`），
+    # 但仍属于本次动作处理的观察——工作台与 genome 节点里都能找到它。
+    trace_refs = json.loads(manage_trace["evidence_refs_json"])
+    assert "confirmed_project_state" in trace_refs
+    assert observation_ref not in trace_refs
 
     project_id = project["id"]
     observation_id = learning["observation"]["id"]

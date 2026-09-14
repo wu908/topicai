@@ -157,14 +157,69 @@ class CreatorStateService:
             )
         return await self.get(owner_user_id)
 
+    #: 沉淀门槛（对齐 cheat-on-content 的观察生命周期）：
+    #: 1 个样本只能说"观察到"，2 个同类样本才算跨内容观察，3 个才叫规律。
+    #: 只有达到 cross_content 及以上的经验才会被当作生成参考——
+    #: 这修掉了"一条内容确认后立刻成为已验证经验"与界面"不凭一篇内容下结论"的矛盾。
+    INSIGHT_STAGE_OBSERVATION = "observation"
+    INSIGHT_STAGE_CROSS_CONTENT = "cross_content"
+    INSIGHT_STAGE_SETTLED = "settled"
+    EVIDENCE_FOR_CROSS_CONTENT = 2
+    EVIDENCE_FOR_SETTLED = 3
+
+    @classmethod
+    def _stage_for(cls, evidence_count: int) -> str:
+        if evidence_count >= cls.EVIDENCE_FOR_SETTLED:
+            return cls.INSIGHT_STAGE_SETTLED
+        if evidence_count >= cls.EVIDENCE_FOR_CROSS_CONTENT:
+            return cls.INSIGHT_STAGE_CROSS_CONTENT
+        return cls.INSIGHT_STAGE_OBSERVATION
+
+    @staticmethod
+    def _insight_pattern_key(insight: dict[str, Any]) -> str:
+        """同类判定的键。
+
+        当前用 scope（平台/形态等）做粗粒度归类并在数据里留痕；
+        用模型给语义化的 pattern 标签是后续改进，这里不假装更精确。
+        """
+        scope = insight.get("scope") or {}
+        try:
+            canonical = json.dumps(scope, sort_keys=True, ensure_ascii=False)
+        except (TypeError, ValueError):
+            canonical = str(scope)
+        return canonical
+
     async def append_validated_insight(
         self, owner_user_id: str, insight: dict[str, Any]
     ) -> dict[str, Any]:
         state = await self.get(owner_user_id)
         insights = list(state["validated_insights"])
         source_ref = insight.get("source_ref")
+        pattern_key = self._insight_pattern_key(insight)
         if source_ref and not any(item.get("source_ref") == source_ref for item in insights):
-            insights.append({**insight, "confirmed_at": now(), "editable": True})
+            # 同类样本已存在 → 累加证据并升格；否则这是一条新观察（1 个样本）。
+            same = next(
+                (item for item in insights if item.get("pattern_key") == pattern_key),
+                None,
+            )
+            if same is not None:
+                evidence = int(same.get("evidence_count") or 1) + 1
+                same["evidence_count"] = evidence
+                same["stage"] = self._stage_for(evidence)
+                same.setdefault("corroborated_by", []).append(source_ref)
+                same["updated_at"] = now()
+                insights = [same if item is same else item for item in insights]
+            else:
+                insights.append(
+                    {
+                        **insight,
+                        "pattern_key": pattern_key,
+                        "evidence_count": 1,
+                        "stage": self.INSIGHT_STAGE_OBSERVATION,
+                        "confirmed_at": now(),
+                        "editable": True,
+                    }
+                )
             await self.db.execute(
                 "UPDATE creator_states SET validated_insights_json=:items,updated_at=:now,"
                 "version=version+1 WHERE owner_user_id=:owner",

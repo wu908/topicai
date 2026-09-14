@@ -527,6 +527,9 @@ class IntentOrchestratorService:
                 *content_genome.get("viewpoint_context", []),
                 *content_genome.get("series_context", []),
                 *content_genome.get("insight_context", []),
+                # 待验证观察：证据不足不能当生成依据，但本动作正是在处理它，
+                # trace 必须引用得到，否则"这条建议从哪来"就断了。
+                *content_genome.get("pending_observations", []),
             ]
         ]
         evidence_refs = list(dict.fromkeys([*spec["evidence_refs"], *genome_refs]))

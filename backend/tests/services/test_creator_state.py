@@ -236,3 +236,77 @@ def test_auto_prepare_capabilities_excludes_protected_decisions():
     assert _AUTO_PREPARE_CAPABILITIES.isdisjoint(protected), (
         "AUTO_PREPARE_CAPABILITIES must not overlap with protected decisions"
     )
+
+
+# ==================== R4：经验沉淀的样本门槛（对齐 cheat-on-content） ====================
+
+
+@pytest.mark.asyncio
+async def test_single_observation_is_not_yet_validated_experience(trust_db):
+    """一条内容确认后只能说"观察到"——界面承诺"不凭一篇内容下结论"。"""
+    service = CreatorStateService(trust_db)
+    state = await service.append_validated_insight(
+        "u-trust",
+        {
+            "statement": "开头放翻车图收藏率更高",
+            "source_ref": "observation:o1",
+            "scope": {"platform": "xiaohongshu", "format": "graphic_note"},
+        },
+    )
+
+    insight = state["validated_insights"][0]
+    assert insight["evidence_count"] == 1
+    assert insight["stage"] == CreatorStateService.INSIGHT_STAGE_OBSERVATION
+    assert insight["pattern_key"], "同类判定键必须留痕，便于审计"
+
+
+@pytest.mark.asyncio
+async def test_corroborating_sample_promotes_the_insight(trust_db):
+    """同类样本第二次出现 → 升格为跨内容观察（这才算"多次验证"）。"""
+    service = CreatorStateService(trust_db)
+    scope = {"platform": "xiaohongshu", "format": "graphic_note"}
+    await service.append_validated_insight(
+        "u-trust", {"statement": "A", "source_ref": "observation:o1", "scope": scope}
+    )
+    state = await service.append_validated_insight(
+        "u-trust", {"statement": "A'", "source_ref": "observation:o2", "scope": scope}
+    )
+
+    assert len(state["validated_insights"]) == 1, "同类样本应累加而不是新建"
+    insight = state["validated_insights"][0]
+    assert insight["evidence_count"] == 2
+    assert insight["stage"] == CreatorStateService.INSIGHT_STAGE_CROSS_CONTENT
+    assert "observation:o2" in insight["corroborated_by"]
+
+
+@pytest.mark.asyncio
+async def test_third_sample_reaches_settled(trust_db):
+    """第三个同类样本 → 规律沉淀。"""
+    service = CreatorStateService(trust_db)
+    scope = {"platform": "xiaohongshu", "format": "graphic_note"}
+    for index in range(3):
+        state = await service.append_validated_insight(
+            "u-trust",
+            {"statement": f"S{index}", "source_ref": f"observation:o{index}", "scope": scope},
+        )
+    insight = state["validated_insights"][0]
+    assert insight["evidence_count"] == 3
+    assert insight["stage"] == CreatorStateService.INSIGHT_STAGE_SETTLED
+
+
+@pytest.mark.asyncio
+async def test_different_scope_is_a_different_observation(trust_db):
+    """不同 scope 不该被当成同类——否则门槛形同虚设。"""
+    service = CreatorStateService(trust_db)
+    await service.append_validated_insight(
+        "u-trust",
+        {"statement": "A", "source_ref": "observation:o1",
+         "scope": {"platform": "xiaohongshu", "format": "graphic_note"}},
+    )
+    state = await service.append_validated_insight(
+        "u-trust",
+        {"statement": "B", "source_ref": "observation:o2",
+         "scope": {"platform": "douyin", "format": "vlog_plan"}},
+    )
+    assert len(state["validated_insights"]) == 2
+    assert all(i["evidence_count"] == 1 for i in state["validated_insights"])
