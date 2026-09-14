@@ -173,8 +173,10 @@ export default function CompanionDialog() {
         onClick={() => (open ? close() : setOpen(true))}
         sx={{
           position: 'relative',
-          width: 80,
-          height: 80,
+          // 移动端缩小悬浮球（80→56）：固定球会压住滚动内容，
+          // 390px 实测曾覆盖产出架的「时机不对」弃选 chip（第五轮 C2）。
+          width: { xs: 56, sm: 80 },
+          height: { xs: 56, sm: 80 },
           border: 'none',
           borderRadius: '50%',
           cursor: 'grab',
