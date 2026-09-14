@@ -22,6 +22,7 @@ const GrowthPage = React.lazy(() => import('@/pages/Growth/GrowthPage'));
 const MePage = React.lazy(() => import('@/pages/Me/MePage'));
 const StarterPage = React.lazy(() => import('@/pages/Starter/StarterPage'));
 const GrowthOnboardingPage = React.lazy(() => import('@/pages/GrowthOnboarding/GrowthOnboardingPage'));
+const ReferenceAnchorPage = React.lazy(() => import('@/pages/Onboarding/ReferenceAnchorPage'));
 const NotFoundPage = React.lazy(() => import('@/pages/NotFound/NotFoundPage'));
 
 const LazyRoute = ({ children }: { children: React.ReactNode }) => (
@@ -77,6 +78,7 @@ export default function App() {
             <Route path="/onboarding/directions" element={protectedPage(<StarterPage />)} />
             <Route path="/onboarding/sprint" element={protectedPage(<StarterPage />)} />
             <Route path="/onboarding/growth" element={protectedPage(<GrowthOnboardingPage />)} />
+            <Route path="/onboarding/reference" element={protectedPage(<ReferenceAnchorPage />)} />
             {/* 404 stays outside the auth guard: unknown paths should show
                 the not-found page, not redirect unauthenticated visitors. */}
             <Route path="*" element={<LazyRoute><NotFoundPage /></LazyRoute>} />

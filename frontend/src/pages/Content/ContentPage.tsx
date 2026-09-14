@@ -310,9 +310,12 @@ export default function ContentPage() {
             <ScienceOutlined />
             <div>
               <h2 id="starter-entry-title">还不知道第一篇做什么？</h2>
-              <p>盘点真实经历、兴趣和技能，选择一条方向做三篇 14 天实验。</p>
+              <p>盘点真实经历、兴趣和技能做一条 14 天实验；或者贴 2–3 个你想做成的账号，让系统替你读它们的选题和写法。</p>
             </div>
-            <Button variant="outlined" endIcon={<ArrowForward />} onClick={() => navigate('/onboarding/assessment')}>开始起步实验</Button>
+            <div className="starter-entry-actions">
+              <Button variant="outlined" endIcon={<ArrowForward />} onClick={() => navigate('/onboarding/assessment')}>开始起步实验</Button>
+              <Button variant="outlined" endIcon={<ArrowForward />} onClick={() => navigate('/onboarding/reference')}>贴参考，读方向</Button>
+            </div>
           </section>
         ) : null}
         {empty || showCreate ? (

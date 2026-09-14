@@ -200,6 +200,14 @@ export default function GrowthOnboardingPage() {
                 <Chip size="small" label={profile.confirmation_state === 'confirmed' ? '已确认' : profile.confirmation_state === 'needs_review' ? '待确认' : '资料不足，暂定'} />
               </div>
               {profile.confirmation_state === 'provisional' ? <Alert severity="info">历史内容不足 10 条，当前判断为暂定；你仍可手动补全并确认。</Alert> : null}
+              {/* 填不出下面的字段时，贴几个想做成样的参考比硬填更接近用户真正知道的
+                  东西——那条路读出来的方向会帮他填这里。 */}
+              <Alert
+                severity="info"
+                action={<Button color="inherit" onClick={() => navigate('/onboarding/reference')}>贴参考</Button>}
+              >
+                不知道方向该写什么？贴 2–3 个你想做成的账号或笔记，让系统替你读它们的选题、写法和读者。
+              </Alert>
               <div className="growth-form-grid">
                 <TextField label="创作方向" value={niche} onChange={(event) => setNiche(event.target.value)} required />
                 <TextField select label="成长目标" value={growthGoal} onChange={(event) => setGrowthGoal(event.target.value as typeof growthGoal)}>

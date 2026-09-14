@@ -1,0 +1,184 @@
+/* 「你想做成什么样」——参考读数页（冷启动锚点 R7）。
+   沿用 GrowthOnboardingPage 的排版语言（分节 + 左侧小标 + 标题），
+   因为它属于同一段引导旅程；只是把读出来的东西做成可以逐条否证的结构。 */
+
+.anchor-loading {
+  min-height: 320px;
+  display: grid;
+  place-items: center;
+}
+
+.anchor-back.anchor-back {
+  margin-bottom: 18px;
+}
+
+.anchor-section {
+  max-width: 860px;
+  display: grid;
+  gap: 16px;
+  padding-bottom: 22px;
+}
+
+.anchor-section + .anchor-section {
+  padding-top: 22px;
+  border-top: 1px solid var(--v3-border, #e8e5e1);
+}
+
+.anchor-heading,
+.anchor-block-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.anchor-heading > span {
+  width: 100%;
+  color: var(--v3-text-ter);
+  font-size: 12px;
+}
+
+.anchor-heading h2 {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.35;
+}
+
+.anchor-block-head h2,
+.anchor-block-head h3 {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.4;
+}
+
+.anchor-hint,
+.anchor-note {
+  color: var(--v3-text-ter);
+  font-size: 13px;
+}
+
+.anchor-preview {
+  display: grid;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--v3-text-sec);
+}
+
+/* 移动端 390：识别结果的芯片必须能换行，不能把宽度顶开 */
+.anchor-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.anchor-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.anchor-block {
+  display: grid;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1px solid var(--v3-glass-border, rgba(255, 255, 255, 0.82));
+  border-radius: var(--v3-radius, 15px);
+  background: var(--v3-surface, rgba(255, 255, 255, 0.55));
+}
+
+.anchor-block ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 12px;
+}
+
+.anchor-block li {
+  display: grid;
+  gap: 4px;
+  /* 网格子项默认会被拉伸：不加这一条，MUI 按钮会撑满整行、文字居中，
+     看起来不属于任何一条结论。让每个子项按自身宽度靠左。 */
+  justify-items: start;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--v3-glass-outline, rgba(23, 28, 38, 0.055));
+}
+
+.anchor-block li:last-child {
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.anchor-item-main {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.anchor-item-main strong {
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+.anchor-support {
+  color: var(--v3-text-ter);
+  font-size: 12px;
+}
+
+.anchor-item-limitation {
+  color: var(--v3-text-ter);
+  font-size: 12px;
+}
+
+.anchor-empty-block {
+  display: grid;
+  gap: 6px;
+}
+
+.anchor-empty-block h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.anchor-limitations {
+  margin: 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 5px;
+  color: var(--v3-text-ter);
+  font-size: 12px;
+}
+
+.anchor-rewrite {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid var(--v3-border-light, rgba(255, 255, 255, 0.65));
+  border-radius: var(--v3-radius, 15px);
+  background: var(--v3-panel-bg, rgba(255, 255, 255, 0.5));
+}
+
+.anchor-next {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-top: 4px;
+}
+
+@media (max-width: 640px) {
+  .anchor-section {
+    gap: 14px;
+  }
+
+  .anchor-block {
+    padding: 12px;
+  }
+
+  .anchor-next {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

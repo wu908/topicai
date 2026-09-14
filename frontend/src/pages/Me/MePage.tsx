@@ -314,6 +314,7 @@ export default function MePage() {
           </section>
           <div className="operations-row-actions">
             <Button variant="contained" onClick={() => navigate('/onboarding/growth')}>导入历史内容并校对画像</Button>
+            <Button variant="outlined" onClick={() => navigate('/onboarding/reference')}>贴参考，读出你想做成什么样</Button>
             <Button variant="outlined" onClick={() => navigate('/content')}>查看内容项目</Button>
           </div>
         </>
