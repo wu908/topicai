@@ -181,22 +181,16 @@ describe('ContentPage', () => {
     api.classifyRetrospectiveIntent.mockResolvedValue({ project: legacyPublishedProject });
   });
 
-  it('shows a real project creation form when the project list is empty', async () => {
+  it('offers the conversational start entry when the project list is empty', async () => {
     renderPage();
 
-    expect(await screen.findByRole('heading', { name: '先说一条你想做的内容' })).toBeInTheDocument();
-    expect(screen.getByLabelText('项目标题')).toBeInTheDocument();
-    expect(screen.getByLabelText('目标读者')).toBeInTheDocument();
-    const createButton = screen.getByRole('button', { name: '创建项目' });
-    expect(createButton).toBeDisabled();
-    fireEvent.change(screen.getByLabelText('项目标题'), {
-      target: { value: '第一个真实经验项目' },
-    });
-    fireEvent.change(screen.getByLabelText('目标读者'), {
-      target: { value: '知识型图文创作者' },
-    });
-    expect(createButton).toBeEnabled();
+    // R1：入口不再是一张表单——一个输入框即可开始，标题/意图/读者变化都不再前置。
+    expect(await screen.findByRole('heading', { name: '开始一条内容' })).toBeInTheDocument();
+    expect(screen.getByLabelText('一句话说说你想做什么')).toBeInTheDocument();
+    expect(screen.queryByLabelText('项目标题')).toBeNull();
+    expect(screen.queryByLabelText('这条内容更像什么')).toBeNull();
   });
+
 
   // ADR 0002：历史内容的发布意图为空，列表不能替用户兜底成某个具体意图。
   it('labels historical projects from the retrospective intent, never a default', async () => {
