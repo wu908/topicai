@@ -139,6 +139,17 @@ class ProjectStartService:
                 # 推断出意图就带上（工作台据此选问题集）；没推断出就留空，
                 # 由既有的"确认内容目的"步骤让用户定。
                 **({"content_intent": inference.intent} if inference.intent else {}),
+                # 推断记录（R2）：状态机据此跳过重复的意图确认，并用这个
+                # 针对当前材料的问题替代按意图固定的通用问题。
+                **(
+                    {
+                        "start_inferred_intent": inference.intent,
+                        "start_inferred_question": inference.next_question,
+                        "start_inference_confidence": inference.confidence,
+                    }
+                    if inference.intent
+                    else {}
+                ),
                 idempotency_key=body.idempotency_key,
             ),
         )

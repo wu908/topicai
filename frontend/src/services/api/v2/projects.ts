@@ -299,6 +299,14 @@ export const generateContentOpportunities = (desiredCount = 6) =>
   );
 
 /** 「开始一条内容」：一句话或一条素材 → AI 推断 → 建项目。 */
+/** 撤销 AI 的推断，把意图决定权交回用户（R2 的「不对，我自己选」）。 */
+export const dismissStartInference = (projectId: string) =>
+  getData(
+    v2Client.post<ApiEnvelope<{ project_id: string }>>(
+      `/projects/${encodeURIComponent(projectId)}:dismiss-inference`,
+    ),
+  );
+
 export const startProject = (input: {
   raw_input?: string;
   inbox_item_id?: string;

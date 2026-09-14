@@ -130,6 +130,11 @@ export interface ContentProject {
   retrospective_intent: ContentIntent | null;
   content_format: ContentFormat;
   intent_status: IntentStatus;
+  /** 「开始一条内容」时 AI 的推断（R2）。刻意与 intent_status 分离：
+   *  推断不是用户确认；用户说「不对，我自己选」后被清空。 */
+  start_inferred_intent: ContentIntent | null;
+  start_inferred_question: string | null;
+  start_inference_confidence: 'high' | 'medium' | 'low' | null;
   audience_change: string | null;
   material_requirements: string[];
   expected_responses: string[];

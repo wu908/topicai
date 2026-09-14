@@ -1,0 +1,13 @@
+-- 053_project_start_inference.sql (创建流程重构 R2)
+--
+-- 记录「开始一条内容」时 AI 的推断结果，供状态机使用：
+--   start_inferred_intent      AI 推断的意图（'candidate' 状态下的替代确认依据）
+--   start_inferred_question    推断出的那个"最该先问的问题"
+--   start_inference_confidence high | medium | low
+--
+-- 语义边界（刻意不用 intent_status='confirmed'）：
+--   用户并没有点过"确认"，所以不写 confirmed——那是"用户确认过"的语义，
+--   写进去会让后续"你确认过的内容不会被自动改写"的承诺失真。推断就是推断，
+--   用户点「不对，我自己选」时清空该列，状态机随即回到既有的确认步骤。
+--
+-- 加列由 runner / 内存路径的 ensure_columns 完成（PRAGMA 守卫，可重复执行）。

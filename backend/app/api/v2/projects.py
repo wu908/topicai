@@ -62,6 +62,20 @@ async def start_project(
     return ApiResponse(data=result.model_dump(mode="json"))
 
 
+@router.post("/{project_id}:dismiss-inference", status_code=200)
+async def dismiss_start_inference(
+    project_id: str,
+    user=Depends(get_current_user),
+    db: Database = Depends(get_db),
+):
+    """用户说「不对，我自己选」：清掉 AI 的推断，回到既有的意图确认步骤。
+
+    这也是推断的唯一回退路径——推断不是用户确认，所以必须能被一句话撤销。
+    """
+    await ContentProjectService(db).dismiss_start_inference(user["id"], project_id)
+    return ApiResponse(data={"project_id": project_id})
+
+
 @router.get("/{project_id}")
 async def get_project(
     project_id: str,

@@ -53,6 +53,9 @@ class ContentProjectService:
                     "intent": candidate_intent,
                     "content_format": body.content_format,
                     "audience_change": body.audience_change.strip() if body.audience_change else None,
+                    "start_intent": body.start_inferred_intent,
+                    "start_question": body.start_inferred_question,
+                    "start_confidence": body.start_inference_confidence,
                     "opportunity": body.opportunity_id,
                     "sprint": body.starter_sprint_id,
                     "planned": body.planned_publish_at,
@@ -65,11 +68,14 @@ class ContentProjectService:
                         "INSERT INTO content_projects ("
                         "id,owner_user_id,title,status,primary_goal,target_audience,"
                         "content_intent,content_format,intent_status,audience_change,"
+                        "start_inferred_intent,start_inferred_question,"
+                        "start_inference_confidence,"
                         "opportunity_id,starter_sprint_id,planned_publish_at,last_action,"
                         "last_action_at,version,idempotency_key,request_hash,created_at,updated_at"
                         ") VALUES ("
                         ":id,:owner,:title,:status,:goal,:audience,:intent,:content_format,"
-                        "'candidate',:audience_change,:opportunity,:sprint,"
+                        "'candidate',:audience_change,:start_intent,:start_question,"
+                        ":start_confidence,:opportunity,:sprint,"
                         ":planned,'project_created',:now,1,:key,:hash,:now,:now)"
                     ),
                     values,
@@ -81,6 +87,21 @@ class ContentProjectService:
                     )
                 ).mappings().one()
                 return self._normalize(created), False
+
+    async def dismiss_start_inference(self, owner: str, project_id: str) -> None:
+        """清空 AI 的推断（R2）。
+
+        清掉之后状态机的「无推断」分支会重新给出意图确认步骤——这就是
+        「不对，我自己选」的语义：把决定权交回用户，而不是把推断写死。
+        """
+        result = await self.db.execute(
+            "UPDATE content_projects SET start_inferred_intent=NULL,"
+            "start_inferred_question=NULL,start_inference_confidence=NULL,"
+            "updated_at=:now WHERE id=:id AND owner_user_id=:owner",
+            {"now": now(), "id": project_id, "owner": owner},
+        )
+        if getattr(result, "rowcount", 1) == 0:
+            raise ValueError("project not found")
 
     async def get(self, owner_user_id: str, project_id: str) -> dict[str, Any]:
         row = await self.db.fetch_one(
