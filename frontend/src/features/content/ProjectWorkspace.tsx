@@ -215,6 +215,13 @@ export default function ProjectWorkspace({
   const baseBodyText = version?.body_text ?? '';
   const hypothesis = workspace.publish_hypothesis;
   const latestObservation = workspace.observations[0];
+  // R5：进度与写作提醒默认收起，避免一屏并列三栏没有主次。
+  const [showProgress, setShowProgress] = useState(false);
+  // 判断：只默认收起"纯状态"的进度栏（5 步里 4 步还没发生，是纯噪音）。
+  // 「参考与提醒」里装着你复盘沉淀的资产与「提炼候选/发现系列」这类动作，
+  // 默认可见——把可操作的东西藏起来是过度分层。
+  const [showTips, setShowTips] = useState(true);
+
   const [title, setTitle] = useState(baseTitle);
   const [bodyText, setBodyText] = useState(baseBodyText);
   const [recoveryDraft, setRecoveryDraft] = useState<ProjectDraft | null>(() =>
@@ -308,6 +315,19 @@ export default function ProjectWorkspace({
   };
 
   const suggestions: Array<{ id: string; title: string; body: string; source: string }> = [];
+
+  // R5 细条计数：提醒条数来自 suggestions；进度按五项里已有产物的算。
+  const tipCount = suggestions.length;
+  const progressTotal = 5;
+  const intentConfirmed =
+    workspace.project.intent_status === 'working_confirmed' ||
+    workspace.project.intent_status === 'locked';
+  const progressDone =
+    (intentConfirmed ? 1 : 0) +
+    (workspace.current_version ? 1 : 0) +
+    (workspace.publish_hypothesis ? 1 : 0) +
+    (workspace.publish_record ? 1 : 0) +
+    (workspace.observations.length ? 1 : 0);
   if (!bodyText.trim() || bodyText.trim().length < 80) {
     suggestions.push({
       id: 'evidence',
@@ -395,8 +415,32 @@ export default function ProjectWorkspace({
         </div>
       </section>
 
-      <div className="workspace-body">
-        <aside className="workspace-outline" aria-label="项目进度">
+      {/* R5 版面分层：用户此刻只需要知道"现在做什么"。进度与写作提醒
+          默认收成一行细条（它们自己都说"可选/完成一个动作再进入下一步"），
+          需要时展开——避免一屏并列三栏、没有主次。 */}
+      <div className="workspace-strips">
+        <button
+          type="button"
+          className={`strip${showProgress ? ' on' : ''}`}
+          aria-expanded={showProgress}
+          onClick={() => setShowProgress((value) => !value)}
+        >
+          进度 · {progressDone}/{progressTotal} 步
+          <span className="caret" aria-hidden="true">{showProgress ? '收起' : '展开'}</span>
+        </button>
+        <button
+          type="button"
+          className={`strip${showTips ? ' on' : ''}`}
+          aria-expanded={showTips}
+          onClick={() => setShowTips((value) => !value)}
+        >
+          参考与提醒{tipCount ? ` · ${tipCount} 条` : ''}
+          <span className="caret" aria-hidden="true">{showTips ? '收起' : '展开'}</span>
+        </button>
+      </div>
+
+      <div className={`workspace-body${showProgress ? ' show-progress' : ''}${showTips ? ' show-tips' : ''}`}>
+        <aside className="workspace-outline" aria-label="项目进度" aria-hidden={!showProgress} data-collapsed={!showProgress}>
           <div className="outline-intro">
             <h2>这篇内容的进度</h2>
             <p>完成一个动作，再进入下一步</p>
@@ -567,7 +611,7 @@ export default function ProjectWorkspace({
 
         </main>
 
-        <aside className="workspace-suggestions" aria-label="写作提醒">
+        <aside className="workspace-suggestions" aria-label="写作提醒" aria-hidden={!showTips} data-collapsed={!showTips}>
           <div className="suggestions-header">
             <h2>写作提醒</h2>
             <span className="suggestions-info"><AutoAwesomeOutlined fontSize="small" /></span>
