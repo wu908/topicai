@@ -10,6 +10,9 @@ const pickupDeliverable = vi.fn();
 const discardDeliverable = vi.fn();
 const recordLoopMetric = vi.fn();
 const listLoopMetrics = vi.fn();
+const listPool = vi.fn();
+const restoreDeliverable = vi.fn();
+const deleteDeliverable = vi.fn();
 
 vi.mock('@/services/api/v2/asyncLoop', () => ({
   addInboxItem: (...args: unknown[]) => addInboxItem(...args),
@@ -20,6 +23,9 @@ vi.mock('@/services/api/v2/asyncLoop', () => ({
   discardDeliverable: (...args: unknown[]) => discardDeliverable(...args),
   recordLoopMetric: (...args: unknown[]) => recordLoopMetric(...args),
   listLoopMetrics: (...args: unknown[]) => listLoopMetrics(...args),
+  listPool: (...args: unknown[]) => listPool(...args),
+  restoreDeliverable: (...args: unknown[]) => restoreDeliverable(...args),
+  deleteDeliverable: (...args: unknown[]) => deleteDeliverable(...args),
 }));
 
 import AsyncLoopPage from '../AsyncLoopPage';
@@ -45,7 +51,9 @@ const readyDeliverable = {
 
 describe('AsyncLoopPage', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    // resetAllMocks 而非 clearAllMocks：后者不清实现，前一个用例的
+    // mockRejectedValue 会泄漏到后续用例（本轮踩到过）。
+    vi.resetAllMocks();
     listInbox.mockResolvedValue({
       items: [
         {
@@ -63,6 +71,9 @@ describe('AsyncLoopPage', () => {
       total: 1,
     });
     listDeliverables.mockResolvedValue({ items: [readyDeliverable], total: 1 });
+    listPool.mockResolvedValue({ items: [], total: 0 });
+    restoreDeliverable.mockResolvedValue({ ...readyDeliverable, status: 'ready' });
+    deleteDeliverable.mockResolvedValue({ id: 'p1' });
     addInboxItem.mockResolvedValue({ id: 'i2' });
     digestInbox.mockResolvedValue({ thread_id: 't2', deliverables: [readyDeliverable] });
     pickupDeliverable.mockResolvedValue({
@@ -132,3 +143,72 @@ describe('AsyncLoopPage', () => {
     );
     expect(await screen.findByText('network down')).toBeTruthy();
   });
+
+describe('灵感池（第六轮 C6）', () => {
+  // 自包含 setup：顶层 describe 不继承上面那个 beforeEach，若不重置就会
+  // 沿用上一个用例残留的实现（曾因此读到 "network down"）。
+  beforeEach(() => {
+    vi.resetAllMocks();
+    listDeliverables.mockResolvedValue({ items: [readyDeliverable], total: 1 });
+    listPool.mockResolvedValue({ items: [], total: 0 });
+    restoreDeliverable.mockResolvedValue({ ...readyDeliverable, status: 'ready' });
+    deleteDeliverable.mockResolvedValue({ id: 'pool1' });
+  });
+
+  const pooledDeliverable = {
+    ...readyDeliverable,
+    id: 'pool1',
+    title: '被放弃的选题',
+    status: 'discarded',
+    attribution: '换换口味',
+    expire_at: '2026-09-20T00:00:00Z',
+  };
+
+  it('switches to the pool tab and explains why each item is there', async () => {
+    listPool.mockResolvedValue({ items: [pooledDeliverable], total: 1 });
+    render(<MemoryRouter><AsyncLoopPage /></MemoryRouter>);
+
+    fireEvent.click(await screen.findByRole('tab', { name: /灵感池/ }));
+    expect(await screen.findByText('被放弃的选题')).toBeTruthy();
+    // 丢弃原因来自 attribution，而不是裸渲染字段
+    expect(screen.getByText('你标了「换换口味」')).toBeTruthy();
+    expect(screen.getByRole('button', { name: '重新上架' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '永久删除' })).toBeTruthy();
+  });
+
+  it('labels an expired item as 7 天未被拾取, not as a discard', async () => {
+    listPool.mockResolvedValue({
+      items: [{ ...pooledDeliverable, status: 'expired', attribution: null }],
+      total: 1,
+    });
+    render(<MemoryRouter><AsyncLoopPage /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole('tab', { name: /灵感池/ }));
+    expect(await screen.findByText('7 天未被拾取')).toBeTruthy();
+  });
+
+  it('restores an item back to the shelf', async () => {
+    listPool.mockResolvedValue({ items: [pooledDeliverable], total: 1 });
+    render(<MemoryRouter><AsyncLoopPage /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole('tab', { name: /灵感池/ }));
+    fireEvent.click(await screen.findByRole('button', { name: '重新上架' }));
+
+    await waitFor(() => expect(restoreDeliverable).toHaveBeenCalledWith('pool1'));
+    expect(await screen.findByText('已重新上架，观察窗重新计 7 天。')).toBeTruthy();
+  });
+
+  it('asks for confirmation before permanently deleting', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    listPool.mockResolvedValue({ items: [pooledDeliverable], total: 1 });
+    render(<MemoryRouter><AsyncLoopPage /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole('tab', { name: /灵感池/ }));
+    fireEvent.click(await screen.findByRole('button', { name: '永久删除' }));
+
+    expect(confirmSpy).toHaveBeenCalled();
+    expect(deleteDeliverable).not.toHaveBeenCalled();
+
+    confirmSpy.mockReturnValue(true);
+    fireEvent.click(screen.getByRole('button', { name: '永久删除' }));
+    await waitFor(() => expect(deleteDeliverable).toHaveBeenCalledWith('pool1'));
+    confirmSpy.mockRestore();
+  });
+});

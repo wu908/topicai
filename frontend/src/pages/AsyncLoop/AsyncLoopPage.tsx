@@ -4,9 +4,12 @@ import { useNavigate } from 'react-router-dom';
 
 import { extractErrorMessage } from '@/utils/error';
 import {
+  deleteDeliverable,
   discardDeliverable,
   listDeliverables,
+  listPool,
   pickupDeliverable,
+  restoreDeliverable,
 } from '@/services/api/v2/asyncLoop';
 import { openCompanion } from '@/features/companion';
 import type { Deliverable } from '@/types/contracts/v2/asyncLoop';
@@ -29,6 +32,14 @@ const DISCARD_REASONS = ['太俗', '选题不对', '换换口味', '时机不对
 const makeKey = (prefix: string) =>
   `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
+/** 池内条目为何在这里：discarded 读 attribution，expired 是 7 天未拾取。 */
+const poolReason = (d: Deliverable): string =>
+  d.status === 'discarded' ? (d.attribution ? `你标了「${d.attribution}」` : '你放弃了它')
+    : '7 天未被拾取';
+
+const fmtPoolTime = (iso: string | null): string =>
+  iso ? new Date(iso).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' }) : '';
+
 const fmtDay = (iso: string | null): string =>
   iso ? new Date(iso).toLocaleDateString('zh-CN', { weekday: 'long' }) : '待定';
 
@@ -42,10 +53,14 @@ export default function AsyncLoopPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [intent, setIntent] = useState('solve');
   const [audienceChange, setAudienceChange] = useState('');
+  // 第六轮 C6：灵感池与产出架同页切换，不新增导航项。
+  const [tab, setTab] = useState<'shelf' | 'pool'>('shelf');
+  const [pool, setPool] = useState<Deliverable[]>([]);
 
   const reload = useCallback(async () => {
-    const shelf = await listDeliverables('ready');
+    const [shelf, pooled] = await Promise.all([listDeliverables('ready'), listPool()]);
     setDeliverables(shelf.items);
+    setPool(pooled.items);
   }, []);
 
   useEffect(() => {
@@ -93,16 +108,108 @@ export default function AsyncLoopPage() {
       setSelectedId(null);
     }, '已回到灵感池。');
 
+  const restore = (d: Deliverable) =>
+    run(async () => {
+      await restoreDeliverable(d.id);
+      setSelectedId(null);
+    }, '已重新上架，观察窗重新计 7 天。');
+
+  const removeFromPool = (d: Deliverable) =>
+    run(async () => {
+      await deleteDeliverable(d.id);
+      setSelectedId(null);
+    }, '已永久删除。');
+
   const active = deliverables.find((d) => d.id === selectedId) ?? deliverables[0];
 
   return (
     <div>
       {error ? <p className="login-err" role="alert">{error}</p> : null}
       {notice ? <p className="pg-sub" role="status" style={{ color: 'var(--ink)' }}>{notice}</p> : null}
-      <p className="kicker">产出架 · {deliverables.length} 条待决定</p>
-      <h1 className="pg">挑一条想发的，其余的交给它。</h1>
+      <p className="kicker">
+        {tab === 'shelf'
+          ? `产出架 · ${deliverables.length} 条待决定`
+          : `灵感池 · ${pool.length} 条安静等待`}
+      </p>
+      <h1 className="pg">
+        {tab === 'shelf' ? '挑一条想发的，其余的交给它。' : '放下的灵感没有丢，它们在这里。'}
+      </h1>
 
-      {deliverables.length === 0 ? (
+      {/* 第六轮 C6：承诺「回到灵感池」的兑现面。放在同一页，不动侧栏与移动底栏。 */}
+      <div className="seg" role="tablist" aria-label="产出架视图">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === 'shelf'}
+          className={`seg-btn${tab === 'shelf' ? ' on' : ''}`}
+          onClick={() => setTab('shelf')}
+        >
+          待决定 ({deliverables.length})
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === 'pool'}
+          className={`seg-btn${tab === 'pool' ? ' on' : ''}`}
+          onClick={() => setTab('pool')}
+        >
+          灵感池 ({pool.length})
+        </button>
+      </div>
+
+      {tab === 'pool' ? (
+        pool.length === 0 ? (
+          <div className="drop" style={{ marginTop: 24 }}>
+            <div className="big">❁</div>
+            <h3>池子是空的。</h3>
+            <p>被放弃或 7 天没被拾取的产出会安静地落在这里，不会催你。</p>
+          </div>
+        ) : (
+          <div style={{ marginTop: 24 }}>
+            <div className="pane-title">池中 · {pool.length}</div>
+            {pool.map((d) => (
+              <div className="card deliv glass" key={d.id}>
+                <div className="tags">
+                  <span className="tag">{poolReason(d)}</span>
+                  {d.expire_at ? <span className="tag">到期 {fmtPoolTime(d.expire_at)}</span> : null}
+                  {d.facts.length ? <span className="tag">事实 ×{d.facts.length}</span> : null}
+                </div>
+                <h3>{d.title}</h3>
+                {d.body_text ? <p className="preview">{d.body_text.split('\n')[0]}</p> : null}
+                <div className="cta">
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    disabled={busy}
+                    onClick={() => void restore(d)}
+                  >
+                    重新上架
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-text"
+                    disabled={busy}
+                    onClick={() => {
+                      if (window.confirm(`永久删除「${d.title}」？此操作不可撤销。`)) {
+                        void removeFromPool(d);
+                      }
+                    }}
+                  >
+                    永久删除
+                  </button>
+                  <button
+                    type="button"
+                    className="askbtn"
+                    onClick={() => openCompanion(`灵感池 · ${d.title}`)}
+                  >
+                    问它
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )
+      ) : deliverables.length === 0 ? (
         <div className="drop" style={{ marginTop: 36 }}>
           <div className="big">❧</div>
           <h3>架子上还没有待决定的内容。丢点素材，点「消化生产」。</h3>
