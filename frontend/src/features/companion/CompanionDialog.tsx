@@ -195,9 +195,13 @@ export default function CompanionDialog() {
           ref={frameRef}
           sx={{
             position: 'absolute',
-            right: 92,
-            bottom: 8,
-            width: 400,
+            // 第五轮 C4：面板原来固定 width:400 / right:92，390px 视口下
+            // 整体左移出屏（实测输入框 x=-101、上下文 chip 完全不可见）。
+            // 窄屏改为满宽减两侧安全边距，并抬到缩小后的球体上方。
+            right: { xs: 0, sm: 92 },
+            // 88 在球体 80px 与 56px 两种状态下都能保持间隙（与球体尺寸修复解耦）。
+            bottom: { xs: 88, sm: 8 },
+            width: { xs: 'calc(100vw - 24px)', sm: 400 },
             pointerEvents: 'auto',
             display: 'flex',
             flexDirection: 'column',
