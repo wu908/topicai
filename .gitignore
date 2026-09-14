@@ -111,3 +111,7 @@ docs/reviews/ux-audit-2026-09-13/screenshots/
 # Mimosa scanner runtime state (regenerable, never commit)
 .mimosa/
 **/.mimosa/
+
+# 本地视觉验证产物（可重新生成，绝不入库）
+browser-screenshots/
+.dsh-vision-toolkit/
