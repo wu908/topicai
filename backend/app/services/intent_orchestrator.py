@@ -12,32 +12,12 @@ from app.models.v2.action_domain import AITraceCreate
 from app.services.ai_trace import AITraceService
 from app.services.content_genome import ContentGenomeService
 from app.services.creator_state import CreatorStateService
+from app.services.intent_rubric import INTENT_RUBRIC, rubric_for
 from app.services.v2_utils import effective_intent_status, now, request_hash
 
-INTENT_CONFIG = {
-    "solve": {
-        "label": "解决",
-        "question": "你亲自解决过这个问题的哪一步最容易被忽略？",
-        "materials": ["真实问题场景", "本人使用的方法", "一个结果或限制"],
-        "responses": ["收藏", "关注", "问题型评论"],
-        "signals": ["favorites", "follows_gained", "question_comments"],
-    },
-    "share": {
-        "label": "分享",
-        "question": "这段经历里，哪个瞬间改变了你的看法或感受？",
-        "materials": ["真实事件", "当时的感受或观点", "形成这一理解的原因"],
-        "responses": ["共鸣评论", "有质量的互动", "关注"],
-        "signals": ["resonance_comments", "interaction_quality", "follows_gained"],
-    },
-    "record": {
-        "label": "记录",
-        "question": "这次变化开始前是什么状态，现在最具体的变化是什么？",
-        "materials": ["起点证据", "过程片段", "转折", "当前结果"],
-        "responses": ["持续关注", "追问进展", "系列期待"],
-        "signals": ["completion", "returning_readers", "series_continuation"],
-    },
-}
-
+#: 意图 rubric 已抽到 intent_rubric（R6）：可扩展、显式声明是否有叙事转折。
+#: 这里保留 INTENT_CONFIG 这个名字作为兼容别名，消费方（intent_actions）无需改动。
+INTENT_CONFIG = INTENT_RUBRIC
 
 TODAY_ACTION_PRIORITY = {
     "review_candidate": 100,
@@ -54,17 +34,6 @@ TODAY_ACTION_PRIORITY = {
     "create_project": 10,
     # Terminal and informational: never displace real work in Today.
     "scope_learning": 5,
-}
-
-
-# Used when no intent has been confirmed or classified yet. Every field stays
-# neutral so an action can never imply an intent the user has not chosen.
-_UNRESOLVED_INTENT_CONFIG: dict[str, Any] = {
-    "label": "",
-    "question": "这条内容里，哪个真实信息最关键？",
-    "materials": [],
-    "responses": [],
-    "signals": [],
 }
 
 
@@ -650,11 +619,14 @@ class IntentOrchestratorService:
 
     def _action_spec(self, action_type: str, project: dict[str, Any] | None) -> dict[str, Any]:
         intent = resolved_action_intent(project)
-        config = INTENT_CONFIG.get(intent or "", _UNRESOLVED_INTENT_CONFIG)
+        config = rubric_for(intent)
         # R2：推断出的问题是"针对这条材料"的（例如展示作品类不会被问转折），
         # 优先于按意图固定的通用问题。
-        if project and (project.get("start_inferred_question") or "").strip():
-            config = {**config, "question": project["start_inferred_question"].strip()}
+        inferred_question = (project or {}).get("start_inferred_question")
+        if (inferred_question or "").strip():
+            # 推断出的是针对当前材料的问题——优先于按意图固定的兜底问题。
+            # 「展示作品被问转折」正是靠这一层解决的（inferred 先胜）。
+            config = {**config, "question": inferred_question.strip()}
         audience = (project or {}).get("target_audience") or "目标读者尚未确认"
         project_id = (project or {}).get("id", "")
         # With no confirmed or classified intent there is nothing to confirm yet:
