@@ -19,7 +19,8 @@ class UserSettingsService:
     async def get(self, owner: str) -> dict[str, Any]:
         user = await self.db.fetch_one(
             "SELECT weekly_publish_goal,timezone,consent_json,"
-            "xiaohongshu_account_reference,settings_version FROM users WHERE id=:owner",
+            "xiaohongshu_account_reference,settings_version,auto_digest_enabled "
+            "FROM users WHERE id=:owner",
             {"owner": owner},
         )
         if user is None:
@@ -39,6 +40,7 @@ class UserSettingsService:
                 "xiaohongshu_account_reference"
             ],
             "consent": json.loads(user["consent_json"] or "{}"),
+            "auto_digest_enabled": bool(user["auto_digest_enabled"]),
             "version": user["settings_version"],
             "ai": {
                 "enabled": config.ai_enabled,
@@ -66,7 +68,9 @@ class UserSettingsService:
                 updated = await session.execute(
                     text(
                         "UPDATE users SET weekly_publish_goal=:goal,consent_json=:consent,"
-                        "xiaohongshu_account_reference=:account,settings_version=settings_version+1 "
+                        "xiaohongshu_account_reference=:account,"
+                        "auto_digest_enabled=:auto_digest,"
+                        "settings_version=settings_version+1 "
                         "WHERE id=:owner AND settings_version=:expected"
                     ),
                     {
@@ -80,6 +84,11 @@ class UserSettingsService:
                         "account": body.xiaohongshu_account_reference
                         if body.xiaohongshu_account_reference is not None
                         else current["xiaohongshu_account_reference"],
+                        "auto_digest": int(
+                            body.auto_digest_enabled
+                            if body.auto_digest_enabled is not None
+                            else current["auto_digest_enabled"]
+                        ),
                         "owner": owner,
                         "expected": body.expected_version,
                     },

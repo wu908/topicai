@@ -170,3 +170,36 @@ async def test_publish_check_and_screenshot_manual_fallback_contract(client):
     )
     assert unavailable.status_code == 422
     assert unavailable.json()["meta"]["error_code"] == "AI_CAPABILITY_MISSING"
+
+
+@pytest.mark.asyncio
+async def test_auto_digest_setting_round_trips_and_defaults_off(client):
+    """夜间自动消化默认关，能被用户显式打开并回读（第六轮 C7）。"""
+    initial = (await client.get("/api/v2/settings")).json()["data"]
+    assert initial["auto_digest_enabled"] is False
+
+    turned_on = await client.put(
+        "/api/v2/settings",
+        json={
+            "auto_digest_enabled": True,
+            "expected_version": initial["version"],
+        },
+    )
+    assert turned_on.status_code == 200
+    assert turned_on.json()["data"]["auto_digest_enabled"] is True
+
+    # 不传该字段时保持现值（PUT 是合并语义）
+    kept = await client.put(
+        "/api/v2/settings",
+        json={"expected_version": turned_on.json()["data"]["version"]},
+    )
+    assert kept.json()["data"]["auto_digest_enabled"] is True
+
+    turned_off = await client.put(
+        "/api/v2/settings",
+        json={
+            "auto_digest_enabled": False,
+            "expected_version": kept.json()["data"]["version"],
+        },
+    )
+    assert turned_off.json()["data"]["auto_digest_enabled"] is False

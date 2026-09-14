@@ -12,6 +12,8 @@ class UserSettingsUpdate(StrictModel):
     content_strategy: str | None = Field(default=None, min_length=1, max_length=2000)
     xiaohongshu_account_reference: str | None = Field(default=None, max_length=200)
     consent: dict[str, Any] | None = None
+    # 夜间自动消化（默认关）：用户主动开启后每晚整理可发布素材。
+    auto_digest_enabled: bool | None = None
     expected_version: int = Field(ge=1)
 
 
@@ -29,5 +31,6 @@ class UserSettingsView(StrictModel):
     content_strategy: str
     xiaohongshu_account_reference: str | None
     consent: dict[str, Any]
+    auto_digest_enabled: bool
     version: int = Field(ge=1)
     ai: AICapabilityStatus

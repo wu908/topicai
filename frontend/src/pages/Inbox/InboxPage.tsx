@@ -105,7 +105,9 @@ export default function InboxPage() {
       <div className="drop">
         <div className="big">🌾</div>
         <h3>把照片、语音、一句话的念头，随手放这里</h3>
-        <p>它会在夜里安静消化，变成待发布的产出，不打扰你。</p>
+        {/* 第六轮 C7：原来的「它会在夜里安静消化」在未开启夜间整理时是假承诺。
+            改成对两种状态都成立的说法，顺带把开关本身告知用户。 */}
+        <p>点「消化生产」，几十秒后变成待发布的产出；在「我的」打开夜间整理后，它也会自己动手。</p>
         <textarea
           className="lm-input"
           style={{ height: 'auto', minHeight: 74, maxWidth: 560, margin: '18px auto 0', display: 'block', padding: '12px 16px', textAlign: 'left' }}

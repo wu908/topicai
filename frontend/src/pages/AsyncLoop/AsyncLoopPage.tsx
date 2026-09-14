@@ -213,7 +213,7 @@ export default function AsyncLoopPage() {
         <div className="drop" style={{ marginTop: 36 }}>
           <div className="big">❧</div>
           <h3>架子上还没有待决定的内容。丢点素材，点「消化生产」。</h3>
-          <p>它会在夜里安静消化，变成待发布的产出，不打扰你。</p>
+          <p>丢进去点「消化生产」，几十秒后变成待发布的产出；开了夜间整理它会自己动手。</p>
           {/* UX 审计 2026-09-13 B5：空态提到「消化生产」按钮在收件箱，给出直达入口。 */}
           <div className="row" style={{ justifyContent: 'center', marginTop: 14 }}>
             <button type="button" className="btn btn-primary btn-sm" onClick={() => navigate('/loop/inbox')}>
