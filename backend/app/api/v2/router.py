@@ -19,6 +19,7 @@ from app.api.v2.materials import router as materials_router
 from app.api.v2.onboarding import router as onboarding_router
 from app.api.v2.projects import router as projects_router
 from app.api.v2.publish_checks import router as publish_checks_router
+from app.api.v2.reference_anchor import router as reference_anchor_router
 from app.api.v2.settings import router as settings_router
 from app.api.v2.starter import router as starter_router
 from app.models.common import ApiResponse
@@ -43,6 +44,7 @@ api_v2_router.include_router(materials_router)
 api_v2_router.include_router(settings_router)
 api_v2_router.include_router(publish_checks_router)
 api_v2_router.include_router(companion_router)
+api_v2_router.include_router(reference_anchor_router)
 
 
 @api_v2_router.get("/health", response_model=ApiResponse[dict])
