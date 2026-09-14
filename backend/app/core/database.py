@@ -367,6 +367,18 @@ class Database:
                             ),
                         ],
                     )
+                elif version == "054_reference_samples":
+                    await ensure_columns(
+                        "imported_notes",
+                        [
+                            (
+                                "origin",
+                                "TEXT NOT NULL DEFAULT 'self' "
+                                "CHECK (origin IN ('self','reference'))",
+                            ),
+                            ("source_handle", "TEXT"),
+                        ],
+                    )
                 elif version == "052_auto_digest_setting":
                     await ensure_columns(
                         "users",

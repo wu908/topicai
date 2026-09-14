@@ -12,15 +12,34 @@ from app.core.exceptions import IdempotencyConflictException
 from app.models.v2.onboarding import HistoryImportCreate, HistoryNoteInput
 from app.services.v2_utils import content_hash, now, request_hash
 
+#: 自有历史的 90 天是隐私窗口（导入的正文只在这段时间内可被系统读取）。
+#: 参考样本是用户自己贴进来的"我想做成这样"——它过期静默消失会让冷启动锚点
+#: 凭空不见，所以给一个远长于隐私窗口的保留期，删除由用户显式发起。
+_RETENTION_DAYS = {"self": 90, "reference": 3650}
+
 
 class HistoryImportService:
     def __init__(self, db: Any):
         self.db = db
 
     async def import_items(
-        self, owner_user_id: str, body: HistoryImportCreate
+        self,
+        owner_user_id: str,
+        body: HistoryImportCreate,
+        *,
+        origin: str = "self",
+        item_model: type[HistoryNoteInput] = HistoryNoteInput,
     ) -> tuple[dict[str, Any], bool]:
-        digest = request_hash(body)
+        if origin not in _RETENTION_DAYS:
+            raise ValueError(f"unknown import origin: {origin}")
+        # 非 self 的来源参与摘要：同一个 idempotency_key 下，把一批内容先当"我的历史"
+        # 再当"参考样本"提交，是两次不同的操作，不能拿旧结果回放。
+        # self 不并入——这样自有历史的摘要与本次改动之前逐字节一致，部署前已发出的
+        # 重试请求仍然正常回放，而不是收到 409。
+        digest_payload = body.model_dump(mode="json")
+        if origin != "self":
+            digest_payload["origin"] = origin
+        digest = request_hash(digest_payload)
         existing = await self.db.fetch_one(
             "SELECT * FROM history_imports WHERE owner_user_id=:owner " "AND idempotency_key=:key",
             {"owner": owner_user_id, "key": body.idempotency_key},
@@ -55,7 +74,7 @@ class HistoryImportService:
                 )
                 for index, raw_item in enumerate(body.items):
                     try:
-                        item = HistoryNoteInput.model_validate(raw_item)
+                        item = item_model.model_validate(raw_item)
                         normalized = self._normalize_item(item)
                     except (ValidationError, ValueError) as exc:
                         error = (
@@ -67,6 +86,13 @@ class HistoryImportService:
                         continue
 
                     source_hash = content_hash(
+                        # 来源参与"内容身份"：同一篇文本既是"我发过的"又是"我想做成
+                        # 这样"时，是两条事实。imported_notes 的唯一键是
+                        # (owner_user_id, source_hash)，把来源并入哈希，唯一约束就自动
+                        # 表达"每个来源下内容唯一"——不必重建表来改唯一键。
+                        # self 不并入：自有历史的历史哈希保持不变，升级后旧行仍能被
+                        # 正确识别为重复，而不是被重复导入一遍。
+                        *([origin] if origin != "self" else []),
                         normalized["external_key"],
                         normalized["title"],
                         normalized["body_excerpt"],
@@ -80,7 +106,10 @@ class HistoryImportService:
                                     "SELECT id FROM imported_notes WHERE owner_user_id=:owner "
                                     "AND source_hash=:source_hash"
                                 ),
-                                {"owner": owner_user_id, "source_hash": source_hash},
+                                {
+                                    "owner": owner_user_id,
+                                    "source_hash": source_hash,
+                                },
                             )
                         )
                         .mappings()
@@ -102,16 +131,21 @@ class HistoryImportService:
                             "INSERT INTO imported_notes (id,owner_user_id,history_import_id,"
                             "external_key,title,body_excerpt,published_at,note_url,metrics_json,"
                             "audience_questions_json,tags_json,source_hash,retention_expires_at,"
-                            "user_confirmed,created_at) VALUES (:id,:owner,:history_import,"
+                            "user_confirmed,created_at,origin,source_handle) "
+                            "VALUES (:id,:owner,:history_import,"
                             ":external_key,:title,:body_excerpt,:published_at,:note_url,:metrics,"
-                            ":questions,:tags,:source_hash,:retention_expires_at,0,:created_at)"
+                            ":questions,:tags,:source_hash,:retention_expires_at,0,:created_at,"
+                            ":origin,:source_handle)"
                         ),
                         {
                             "id": note_id,
                             "owner": owner_user_id,
                             "history_import": import_id,
                             "source_hash": source_hash,
-                            "retention_expires_at": (datetime.now(UTC) + timedelta(days=90))
+                            "origin": origin,
+                            "retention_expires_at": (
+                                datetime.now(UTC) + timedelta(days=_RETENTION_DAYS[origin])
+                            )
                             .isoformat()
                             .replace("+00:00", "Z"),
                             "created_at": timestamp,
@@ -173,6 +207,9 @@ class HistoryImportService:
             "metrics": json.dumps(item.metrics, ensure_ascii=False),
             "questions": json.dumps(item.audience_questions, ensure_ascii=False),
             "tags": json.dumps(item.tags, ensure_ascii=False),
+            # 自有历史没有来源列（NULL）；参考样本必须带，且不参与 source_hash——
+            # 同一篇内容被两个账号转发，仍是同一篇内容，不该重复入库两次。
+            "source_handle": getattr(item, "source_handle", None),
         }
 
     @staticmethod

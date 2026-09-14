@@ -1149,6 +1149,21 @@ def apply(
                     ],
                 )
                 conn.executescript(sql)
+            elif version == "054_reference_samples":
+                # 「别人的内容」这一维度（冷启动锚点 R7）。老库与全新库都能拿到。
+                _ensure_columns(
+                    conn,
+                    "imported_notes",
+                    [
+                        (
+                            "origin",
+                            "TEXT NOT NULL DEFAULT 'self' "
+                            "CHECK (origin IN ('self','reference'))",
+                        ),
+                        ("source_handle", "TEXT"),
+                    ],
+                )
+                conn.executescript(sql)
             elif version == "052_auto_digest_setting":
                 # 夜间自动消化开关（默认关）。加列走 _ensure_columns，
                 # 老库与全新库都能拿到该列。

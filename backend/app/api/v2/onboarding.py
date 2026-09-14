@@ -12,6 +12,7 @@ from app.models.v2.onboarding import (
     HistoryImportResult,
     OnboardingContext,
     ProductModeUpdate,
+    ReferenceNoteInput,
 )
 from app.services.creator_profile_v2 import CreatorProfileV2Service
 from app.services.history_import import HistoryImportService
@@ -48,6 +49,33 @@ async def import_history(
     db: Database = Depends(get_db),
 ):
     result, replayed = await HistoryImportService(db).import_items(user["id"], body)
+    response.status_code = 200 if replayed else 201
+    return ApiResponse[HistoryImportResult](
+        code=response.status_code,
+        data=result,
+        meta={"idempotency_replayed": replayed},
+    )
+
+
+@router.post(
+    "/reference-imports",
+    status_code=201,
+    response_model=ApiResponse[HistoryImportResult],
+)
+async def import_references(
+    body: HistoryImportCreate,
+    response: Response,
+    user=Depends(get_current_user),
+    db: Database = Depends(get_db),
+):
+    """导入「我想做成这样」的参考内容。
+
+    与 /history-imports 的唯一区别是每一行必须说明来源，且这些行**不进入**
+    "你是谁"的画像推断——它们只回答"你想做成什么样"（见 reference_anchor）。
+    """
+    result, replayed = await HistoryImportService(db).import_items(
+        user["id"], body, origin="reference", item_model=ReferenceNoteInput
+    )
     response.status_code = 200 if replayed else 201
     return ApiResponse[HistoryImportResult](
         code=response.status_code,
