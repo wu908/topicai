@@ -25,8 +25,11 @@ describe('GrowthPage', () => {
 
   it('renders real counts and honest achievement states', async () => {
     render(<GrowthPage />);
-    expect(await screen.findByText('它的积累')).toBeTruthy();
-    expect(screen.getByText('已确认经验')).toBeTruthy();
+    // 「它的积累」是静态标题：findByText 在第一帧就满足了，随后同步断言的
+    // 「已确认经验」却来自异步加载完的 state——负载高时它会先于 state 到达而变红
+    // （CI 上就这样偶发失败）。等数据驱动的那一项，断言才真正成立。
+    expect(await screen.findByText('已确认经验')).toBeTruthy();
+    expect(screen.getByText('1 项')).toBeTruthy();
     expect(screen.getAllByText(/待达成/).length).toBeGreaterThan(0);
     expect(screen.getByText(/连续接受/)).toBeTruthy();
     expect(screen.getByText(/永远不会委托/)).toBeTruthy();
