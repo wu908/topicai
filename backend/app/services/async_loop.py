@@ -230,6 +230,15 @@ class ProductionService:
         )
         return [self._view(r) for r in rows]
 
+    async def pending_intake_count(self, owner: str) -> int:
+        """还有多少可发布素材没消化——前端据此显示进度与剩余。"""
+        row = await self.db.fetch_one(
+            "SELECT COUNT(*) AS n FROM inbox_items WHERE owner_user_id=:owner "
+            "AND status='intake' AND consent='publishable'",
+            {"owner": owner},
+        )
+        return int(row["n"])
+
     async def get(self, owner: str, deliverable_id: str) -> dict[str, Any]:
         row = await self._row(owner, deliverable_id)
         return self._view(row)

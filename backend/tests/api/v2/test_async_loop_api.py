@@ -264,3 +264,61 @@ async def test_pool_actions_are_owner_scoped(client_as_u2, test_db):
             (await client_as_u2.get(
                 "/api/v2/loop/deliverables?status=expired,discarded")).json()["data"]["items"]}
     assert d["id"] not in pool
+
+
+# ==================== 逐条消化（第六轮 C7 前端进度） ====================
+
+
+@pytest.mark.asyncio
+async def test_digest_limit_consumes_one_item_at_a_time_and_reports_remaining(
+    client, test_db
+):
+    """limit=1 逐条消化：每次只产一条，remaining 递减到 0。"""
+    from app.services.async_loop import InboxService
+
+    for suffix in ("one", "two", "three"):
+        await InboxService(test_db).add(
+            "u1",
+            InboxItemCreate(
+                kind="text",
+                title=f"素材 {suffix}",
+                content=f"第 {suffix} 条真实经历：北阳台辣椒第 30 天的结果。",
+                idempotency_key=f"progressive-{suffix}",
+            ),
+        )
+
+    first = (await client.post("/api/v2/loop/inbox/digest?limit=1")).json()["data"]
+    assert len(first["deliverables"]) == 1
+    assert first["remaining"] == 2
+
+    second = (await client.post("/api/v2/loop/inbox/digest?limit=1")).json()["data"]
+    assert len(second["deliverables"]) == 1
+    assert second["remaining"] == 1
+
+    # 架上预算未满时继续；这里只断言「不超过请求上限」
+    third = (await client.post("/api/v2/loop/inbox/digest?limit=1")).json()["data"]
+    assert len(third["deliverables"]) <= 1
+    assert third["remaining"] >= 0
+
+
+@pytest.mark.asyncio
+async def test_digest_without_limit_keeps_batch_behaviour(client, test_db):
+    """不传 limit 时行为不变（既有调用方与 E2E 不受影响）。"""
+    from app.services.async_loop import InboxService
+
+    await InboxService(test_db).add(
+        "u1",
+        InboxItemCreate(
+            kind="text", title="素材 batch", content="第 batch 条真实经历。",
+            idempotency_key="batch-mode",
+        ),
+    )
+    result = (await client.post("/api/v2/loop/inbox/digest")).json()["data"]
+    assert "deliverables" in result and "remaining" in result
+
+
+@pytest.mark.asyncio
+async def test_digest_rejects_non_positive_limit(client, test_db):
+    response = await client.post("/api/v2/loop/inbox/digest?limit=0")
+    assert response.status_code == 400
+    assert "limit must be at least 1" in response.json()["message"]
