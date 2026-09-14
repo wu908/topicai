@@ -106,10 +106,16 @@ body {
     display: none !important;
   }
 
-  /* 悬浮球避开 72px 底栏与「更多」面板（第二轮 C1：球压更多按钮）。 */
+  /* 悬浮球避开 72px 底栏与「更多」面板（第二轮 C1：球压更多按钮）。
+     第五轮 C2：球还会压住滚动内容末行（产出架弃选 chip），
+     移动端球缩到 56px 并把内容底部留白加到 180px，让末行 CTA 脱离球区。 */
   .companion-root {
-    bottom: 88px !important;
-    right: 20px !important;
+    bottom: 96px !important;
+    right: 12px !important;
+  }
+
+  .app-main-content {
+    padding-bottom: 180px !important;
   }
 
   .v3-sidebar-nav {
