@@ -27,6 +27,7 @@ def _payload(intent="share", question="这件事里哪一步最费劲？"):
         "reason": "听起来是分享一段真实经历",
         "confidence": "medium",
         "next_question": question,
+        "audience_change": "看完知道断更后可以先用零碎想法重启",
     }
 
 
@@ -205,3 +206,42 @@ async def test_no_inference_still_asks_the_user_to_confirm(test_db):
 
     action = await IntentOrchestratorService(test_db).ensure_project_action("u1", started.project_id)
     assert action["action_type"] == "confirm_intent"
+
+
+# ==================== R3：读者变化由材料提炼，不再问用户 ====================
+
+
+@pytest.mark.asyncio
+async def test_inference_proposes_the_audience_change(test_db):
+    """读者变化是生成候选的输入，应由材料提炼——不让用户凭空作答。"""
+    await _seed_user(test_db)
+    llm = _StubLLM(payload=_payload("share"))
+    started = await ProjectStartService(test_db, llm=llm).start(
+        "u1",
+        ProjectStartRequest(raw_input="我画了一组水彩插画想发出来", idempotency_key="r3-1"),
+    )
+
+    project = await test_db.fetch_one(
+        "SELECT audience_change FROM content_projects WHERE id=:id",
+        {"id": started.project_id},
+    )
+    assert project["audience_change"] == "看完知道断更后可以先用零碎想法重启"
+    assert started.inference.audience_change
+
+
+@pytest.mark.asyncio
+async def test_fallback_leaves_audience_change_for_the_confirmation_step(test_db):
+    """模型不可用时不编读者变化——留空，由既有的确认步骤问用户。"""
+    await _seed_user(test_db)
+    llm = _StubLLM(error=RuntimeError("model down"))
+    started = await ProjectStartService(test_db, llm=llm).start(
+        "u1",
+        ProjectStartRequest(raw_input="随便说说", idempotency_key="r3-2"),
+    )
+
+    project = await test_db.fetch_one(
+        "SELECT audience_change FROM content_projects WHERE id=:id",
+        {"id": started.project_id},
+    )
+    assert project["audience_change"] is None
+    assert started.inference.audience_change is None

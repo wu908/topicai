@@ -41,6 +41,9 @@ class _StartInference(StrictModel):
     reason: str = Field(min_length=1, max_length=200)
     confidence: Literal["high", "medium", "low"] = "medium"
     next_question: str = Field(min_length=1, max_length=200)
+    #: R3：由材料提炼的"读者能获得什么"，作为后续生成的输入。
+    #: 它不该由用户凭空作答，所以由推断顺带给出，用户在发布前判断可改。
+    audience_change: str = Field(min_length=2, max_length=200)
 
 
 _START_SYSTEM_PROMPT = (
@@ -58,7 +61,8 @@ _START_SYSTEM_PROMPT = (
     "4. 展示作品类内容没有「转折瞬间」，不要问改变看法之类的叙事问题。\n"
     "只输出一个 JSON 对象，不要解释、不要 Markdown 代码块。字段严格如下：\n"
     '{"intent":"share","reason":"听起来是分享一段真实经历",'
-    '"confidence":"medium","next_question":"这件事里哪一步最费劲？"}'
+    '"confidence":"medium","next_question":"这件事里哪一步最费劲？",'
+    '"audience_change":"看完知道断更后可以先用零碎想法重启"}'
 )
 
 
@@ -104,6 +108,7 @@ class ProjectStartService:
                 reason=draft.reason,
                 confidence=draft.confidence,
                 next_question=draft.next_question,
+                audience_change=draft.audience_change,
                 source="ai",
             )
         except Exception:
@@ -115,6 +120,7 @@ class ProjectStartService:
                 reason="这次没判断出来——不猜，你说了算。",
                 confidence="low",
                 next_question="这条内容里，哪个具体的事或结果是你最想说的？",
+                audience_change=None,
                 source="deterministic_fallback",
             )
 
@@ -141,6 +147,13 @@ class ProjectStartService:
                 **({"content_intent": inference.intent} if inference.intent else {}),
                 # 推断记录（R2）：状态机据此跳过重复的意图确认，并用这个
                 # 针对当前材料的问题替代按意图固定的通用问题。
+                # R3：读者变化由材料提炼出来，作为生成候选的输入；用户会在
+                # 发布前判断那一步看到它并可改，所以这里不问。
+                **(
+                    {"audience_change": inference.audience_change}
+                    if inference.audience_change
+                    else {}
+                ),
                 **(
                     {
                         "start_inferred_intent": inference.intent,

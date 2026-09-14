@@ -40,6 +40,9 @@ class ProjectStartInference(StrictModel):
     confidence: Literal["high", "medium", "low"]
     #: 只问一个：当前最缺、且答了会改变产出的那个信息
     next_question: str
+    #: 由材料提炼的"读者能获得什么"（R3）。这是生成候选的输入，
+    #: 但不该由用户凭空作答——AI 先提，用户在发布前判断那一步看到并可改。
+    audience_change: str | None = None
     #: 推断来源：模型或降级（降级时 intent 为 None，交给后续确认步骤）
     source: Literal["ai", "deterministic_fallback"]
 
