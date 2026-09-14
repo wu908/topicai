@@ -34,6 +34,32 @@ export const listDeliverables = (status = 'ready') =>
     ),
   );
 
+/** 灵感池 = 过期未拾取 ∪ 用户主动丢弃。 */
+export const POOL_STATUSES = 'expired,discarded';
+
+export const listPool = () =>
+  getData(
+    v2Client.get<ApiEnvelope<{ items: Deliverable[]; total: number }>>(
+      `/loop/deliverables?status=${encodeURIComponent(POOL_STATUSES)}`,
+    ),
+  );
+
+/** 池内条目重新上架（重置 7 天观察窗）。 */
+export const restoreDeliverable = (id: string) =>
+  getData(
+    v2Client.post<ApiEnvelope<Deliverable>>(
+      `/loop/deliverables/${encodeURIComponent(id)}:restore`,
+    ),
+  );
+
+/** 永久删除池内条目。 */
+export const deleteDeliverable = (id: string) =>
+  getData(
+    v2Client.delete<ApiEnvelope<{ id: string }>>(
+      `/loop/deliverables/${encodeURIComponent(id)}`,
+    ),
+  );
+
 export const pickupDeliverable = (id: string, input: PickupInput) =>
   getData(
     v2Client.post<ApiEnvelope<PickupResult>>(
