@@ -217,7 +217,10 @@ export default function ProjectWorkspace({
   const latestObservation = workspace.observations[0];
   // R5：进度与写作提醒默认收起，避免一屏并列三栏没有主次。
   const [showProgress, setShowProgress] = useState(false);
-  const [showTips, setShowTips] = useState(false);
+  // 判断：只默认收起"纯状态"的进度栏（5 步里 4 步还没发生，是纯噪音）。
+  // 「参考与提醒」里装着你复盘沉淀的资产与「提炼候选/发现系列」这类动作，
+  // 默认可见——把可操作的东西藏起来是过度分层。
+  const [showTips, setShowTips] = useState(true);
 
   const [title, setTitle] = useState(baseTitle);
   const [bodyText, setBodyText] = useState(baseBodyText);

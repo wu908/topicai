@@ -58,10 +58,9 @@ const renderWorkspace = (overrides: Partial<CalibrationWorkspace> = {}) => {
   );
   // R5 版面分层：进度与「参考与提醒」默认收起（一屏只留一件要做的事）。
   // 这些用例测的不是折叠行为本身，所以按真实用户路径先展开两侧。
+  // 只有进度栏默认收起（纯状态）；「参考与提醒」默认可见。
   const progress = screen.queryByRole('button', { name: /^进度 ·/ });
   if (progress) fireEvent.click(progress);
-  const tips = screen.queryByRole('button', { name: /^参考与提醒/ });
-  if (tips) fireEvent.click(tips);
   return { onSaveVersion, onTransition };
 };
 
