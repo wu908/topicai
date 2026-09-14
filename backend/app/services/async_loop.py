@@ -9,6 +9,7 @@ expire; pickup goes through the official project services so shared semantics
 
 import json
 import uuid
+from collections.abc import Sequence
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -31,6 +32,14 @@ SHELF_LIMIT = 6
 BATCH_MAIN = 2
 EXPIRE_DAYS = 7
 PICKUP_IDEM = "pickup_idem"
+
+#: deliverables.status 的允许取值（与 050 迁移的 CHECK 约束一致）。
+DELIVERABLE_STATUSES = frozenset(
+    {"queued", "producing", "ready", "failed", "expired", "picked", "discarded"}
+)
+
+#: 灵感池 = 过期未拾取 + 用户主动丢弃。
+POOL_STATUSES = ("expired", "discarded")
 
 INTENT_BY_KIND = {
     "text": "solve",
@@ -154,16 +163,28 @@ class ProductionService:
         self.llm = llm
 
     async def list_deliverables(
-        self, owner: str, *, status: str = "ready"
+        self, owner: str, *, status: str = "ready",
+        statuses: Sequence[str] | None = None,
     ) -> list[dict[str, Any]]:
         # 第五轮 C5：sweep_expired 此前只有测试调用，生产链路从不触发，
         # 于是「不选的会安静等 7 天，然后回到灵感池」实际不成立。
         # 列表读取时惰性清扫——与 _expire_at 的派生语义一致，无需额外定时任务。
+        # 第六轮：灵感池需要同时看 expired + discarded，故支持多状态。
         await self.sweep_expired(owner)
+        wanted = list(statuses) if statuses is not None else [status]
+        if not wanted:
+            return []
+        for value in wanted:
+            if value not in DELIVERABLE_STATUSES:
+                # 此前非法 status 静默返回空列表，掩盖调用方错误。
+                raise ValueError(f"unknown deliverable status: {value}")
+        placeholders = ",".join(f":s{i}" for i in range(len(wanted)))
+        params: dict[str, Any] = {"owner": owner}
+        params.update({f"s{i}": value for i, value in enumerate(wanted)})
         rows = await self.db.fetch_all(
-            "SELECT * FROM deliverables WHERE owner_user_id=:owner AND status=:status "
-            "ORDER BY created_at DESC, id",
-            {"owner": owner, "status": status},
+            f"SELECT * FROM deliverables WHERE owner_user_id=:owner "
+            f"AND status IN ({placeholders}) ORDER BY created_at DESC, id",
+            params,
         )
         return [self._view(r) for r in rows]
 
@@ -458,8 +479,67 @@ class PickupService:
         fresh = await self._row(owner, deliverable_id)
         return ProductionService._view(fresh)
 
+    async def restore(self, owner: str, deliverable_id: str) -> dict[str, Any]:
+        """把池中的产出（过期或被弃）重新上架，并重置 7 天观察窗。
+
+        「回到灵感池」的兑现点：池子不是坟墓，用户可以把条目放回待决定。
+        注意 expire_at 会重算，等于可以无限续命——这是有意为之的语义。
+        """
+        row = await self.db.fetch_one(
+            "SELECT * FROM deliverables WHERE id=:id AND owner_user_id=:owner",
+            {"id": deliverable_id, "owner": owner},
+        )
+        if row is None:
+            raise ValueError("deliverable not found")
+        if row["status"] not in POOL_STATUSES:
+            raise ValueError("only pooled deliverables can be restored")
+        ts = now()
+        await self.db.execute(
+            "UPDATE deliverables SET status='ready',attribution=NULL,"
+            "expire_at=:expire,updated_at=:now "
+            "WHERE id=:id AND owner_user_id=:owner AND status IN ('expired','discarded')",
+            {"expire": _expire_at(ts), "now": ts,
+             "id": deliverable_id, "owner": owner},
+        )
+        await self._picked_event(
+            owner, row, None, event_type="ready",
+            detail={"reason": "restored_from_pool",
+                    "previous_status": row["status"]},
+        )
+        fresh = await self._row(owner, deliverable_id)
+        return ProductionService._view(fresh)
+
+    async def delete_pooled(self, owner: str, deliverable_id: str) -> None:
+        """永久删除池中条目。仅限池内状态，避免误删架上待决定产出。
+
+        production_events 是只写审计表（全仓无读取方、无外键引用），
+        所以先写事件再删行不会留下悬空依赖。
+        """
+        row = await self.db.fetch_one(
+            "SELECT * FROM deliverables WHERE id=:id AND owner_user_id=:owner",
+            {"id": deliverable_id, "owner": owner},
+        )
+        if row is None:
+            raise ValueError("deliverable not found")
+        if row["status"] not in POOL_STATUSES:
+            raise ValueError("only pooled deliverables can be deleted")
+        await self._picked_event(
+            owner, row, None, event_type="discarded",
+            detail={"reason": "deleted_from_pool",
+                    "previous_status": row["status"]},
+        )
+        await self.db.execute(
+            "DELETE FROM deliverables WHERE id=:id AND owner_user_id=:owner "
+            "AND status IN ('expired','discarded')",
+            {"id": deliverable_id, "owner": owner},
+        )
+
     async def _picked_event(self, owner: str, row: Any, project_id: str | None,
-                            event_type: str = "picked") -> None:
+                            event_type: str = "picked",
+                            detail: dict[str, Any] | None = None) -> None:
+        # 注意：production_events.event_type 有 CHECK 约束（050），池操作没有
+        # 专属取值，故沿用既有类型并用 detail.reason 区分——重建该表可加精确
+        # 类型，但为审计表做重建的迁移风险大于收益。
         await self.db.execute(
             "INSERT INTO production_events (id,owner_user_id,thread_id,deliverable_id,"
             "event_type,detail_json,created_at) VALUES "
@@ -467,7 +547,10 @@ class PickupService:
             {
                 "id": str(uuid.uuid4()), "owner": owner, "thread": row["thread_id"],
                 "deliverable": row["id"], "etype": event_type,
-                "detail": json.dumps({"project_id": project_id}, ensure_ascii=False),
+                "detail": json.dumps(
+                    detail if detail is not None else {"project_id": project_id},
+                    ensure_ascii=False,
+                ),
                 "now": now(),
             },
         )

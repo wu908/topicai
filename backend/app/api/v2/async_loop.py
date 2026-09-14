@@ -64,8 +64,40 @@ async def list_deliverables(
     user=Depends(get_current_user),
     db: Database = Depends(get_db),
 ):
-    items = await ProductionService(db).list_deliverables(user["id"], status=status)
+    items = await ProductionService(db).list_deliverables(
+        user["id"], statuses=[p for p in (s.strip() for s in status.split(",")) if p]
+    )
     return ApiResponse(data={"items": items, "total": len(items)})
+
+
+@router.post(
+    "/deliverables/{deliverable_id}:restore",
+    response_model=ApiResponse[dict],
+)
+async def restore_deliverable(
+    deliverable_id: str,
+    user=Depends(get_current_user),
+    db: Database = Depends(get_db),
+):
+    """池内条目重新上架（重置 7 天观察窗）。"""
+    return ApiResponse(
+        data=await PickupService(db).restore(user["id"], deliverable_id),
+        message="已重新上架",
+    )
+
+
+@router.delete(
+    "/deliverables/{deliverable_id}",
+    response_model=ApiResponse[dict],
+)
+async def delete_deliverable(
+    deliverable_id: str,
+    user=Depends(get_current_user),
+    db: Database = Depends(get_db),
+):
+    """永久删除池内条目（仅限 expired/discarded）。"""
+    await PickupService(db).delete_pooled(user["id"], deliverable_id)
+    return ApiResponse(data={"id": deliverable_id}, message="已永久删除")
 
 
 @router.post(
