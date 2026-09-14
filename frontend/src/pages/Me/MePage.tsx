@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Alert, Button, Chip, CircularProgress, Stack, TextField } from '@mui/material';
+import { Alert, Button, Chip, CircularProgress, FormControlLabel, Stack, Switch, TextField } from '@mui/material';
 import { DeleteOutline, Download, SaveOutlined } from '@mui/icons-material';
 import PageContainer from '@/components/layout/PageContainer';
 import {
@@ -58,6 +58,7 @@ export default function MePage() {
   const [weeklyGoal, setWeeklyGoal] = useState<number | null>(1);
   const [contentStrategy, setContentStrategy] = useState('');
   const [accountReference, setAccountReference] = useState('');
+  const [autoDigest, setAutoDigest] = useState(false);
   const [exportGate, setExportGate] = useState<HumanGate | null>(null);
   const [deletionGate, setDeletionGate] = useState<HumanGate | null>(null);
   const [deletionConfirmation, setDeletionConfirmation] = useState('');
@@ -86,6 +87,7 @@ export default function MePage() {
     // 回显时转为中文描述；用户自填的自由文本原样保留。
     setContentStrategy(isKnownGoalEnum(next.content_strategy) ? humanizeGoal(next.content_strategy) : next.content_strategy);
     setAccountReference(next.xiaohongshu_account_reference || '');
+    setAutoDigest(Boolean(next.auto_digest_enabled));
   }, []);
 
   const load = useCallback(async () => {
@@ -153,6 +155,7 @@ export default function MePage() {
       weekly_publish_goal: goal,
       content_strategy: contentStrategy.trim(),
       xiaohongshu_account_reference: accountReference.trim(),
+      auto_digest_enabled: autoDigest,
       consent: settings.consent,
       expected_version: settings.version,
     });
@@ -217,6 +220,14 @@ export default function MePage() {
               <TextField label="每周发布目标" type="number" value={weeklyGoal ?? ''} inputProps={{ min: 1, max: 7 }} onChange={(event) => setWeeklyGoal(event.target.value === '' ? null : Number(event.target.value))} required />
               <TextField label="内容策略" value={contentStrategy} onChange={(event) => setContentStrategy(event.target.value)} multiline minRows={2} required helperText="用一句话描述你这段时间的创作重点，例如：每周分享一条真实踩坑经验" />
               <TextField label="小红书账号备注" value={accountReference} onChange={(event) => setAccountReference(event.target.value)} helperText="仅用于区分账号，不要填写密码或令牌" />
+              {/* 夜间自动消化：默认关，用户主动开启后才在每晚整理素材。 */}
+              <FormControlLabel
+                control={<Switch checked={autoDigest} onChange={(event) => setAutoDigest(event.target.checked)} />}
+                label="每晚自动整理收件箱（03:00）"
+              />
+              <p className="operations-helper">
+                开启后每晚最多整理 {2} 条可发布素材；私密素材永不参与。关闭时请在收件箱手动点「消化生产」。
+              </p>
               <div className="operations-row-actions">
                 <Button variant="contained" startIcon={<SaveOutlined />} disabled={busy || !goalValid || !contentStrategy.trim()} onClick={() => void saveSettings()}>保存设置</Button>
               </div>

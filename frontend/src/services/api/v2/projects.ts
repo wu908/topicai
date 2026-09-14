@@ -363,6 +363,8 @@ export const updateUserSettings = (input: {
   content_strategy: string;
   xiaohongshu_account_reference?: string;
   consent: Record<string, unknown>;
+  /** 夜间自动消化开关（默认关）。 */
+  auto_digest_enabled?: boolean;
   expected_version: number;
 }) => getData(v2Client.put<ApiEnvelope<UserSettings>>('/settings', input));
 

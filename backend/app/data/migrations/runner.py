@@ -1124,6 +1124,21 @@ def apply(
                     ],
                 )
                 conn.executescript(sql)
+            elif version == "052_auto_digest_setting":
+                # 夜间自动消化开关（默认关）。加列走 _ensure_columns，
+                # 老库与全新库都能拿到该列。
+                _ensure_columns(
+                    conn,
+                    "users",
+                    [
+                        (
+                            "auto_digest_enabled",
+                            "INTEGER NOT NULL DEFAULT 0 "
+                            "CHECK (auto_digest_enabled IN (0,1))",
+                        ),
+                    ],
+                )
+                conn.executescript(sql)
             else:
                 conn.executescript(sql)
             post_step = MIGRATION_POST_STEPS.get(version)

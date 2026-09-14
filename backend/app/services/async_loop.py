@@ -234,7 +234,12 @@ class ProductionService:
         row = await self._row(owner, deliverable_id)
         return self._view(row)
 
-    async def digest(self, owner: str) -> dict[str, Any]:
+    async def digest(self, owner: str, *, limit: int | None = None) -> dict[str, Any]:
+        """把收件箱里可发布的素材整理成待发布产出。
+
+        limit 限制本次最多消化几条（夜间任务与逐条进度调用都会用）；
+        默认 None = 保持既有批量行为（受架上预算与 BATCH_MAIN 约束）。
+        """
         thread_id = str(uuid.uuid4())
         items = await self.db.fetch_all(
             "SELECT * FROM inbox_items WHERE owner_user_id=:owner "
@@ -251,6 +256,13 @@ class ProductionService:
         exploration = []
         if budget > len(mains):
             exploration = [i for i in items if i["kind"] == "idea"][:1]
+
+        if limit is not None:
+            # 逐条调用（前端进度 / 夜间配额）时按上限截断，先非 idea 再 idea。
+            allowance = max(0, limit)
+            mains = mains[:allowance]
+            allowance -= len(mains)
+            exploration = exploration[: max(0, allowance)]
 
         if not mains and not exploration:
             return {"thread_id": thread_id, "deliverables": []}

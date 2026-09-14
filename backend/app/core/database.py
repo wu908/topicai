@@ -354,6 +354,17 @@ class Database:
                             ),
                         ],
                     )
+                elif version == "052_auto_digest_setting":
+                    await ensure_columns(
+                        "users",
+                        [
+                            (
+                                "auto_digest_enabled",
+                                "INTEGER NOT NULL DEFAULT 0 "
+                                "CHECK (auto_digest_enabled IN (0,1))",
+                            ),
+                        ],
+                    )
                 for stmt in _split_sql_statements(sql):
                     await conn.execute(text(stmt))
                 await conn.execute(

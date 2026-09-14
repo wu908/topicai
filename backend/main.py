@@ -114,6 +114,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # ==================== Shutdown ====================
     logger.info(f"Shutting down {settings.app_name}...")
 
+    # 先停调度器再关库：夜间消化是长任务，反过来会让它撞上已关闭的连接。
+    if hasattr(app.state, "scheduler") and app.state.scheduler:
+        try:
+            app.state.scheduler.shutdown(wait=False)
+            logger.info("Scheduler shutdown")
+        except Exception as e:
+            logger.warning(f"Scheduler shutdown error: {e}")
+
     # Close database
     if hasattr(app.state, "db") and app.state.db:
         try:
@@ -121,14 +129,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             logger.info("Database connection closed")
         except Exception as e:
             logger.warning(f"Database close error: {e}")
-
-    # Shutdown scheduler
-    if hasattr(app.state, "scheduler") and app.state.scheduler:
-        try:
-            app.state.scheduler.shutdown(wait=False)
-            logger.info("Scheduler shutdown")
-        except Exception as e:
-            logger.warning(f"Scheduler shutdown error: {e}")
 
     logger.info("Shutdown complete")
 
