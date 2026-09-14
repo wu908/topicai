@@ -82,6 +82,9 @@ class ContentGenome(StrictModel):
     viewpoint_context: list[dict[str, Any]]
     series_context: list[dict[str, Any]]
     insight_context: list[dict[str, Any]]
+    #: R4：证据不足、还不能当生成依据的观察（单次样本）。它们不进
+    #: insight_context，但对用户与 trace 都可见——「待验证」是诚实的中间态。
+    pending_observations: list[dict[str, Any]] = Field(default_factory=list)
     summary: dict[str, int]
 
 
