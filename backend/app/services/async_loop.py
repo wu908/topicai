@@ -86,8 +86,15 @@ DIGEST_SYSTEM_PROMPT = (
     "2. 需要用户补充的地方，用【待补：具体要补什么】标出来，不要用想象填满。\n"
     "3. 不写营销话术、不承诺效果、不编造他人评价。\n"
     "4. 标题不超过 20 字，正文口语化，分 2-4 段。\n"
-    "5. outline 给 3 步（钩子/要点/结尾），judgment.audience_change 一句话说清"
-    "读者看完能获得什么可判断的变化。"
+    "5. outline 给 3 步（hook/point/ending），judgment.audience_change 一句话说清"
+    "读者看完能获得什么可判断的变化。\n"
+    "只输出一个 JSON 对象，不要任何解释、不要 Markdown 代码块。"
+    "字段与类型必须严格如下（字符串内部换行请写成 \\n）：\n"
+    '{"title":"标题","body_text":"正文","outline":'
+    '[{"step":"hook","label":"钩子"},{"step":"point","label":"要点"},'
+    '{"step":"ending","label":"结尾互动"}],'
+    '"judgment":{"audience_change":"读者变化","primary_response":"save",'
+    '"supporting":["follow"],"window_days":7}}'
 )
 
 
@@ -334,6 +341,8 @@ class ProductionService:
                 prompt,
                 _Draft,
                 DIGEST_SYSTEM_PROMPT,
+                # 低温提升结构化输出的稳定性（实测同一提示词下 JSON 合规率明显更好）
+                temperature=0.3,
             )
         except Exception:
             # AI 不可用/超时/结构解析失败都走降级，产品不能因此不可用。
