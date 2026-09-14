@@ -51,11 +51,21 @@ async def list_inbox(
 
 @router.post("/inbox/digest", response_model=ApiResponse[dict])
 async def digest_inbox(
+    limit: int | None = None,
     user=Depends(get_current_user),
     db: Database = Depends(get_db),
 ):
-    result = await ProductionService(db).digest(user["id"])
-    return ApiResponse(data=result)
+    """消化收件箱。
+
+    `limit` 让调用方逐条消化：单条 AI 生成要几十秒，一次请求塞整批会
+    撞上网关读超时；逐条调用还能拿到进度、把失败隔离在单条内。
+    不传 limit 时保持既有的整批行为。
+    """
+    if limit is not None and limit < 1:
+        raise ValueError("limit must be at least 1")
+    result = await ProductionService(db).digest(user["id"], limit=limit)
+    remaining = await ProductionService(db).pending_intake_count(user["id"])
+    return ApiResponse(data={**result, "remaining": remaining})
 
 
 @router.get("/deliverables", response_model=ApiResponse[dict])

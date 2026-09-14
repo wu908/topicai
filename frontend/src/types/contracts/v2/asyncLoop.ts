@@ -87,6 +87,8 @@ export interface PickupResult {
 export interface DigestResult {
   thread_id: string;
   deliverables: Deliverable[];
+  /** 还有多少可发布素材未消化（逐条进度用）。 */
+  remaining: number;
 }
 
 export interface MetricRecord {

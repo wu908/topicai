@@ -24,8 +24,16 @@ export const addInboxItem = (input: InboxAddInput) =>
 export const listInbox = () =>
   getData(v2Client.get<ApiEnvelope<{ items: InboxItem[]; total: number }>>('/loop/inbox'));
 
-export const digestInbox = () =>
-  getData(v2Client.post<ApiEnvelope<DigestResult>>('/loop/inbox/digest'));
+/** 消化收件箱。limit 用于逐条消化：单条 AI 生成要几十秒，
+ *  一次请求塞整批会撞上网关读超时，逐条还能显示进度并隔离单条失败。 */
+export const digestInbox = (limit?: number) =>
+  getData(
+    v2Client.post<ApiEnvelope<DigestResult>>(
+      limit === undefined
+        ? '/loop/inbox/digest'
+        : `/loop/inbox/digest?limit=${encodeURIComponent(String(limit))}`,
+    ),
+  );
 
 export const listDeliverables = (status = 'ready') =>
   getData(

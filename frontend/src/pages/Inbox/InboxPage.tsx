@@ -1,5 +1,6 @@
 /** 收件箱（原型 hifi-lumen.html 对齐）：dropzone 投放 + 最近丢进来的 + 证伪线度量。 */
 import { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 import { extractErrorMessage } from '@/utils/error';
 import {
@@ -27,6 +28,7 @@ const fmtTime = (iso: string) =>
   new Date(iso).toLocaleDateString('zh-CN', { weekday: 'short', hour: '2-digit', minute: '2-digit' });
 
 export default function InboxPage() {
+  const navigate = useNavigate();
   const [items, setItems] = useState<InboxItem[]>([]);
   const [metrics, setMetrics] = useState<MetricRecord[]>([]);
   const [busy, setBusy] = useState(false);
@@ -36,6 +38,7 @@ export default function InboxPage() {
   const [draftKind, setDraftKind] = useState('text');
   const [isPrivate, setIsPrivate] = useState(false);
   const [loggingMinutes, setLoggingMinutes] = useState(false);
+  const [digestProgress, setDigestProgress] = useState<{ index: number; elapsed: number } | null>(null);
   const [minutesInput, setMinutesInput] = useState('');
 
   const reload = useCallback(async () => {
@@ -83,12 +86,36 @@ export default function InboxPage() {
       setDraft('');
     }, '已丢进收件箱。');
 
+  /** 逐条消化：每次只请求 1 条，显示「第 k 条 · 已用 N 秒」，
+   *  单条失败不丢已产出的部分（AI 生成几十秒，不能塞进一个请求）。 */
   const digest = () =>
     run(async () => {
-      const result = await digestInbox();
+      let produced = 0;
+      let index = 0;
+      let remaining = 1;
+      const startedAt = Date.now();
+      while (remaining > 0) {
+        index += 1;
+        setDigestProgress({ index, elapsed: 0 });
+        const timer = window.setInterval(
+          () => setDigestProgress({ index, elapsed: Math.round((Date.now() - startedAt) / 1000) }),
+          1000,
+        );
+        try {
+          const result = await digestInbox(1);
+          produced += result.deliverables.length;
+          remaining = result.remaining;
+          // 没有新产出说明剩下的是预检过不了的素材，再循环只会空转。
+          if (result.deliverables.length === 0) break;
+        } finally {
+          window.clearInterval(timer);
+        }
+      }
+      setDigestProgress(null);
+      const seconds = Math.round((Date.now() - startedAt) / 1000);
       setNotice(
-        result.deliverables.length
-          ? `产出了 ${result.deliverables.length} 条新内容。`
+        produced
+          ? `产出了 ${produced} 条新内容（用时 ${seconds} 秒）。`
           : '没有可消化的新素材。',
       );
     });
@@ -98,7 +125,16 @@ export default function InboxPage() {
   return (
     <div>
       {error ? <p className="login-err" role="alert">{error}</p> : null}
-      {notice ? <p className="pg-sub" role="status" style={{ color: 'var(--ink)' }}>{notice}</p> : null}
+      {notice ? (
+        <p className="pg-sub" role="status" style={{ color: 'var(--ink)' }}>
+          {notice}
+          {notice.includes('产出了') ? (
+            <button type="button" className="askbtn" style={{ marginLeft: 10 }} onClick={() => navigate('/loop')}>
+              去看产出架 →
+            </button>
+          ) : null}
+        </p>
+      ) : null}
       <p className="kicker">收件箱 · {intakeCount} 条待消化</p>
       <h1 className="pg">想到什么，丢进来，就去忙别的。</h1>
 
@@ -124,7 +160,11 @@ export default function InboxPage() {
         </div>
         <div className="row">
           <button type="button" className="btn btn-primary" disabled={busy || !draft.trim()} onClick={() => void addDraft()}>丢进去</button>
-          <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => void digest()}>消化生产</button>
+          <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => void digest()}>
+            {digestProgress
+              ? `消化中 第 ${digestProgress.index} 条 · 已用 ${digestProgress.elapsed} 秒`
+              : '消化生产'}
+          </button>
         </div>
         <div className="consent">
           <span>本次素材授权 · <b>{isPrivate ? '私密 · 不出本地' : '仅用于生成（可发布类）'}</b></span>
