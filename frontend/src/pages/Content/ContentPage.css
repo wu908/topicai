@@ -39,6 +39,12 @@
   border-bottom: 1px solid var(--v3-border);
 }
 
+/* 冷启动的两条路（起步实验 / 贴参考）在同一个入口里并列 */
+.starter-entry-actions {
+  display: grid;
+  gap: 8px;
+}
+
 .starter-entry h2 {
   margin: 0;
   font-size: 15px;
@@ -162,6 +168,10 @@
   .starter-entry .MuiButton-root {
     grid-column: 1 / -1;
     justify-self: stretch;
+  }
+
+  .starter-entry-actions {
+    grid-column: 1 / -1;
   }
 }
 
