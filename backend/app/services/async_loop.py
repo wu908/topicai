@@ -399,7 +399,7 @@ class ProductionService:
             {
                 "id": deliverable_id, "owner": owner, "thread": thread_id,
                 "title": title, "body": body_text,
-                "outline": json.dumps(OUTLINE, ensure_ascii=False),
+                "outline": json.dumps(outline, ensure_ascii=False),
                 "facts": json.dumps(facts, ensure_ascii=False),
                 "judgment": json.dumps(judgment, ensure_ascii=False),
                 "intent": INTENT_BY_KIND.get(item["kind"], "share"),
