@@ -264,6 +264,7 @@ export default function OpportunitiesPage() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [manualOpen, setManualOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   // D7 瘦身：来源类型固定 user_keyword，有效期交给后端默认——
   // 用户只需要回答"你想到了什么"。
   const manualTrigger = 'user_keyword' as const;
@@ -360,7 +361,25 @@ export default function OpportunitiesPage() {
             {([['all', '全部'], ['proposed', '待确认'], ['saved', '已收藏'], ['accepted', '已采用'], ['rejected', '已放弃']] as const).map(([value, label]) => (
               <Button key={value} size="small" variant={filter === value ? 'contained' : 'outlined'} onClick={() => setFilter(value)}>{label}</Button>
             ))}
-            <TextField select size="small" label="来源类型筛选" value={sourceFilter} onChange={(event) => setSourceFilter(event.target.value as SourceFilter)}>
+            {/* 第五轮 C3：移动端 9 控件挤成三行且浮动标签与状态 chip 重叠，
+                两个筛选下拉在窄屏折叠到「筛选」开关之后。 */}
+            <Button
+              size="small"
+              variant="text"
+              sx={{ display: { xs: 'inline-flex', sm: 'none' } }}
+              onClick={() => setFiltersOpen((open) => !open)}
+              aria-expanded={filtersOpen}
+            >
+              {filtersOpen ? '收起筛选' : '筛选'}
+            </Button>
+            <TextField
+              select
+              size="small"
+              label="来源类型筛选"
+              value={sourceFilter}
+              onChange={(event) => setSourceFilter(event.target.value as SourceFilter)}
+              sx={{ display: { xs: filtersOpen ? 'inline-flex' : 'none', sm: 'inline-flex' } }}
+            >
               <MenuItem value="all">全部来源</MenuItem>
               <MenuItem value="history_derivative">历史内容</MenuItem>
               <MenuItem value="user_question">受众问题</MenuItem>
@@ -370,7 +389,14 @@ export default function OpportunitiesPage() {
               <MenuItem value="evergreen">常青需求</MenuItem>
               <MenuItem value="user_source">手动来源</MenuItem>
             </TextField>
-            <TextField select size="small" label="时效筛选" value={timelinessFilter} onChange={(event) => setTimelinessFilter(event.target.value as TimelinessFilter)}>
+            <TextField
+              select
+              size="small"
+              label="时效筛选"
+              value={timelinessFilter}
+              onChange={(event) => setTimelinessFilter(event.target.value as TimelinessFilter)}
+              sx={{ display: { xs: filtersOpen ? 'inline-flex' : 'none', sm: 'inline-flex' } }}
+            >
               <MenuItem value="all">全部时效</MenuItem>
               <MenuItem value="evergreen">常青</MenuItem>
               <MenuItem value="current">当前有效</MenuItem>
