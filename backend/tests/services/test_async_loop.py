@@ -10,6 +10,7 @@ from app.models.v2.async_loop import (
     PickupRequest,
 )
 from app.services.async_loop import (
+    OUTLINE,
     InboxService,
     LoopMetricsService,
     PickupService,
@@ -346,7 +347,10 @@ async def test_digest_uses_model_draft_when_available(test_db):
     assert "断更第三天" in d["body_text"]
     # 模型不产事实：facts 仍来自素材本身
     assert d["facts"][0]["source_inbox_id"] == item["id"]
-    assert d["outline"][0]["step"] == "hook"
+    # 断言标签本身来自草稿：只断言 step 的话，确定性骨架的 step 也叫 hook，
+    # 这个 bug（INSERT 仍绑定 OUTLINE 常量）就抓不住。
+    assert d["outline"][0]["label"] == "断更三天这个具体结果"
+    assert d["outline"][0]["label"] != OUTLINE[0]["label"]
     assert d["judgment"]["audience_change"].startswith("看完知道断更")
     assert d["precheck"]["passed"] is True
 
