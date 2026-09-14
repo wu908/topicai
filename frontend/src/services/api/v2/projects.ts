@@ -298,6 +298,30 @@ export const generateContentOpportunities = (desiredCount = 6) =>
     ),
   );
 
+/** 「开始一条内容」：一句话或一条素材 → AI 推断 → 建项目。 */
+export const startProject = (input: {
+  raw_input?: string;
+  inbox_item_id?: string;
+  idempotency_key: string;
+}) =>
+  getData(
+    v2Client.post<
+      ApiEnvelope<{
+        project_id: string;
+        title: string;
+        material_id: string | null;
+        inference: {
+          intent: 'solve' | 'share' | 'record' | null;
+          intent_label: string;
+          reason: string;
+          confidence: 'high' | 'medium' | 'low';
+          next_question: string;
+          source: 'ai' | 'deterministic_fallback';
+        };
+      }>
+    >('/projects/start', input),
+  );
+
 export const createProject = (input: ProjectCreateInput) =>
   getData(v2Client.post<ApiEnvelope<ContentProject>>('/projects', input));
 

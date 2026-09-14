@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   Alert,
   Box,
@@ -29,7 +29,6 @@ import {
   createBlindReview,
   createContentVersion,
   createObservation,
-  createProject,
   decideCandidateSegment,
   confirmProjectIntent,
   classifyRetrospectiveIntent,
@@ -62,6 +61,7 @@ import {
   extractSnapshotMetrics,
   listMaterials,
   addMaterialUsage,
+  startProject,
 } from '@/services/api/v2/projects';
 import type {
   CalibrationWorkspace,
@@ -86,11 +86,11 @@ import {
   BlindReviewAction,
   HypothesisForm,
   ObservationForm,
-  ProjectCreateForm,
   PublicationForm,
   SnapshotForm,
   VersionForm,
 } from '@/features/content/StageForms';
+import ProjectStartPanel from '@/features/content/ProjectStartPanel';
 import ProjectWorkspace from '@/features/content/ProjectWorkspace';
 import './ContentPage.css';
 
@@ -113,6 +113,13 @@ const makeKey = (prefix: string) =>
 export default function ContentPage() {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+  // 「开始一条内容」带过来的推断结果：呈现给用户，允许一句话纠正。
+  const inference = (location.state as { inference?: {
+    intent: string | null; intent_label: string; reason: string;
+    confidence: 'high' | 'medium' | 'low'; next_question: string;
+    source: 'ai' | 'deterministic_fallback';
+  } } | null)?.inference;
   const [projects, setProjects] = useState<ContentProject[]>([]);
   const [workspace, setWorkspace] = useState<CalibrationWorkspace | null>(null);
   const [materials, setMaterials] = useState<Material[]>([]);
@@ -286,12 +293,18 @@ export default function ContentPage() {
           </section>
         ) : null}
         {empty || showCreate ? (
-          <ProjectCreateForm
-            busy={busy}
-            onCommand={runCommand}
-            onCreated={(created) => navigate(`/content/${created.id}`)}
-            createProject={createProject}
-            makeKey={stableKey}
+          <ProjectStartPanel
+            onStart={async (input) => {
+              const started = await startProject({
+                ...(input.rawInput ? { raw_input: input.rawInput } : {}),
+                ...(input.inboxItemId ? { inbox_item_id: input.inboxItemId } : {}),
+                idempotency_key: stableKey('start'),
+              });
+              // 推断结果带进工作台呈现（不改 UserSettings，只走导航 state）
+              navigate(`/content/${started.project_id}`, {
+                state: { inference: started.inference },
+              });
+            }}
           />
         ) : (
             <div className="content-project-list">
@@ -365,6 +378,26 @@ export default function ContentPage() {
           idempotency_key: stableKey(`project-material-${material.id}-${workspace.project.id}`),
         }), `project-material-${material.id}-${workspace.project.id}`)}
       />
+      {inference && inference.source === 'ai' && inference.intent ? (
+        <section
+          className={`start-inference${inference.confidence === 'low' ? ' weak' : ''}`}
+          aria-label="AI 的理解"
+        >
+          <span className="tag">我理解这是「{inference.intent_label}」内容</span>
+          <span className="why">{inference.reason}</span>
+          <span className="act">
+            <button
+              type="button"
+              onClick={() => {
+                // 「不对」= 清掉推断，回到既有的意图确认步骤，由用户定。
+                navigate(location.pathname, { replace: true, state: null });
+              }}
+            >
+              不对，我自己选
+            </button>
+          </span>
+        </section>
+      ) : null}
       <ProjectWorkspace
         key={workspace.current_version?.id ?? `project-${workspace.project.id}`}
         workspace={workspace}
