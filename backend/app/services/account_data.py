@@ -19,6 +19,7 @@ EXPORT_TABLES: tuple[tuple[str, str], ...] = (
     ("creator_profiles", "user_id"),
     ("history_imports", "owner_user_id"),
     ("imported_notes", "owner_user_id"),
+    ("reference_anchors", "owner_user_id"),
     ("materials", "owner_user_id"),
     ("content_projects", "owner_user_id"),
     ("content_versions", "owner_user_id"),

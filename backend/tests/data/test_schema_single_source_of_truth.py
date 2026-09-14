@@ -76,6 +76,8 @@ _EXPECTED_TABLES: frozenset[str] = frozenset(
         "project_state_events",
         "history_imports",
         "imported_notes",
+        # reference anchor for cold start (055, R7)
+        "reference_anchors",
         # bounded starter entry flow (029); content execution remains in projects
         "starter_assessments",
         "starter_direction_candidates",
