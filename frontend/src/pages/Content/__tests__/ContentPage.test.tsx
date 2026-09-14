@@ -498,6 +498,8 @@ describe('ContentPage', () => {
     });
     renderPage('/content/p1');
 
+    // R5 版面分层：观点/系列控件在「参考与提醒」面板里，先展开（用户路径）
+    fireEvent.click(await screen.findByRole('button', { name: /参考与提醒/ }));
     fireEvent.click(await screen.findByRole('button', { name: '提炼候选' }));
 
     await waitFor(() => {
@@ -535,6 +537,8 @@ describe('ContentPage', () => {
     });
     renderPage('/content/p1');
 
+    // R5 版面分层：观点/系列控件在「参考与提醒」面板里，先展开（用户路径）
+    fireEvent.click(await screen.findByRole('button', { name: /参考与提醒/ }));
     fireEvent.click(await screen.findByRole('button', { name: '发现系列' }));
 
     await waitFor(() => {
