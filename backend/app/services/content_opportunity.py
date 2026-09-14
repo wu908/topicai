@@ -111,9 +111,11 @@ class ContentOpportunityService:
             return []
 
         pillar = pillars[0]
+        # origin='self'：参考样本不能当作用户自己的历史来生成"历史衍生"机会——
+        # 那会把别人的选题说成用户已经发过的内容。参考的作用见 reference_anchor。
         notes = await self.db.fetch_all(
             "SELECT * FROM imported_notes WHERE owner_user_id=:owner "
-            "AND retention_expires_at>:now "
+            "AND origin='self' AND retention_expires_at>:now "
             "ORDER BY published_at DESC,created_at DESC,id",
             {"owner": owner, "now": now()},
         )

@@ -23,9 +23,11 @@ class CreatorProfileV2Service:
         if row and row.get("confirmation_state") == "confirmed":
             return self._normalize(row)
 
+        # 只看用户自己的作品：参考样本（origin='reference'）回答的是"你想做成什么样"，
+        # 拿它们推断"你是谁"会把别人的定位说成用户的定位。
         notes = await self.db.fetch_all(
             "SELECT * FROM imported_notes WHERE owner_user_id=:owner "
-            "ORDER BY published_at,created_at,id",
+            "AND origin='self' ORDER BY published_at,created_at,id",
             {"owner": owner_user_id},
         )
         if row and payload.get("history_note_count") == len(notes):

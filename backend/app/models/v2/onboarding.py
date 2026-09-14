@@ -24,6 +24,20 @@ class HistoryImportCreate(BaseModel):
     idempotency_key: str = Field(min_length=1, max_length=200)
 
 
+class ReferenceNoteInput(HistoryNoteInput):
+    """一条**别人**的内容——用户想做成的那种样子。
+
+    与 HistoryNoteInput 的唯一区别是必须说明来源：用户说不出自己是谁，
+    但能指出"我想做成这样"，而"这样"是谁的必须记下来，否则这条证据无从追溯，
+    也无从让用户判断系统有没有看错人。
+
+    metrics 不参与任何推断：别人笔记的点赞数不是你的基线，也不构成选题依据
+    （见 reference_anchor 的 visibility_boundary）。
+    """
+
+    source_handle: str = Field(min_length=1, max_length=200)
+
+
 class ProductModeUpdate(BaseModel):
     mode: Literal["starter", "growth"]
     expected_version: int = Field(ge=1)

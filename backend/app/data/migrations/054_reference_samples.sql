@@ -1,0 +1,18 @@
+-- 054_reference_samples.sql（冷启动锚点 R7）
+--
+-- 给「别人的内容」一个位置。此前 imported_notes 在结构上假设每一行都是用户自己的
+-- 作品——owner_user_id 是唯一身份，没有作者/来源列；而 benchmark_samples 是纯数值
+-- 基线表（无标题、无正文、无作者），装不进需要读文本的东西。于是"对标账号"无处可放。
+--
+--   origin         'self' | 'reference'；默认 'self'，老数据语义不变
+--   source_handle  参考来源标识（账号名或链接）；自有历史为 NULL
+--
+-- 为什么参考样本的保留期与自有历史不同（见 history_import._RETENTION_DAYS）：
+-- 自有历史的 90 天是隐私窗口；参考样本是用户自己贴进来的"我想做成这样"，静默过期
+-- 会让锚点凭空消失。
+--
+-- 关键不变式（由 test_reference_samples 守）：参考样本可以影响"你想做成这样"，
+-- 但绝不可以进入"你是谁"的画像推断——那是两件事。所有画像/机会读取都限定 origin='self'。
+--
+-- 加列由 runner / 内存路径的 ensure_columns 完成（PRAGMA 守卫，可重复执行），
+-- 这里只记录语义——与 046、052 的做法一致。
