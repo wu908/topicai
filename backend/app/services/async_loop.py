@@ -156,6 +156,10 @@ class ProductionService:
     async def list_deliverables(
         self, owner: str, *, status: str = "ready"
     ) -> list[dict[str, Any]]:
+        # 第五轮 C5：sweep_expired 此前只有测试调用，生产链路从不触发，
+        # 于是「不选的会安静等 7 天，然后回到灵感池」实际不成立。
+        # 列表读取时惰性清扫——与 _expire_at 的派生语义一致，无需额外定时任务。
+        await self.sweep_expired(owner)
         rows = await self.db.fetch_all(
             "SELECT * FROM deliverables WHERE owner_user_id=:owner AND status=:status "
             "ORDER BY created_at DESC, id",

@@ -257,3 +257,35 @@ async def test_sweep_expired_is_owner_scoped(test_db):
     )
     assert row is not None, "u2 的清扫不得触碰 u1 的产出"
     assert await ProductionService(test_db).sweep_expired("u1") == 1
+
+
+@pytest.mark.asyncio
+async def test_list_deliverables_sweeps_expired_first(test_db):
+    """第五轮 C5：列表读取必须惰性清扫过期产出，否则「等 7 天回灵感池」
+    的承诺在生产链路上不成立（sweep_expired 此前只有测试调用）。"""
+    import datetime
+
+    from app.services.async_loop import InboxService, ProductionService
+
+    owner = "loop-user"
+    await insert_user(test_db)
+    await InboxService(test_db).add(owner, _item("sweep-on-list"))
+    d = (await ProductionService(test_db).digest(owner))["deliverables"][0]
+    rows = await ProductionService(test_db).list_deliverables(owner)
+    assert len(rows) == 1
+    deliverable_id = d["id"]
+
+    past = (datetime.datetime.now(datetime.UTC)
+            - datetime.timedelta(days=8)).isoformat()
+    await test_db.execute(
+        "UPDATE deliverables SET expire_at=:past WHERE id=:id",
+        {"past": past, "id": deliverable_id},
+    )
+
+    # 过期后立刻列架：该条必须已被清扫出 ready 列表。
+    after = await ProductionService(test_db).list_deliverables(owner)
+    assert all(r["id"] != deliverable_id for r in after)
+    expired = await test_db.fetch_one(
+        "SELECT status FROM deliverables WHERE id=:id", {"id": deliverable_id}
+    )
+    assert expired["status"] == "expired"
