@@ -10,10 +10,12 @@ from app.models.v2.content_project import (
     ContentVersionCreate,
     ProjectTransition,
 )
+from app.models.v2.project_start import ProjectStartRequest
 from app.models.v2.publish_hypothesis import PublishHypothesisLock
 from app.services.calibration_workspace import CalibrationWorkspaceService
 from app.services.content_project import ContentProjectService
 from app.services.content_version import ContentVersionService
+from app.services.project_start import ProjectStartService
 from app.services.project_state import ProjectStateService
 from app.services.publish_hypothesis import PublishHypothesisService
 
@@ -43,6 +45,21 @@ async def create_project(
         data=project,
         meta={"idempotency_replayed": replayed},
     )
+
+
+@router.post("/start", status_code=201)
+async def start_project(
+    body: ProjectStartRequest,
+    user=Depends(get_current_user),
+    db: Database = Depends(get_db),
+):
+    """「开始一条内容」：一句话或一条已有素材 → AI 推断意图 → 建项目。
+
+    与 POST /projects 的区别：用户不需要先给标题、选意图、写读者变化；
+    推断结果回给前端呈现，用户只在不对时一句话纠正。
+    """
+    result = await ProjectStartService(db).start(user["id"], body)
+    return ApiResponse(data=result.model_dump(mode="json"))
 
 
 @router.get("/{project_id}")

@@ -322,3 +322,50 @@ async def test_digest_rejects_non_positive_limit(client, test_db):
     response = await client.post("/api/v2/loop/inbox/digest?limit=0")
     assert response.status_code == 400
     assert "limit must be at least 1" in response.json()["message"]
+
+
+# ==================== 「开始一条内容」（创建流程重构 R1） ====================
+
+
+@pytest.mark.asyncio
+async def test_start_project_route_is_not_shadowed_by_project_id(client, test_db):
+    """/projects/start 必须自己命中——若注册在 /{project_id} 之后会被吃掉。
+
+    这类遮蔽是"路由顺序"级别的静默故障，用端点层测试守住。
+    """
+    from app.services.async_loop import InboxService
+
+    await InboxService(test_db).add(
+        "u1",
+        InboxItemCreate(
+            kind="text", title="素材 start", content="一句话就能开一条内容。",
+            idempotency_key="start-route",
+        ),
+    )
+    items = (await client.get("/api/v2/loop/inbox")).json()["data"]["items"]
+    item_id = items[0]["id"]
+
+    response = await client.post(
+        "/api/v2/projects/start",
+        json={"inbox_item_id": item_id, "idempotency_key": "api-start-1"},
+    )
+    # 关键：不是 404/422（被 {project_id} 吃掉），而是成功创建
+    assert response.status_code == 201, response.text
+    data = response.json()["data"]
+    assert data["project_id"]
+    assert data["material_id"]
+    assert data["inference"]["next_question"]
+    assert data["inference"]["source"] in ("ai", "deterministic_fallback")
+
+
+@pytest.mark.asyncio
+async def test_start_project_rejects_two_sources(client):
+    response = await client.post(
+        "/api/v2/projects/start",
+        json={
+            "raw_input": "一句话",
+            "inbox_item_id": "also-an-id",
+            "idempotency_key": "api-start-2",
+        },
+    )
+    assert response.status_code == 422
