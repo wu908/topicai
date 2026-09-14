@@ -7,11 +7,15 @@ expire; pickup goes through the official project services so shared semantics
 (content project creation + working intent confirmation) are never bypassed.
 """
 
+import asyncio
 import json
+import logging
 import uuid
 from collections.abc import Sequence
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, Literal
+
+from pydantic import Field
 
 from app.core.exceptions import IdempotencyConflictException
 from app.models.v2.action_domain import AITraceCreate
@@ -22,11 +26,13 @@ from app.models.v2.async_loop import (
     PickupRequest,
 )
 from app.models.v2.content_project import ContentProjectCreate
-from app.models.v2.intent_actions import IntentConfirmation
+from app.models.v2.intent_actions import IntentConfirmation, StrictModel
 from app.services.ai_trace import AITraceService
 from app.services.content_project import ContentProjectService
 from app.services.intent_actions import IntentConfirmationService
 from app.services.v2_utils import now, request_hash
+
+logger = logging.getLogger(__name__)
 
 SHELF_LIMIT = 6
 BATCH_MAIN = 2
@@ -48,6 +54,42 @@ INTENT_BY_KIND = {
     "image": "record",
     "voice": "record",
 }
+
+#: AI 生成草稿的结构化契约。facts 刻意不在其中——事实必须来自收件箱素材，
+#: 不能由模型生成，否则溯源不变式会被破坏。
+class _OutlineStep(StrictModel):
+    step: str = Field(min_length=1, max_length=40)
+    label: str = Field(min_length=1, max_length=120)
+
+
+class _JudgmentDraft(StrictModel):
+    audience_change: str = Field(min_length=1, max_length=300)
+    primary_response: Literal["save", "comment", "profile_visit", "follow"] = "save"
+    supporting: list[Literal["save", "comment", "profile_visit", "follow"]] = Field(
+        default_factory=list, max_length=2
+    )
+    window_days: int = Field(default=7, ge=1, le=365)
+
+
+class _Draft(StrictModel):
+    title: str = Field(min_length=1, max_length=80)
+    body_text: str = Field(min_length=1, max_length=4000)
+    outline: list[_OutlineStep] = Field(min_length=1, max_length=6)
+    judgment: _JudgmentDraft
+
+
+DIGEST_SYSTEM_PROMPT = (
+    "你是小红书创作者的写作助手。用户会给你一条他自己记录的真实素材，"
+    "你要把它整理成一篇可直接发布的笔记草稿。\n"
+    "硬性规则：\n"
+    "1. 只能使用素材里出现过的事实、数字、场景。素材没写的，一律不要写。\n"
+    "2. 需要用户补充的地方，用【待补：具体要补什么】标出来，不要用想象填满。\n"
+    "3. 不写营销话术、不承诺效果、不编造他人评价。\n"
+    "4. 标题不超过 20 字，正文口语化，分 2-4 段。\n"
+    "5. outline 给 3 步（钩子/要点/结尾），judgment.audience_change 一句话说清"
+    "读者看完能获得什么可判断的变化。"
+)
+
 
 OUTLINE = [
     {"step": "hook", "label": "钩子：一个具体结果或翻车瞬间"},
@@ -216,8 +258,10 @@ class ProductionService:
         await self._event(owner, thread_id, None, "queued", {"intake": len(items)})
         produced: list[dict[str, Any]] = []
         used: list[str] = []
+        sources: list[str] = []
         for item, is_exp in [(i, 0) for i in mains] + [(i, 1) for i in exploration]:
-            view = await self._produce(owner, thread_id, item, is_exp)
+            view, source = await self._produce(owner, thread_id, item, is_exp)
+            sources.append(source)
             if not view:
                 continue  # 预检未过：素材留在收件箱，等用户补料后重试
             produced.append(view)
@@ -228,7 +272,7 @@ class ProductionService:
                 "WHERE id=:id AND owner_user_id=:owner AND status='intake'",
                 {"now": now(), "id": item_id, "owner": owner},
             )
-        await self._trace(owner, thread_id, used)
+        await self._trace(owner, thread_id, used, sources)
         await self._event(owner, thread_id, None, "ready",
                           {"deliverables": len(produced)})
         return {"thread_id": thread_id, "deliverables": produced}
@@ -249,35 +293,72 @@ class ProductionService:
                               {"reason": "ready_7d_not_picked"})
         return len(stale)
 
+    async def _draft_from_ai(self, item: Any) -> _Draft | None:
+        """让模型把一条真实素材整理成草稿；失败返回 None（由调用方降级）。
+
+        事实（facts）刻意不由模型产出：它只写标题/正文/大纲/判断草案，
+        事实仍由调用方从素材派生，保证「每条事实可溯源」的不变式。
+        """
+        from app.core.llm import LLMClient, wrap_user_input
+
+        llm = self.llm or LLMClient()
+        prompt = (
+            f"素材标题：{wrap_user_input(item['title'] or '（无标题）')}\n"
+            f"素材正文：{wrap_user_input(item['content'])}\n"
+            f"素材类型：{item['kind']}"
+        )
+        try:
+            return await asyncio.to_thread(
+                llm.generate_structured,
+                prompt,
+                _Draft,
+                DIGEST_SYSTEM_PROMPT,
+            )
+        except Exception:
+            # AI 不可用/超时/结构解析失败都走降级，产品不能因此不可用。
+            logger.warning("Digest AI draft failed; falling back", exc_info=True)
+            return None
+
     async def _produce(self, owner: str, thread_id: str,
-                       item: Any, is_exploration: int) -> dict[str, Any]:
+                       item: Any, is_exploration: int) -> tuple[dict[str, Any], str]:
         deliverable_id = str(uuid.uuid4())
         ts = now()
         content = item["content"]
-        title = item["title"] or content[:20]
-        body_text = (
-            f"{title}\n\n"
-            f"{content}\n\n"
-            "[请在发布前补充并确认具体细节：对照大纲逐条写下你亲身经历的版本，"
-            "写不出的条目直接删除；当前版本不会虚构缺失经历。]"
-        )
+        draft = await self._draft_from_ai(item)
+        if draft is not None:
+            title = draft.title
+            body_text = draft.body_text
+            outline = [step.model_dump() for step in draft.outline]
+            judgment = draft.judgment.model_dump()
+            source = "ai"
+        else:
+            title = item["title"] or content[:20]
+            body_text = (
+                f"{title}\n\n"
+                f"{content}\n\n"
+                "[请在发布前补充并确认具体细节：对照大纲逐条写下你亲身经历的版本，"
+                "写不出的条目直接删除；当前版本不会虚构缺失经历。]"
+            )
+            outline = OUTLINE
+            judgment = {
+                "audience_change": "看完能获得一个真实、可判断的变化",
+                "primary_response": "save",
+                "supporting": ["follow"],
+                "window_days": 7,
+            }
+            source = "deterministic_fallback"
+        # 事实始终来自素材本身（不由模型生成），溯源不变式不因 AI 而放松。
         facts = [{"statement": content[:200], "source_inbox_id": item["id"],
                   "note": "收件箱素材"}]
-        judgment = {
-            "audience_change": "看完能获得一个真实、可判断的变化",
-            "primary_response": "save",
-            "supporting": ["follow"],
-            "window_days": 7,
-        }
         precheck = PublishCheckService.run_precheck({
             "title": title, "body_text": body_text,
-            "outline": OUTLINE, "facts": facts,
+            "outline": outline, "facts": facts,
         })
         if not precheck["passed"]:
             # 承重墙：结构预检不过就不产 ready（无死路——记 needs_input 事件）
             await self._event(owner, thread_id, None, "needs_input",
                               {"reason": "precheck_failed", "issues": precheck["issues"]})
-            return {}
+            return {}, source
         await self.db.execute(
             "INSERT INTO deliverables (id,owner_user_id,thread_id,title,body_text,"
             "outline_json,facts_json,judgment_json,content_intent,proposed_publish_at,"
@@ -300,9 +381,9 @@ class ProductionService:
         )
         await self._event(owner, thread_id, deliverable_id, "ready",
                           {"exploration": bool(is_exploration),
-                           "precheck": "passed"})
+                           "precheck": "passed", "draft_source": source})
         row = await self._row(owner, deliverable_id)
-        return self._view(row)
+        return self._view(row), source
 
     async def _event(self, owner: str, thread_id: str, deliverable_id: str | None,
                      event_type: str, detail: dict[str, Any]) -> None:
@@ -317,7 +398,21 @@ class ProductionService:
             },
         )
 
-    async def _trace(self, owner: str, thread_id: str, used: list[str]) -> None:
+    async def _trace(self, owner: str, thread_id: str, used: list[str],
+                     sources: list[str]) -> None:
+        # 逐条来源在批次末尾汇总：只要有一条走了模型就按「模型参与」记录
+        # （宁可多报不可少报），并把降级条数与原因写进 limitations。
+        ai_used = "ai" in sources
+        fallback_count = sources.count("deterministic_fallback")
+        limitations = (
+            ["模型产出；事实仍逐条来自收件箱素材", "细节需用户确认"]
+            if ai_used and not fallback_count
+            else (
+                [f"其中 {fallback_count} 条降级为确定性骨架", "细节仍需用户确认"]
+                if ai_used
+                else ["模型不可用；确定性骨架产出", "细节仍需用户确认"]
+            )
+        )
         session = await self.db.get_session()
         async with session:
             async with session.begin():
@@ -329,9 +424,15 @@ class ProductionService:
                         task_type="inbox_production",
                         input_refs=[f"inbox-item:{i}" for i in used],
                         evidence_refs=[f"inbox-item:{i}" for i in used],
-                        policy_version="async-loop-deterministic-v1",
-                        model_identifier=None,
-                        capability="deterministic_fallback",
+                        policy_version=(
+                            "async-loop-ai-v1" if ai_used
+                            else "async-loop-deterministic-v1"
+                        ),
+                        model_identifier=(
+                            getattr(self.llm, "model", None) if ai_used else None
+                        ),
+                        capability="text" if ai_used else "deterministic_fallback",
+                        outcome="success" if ai_used else "fallback",
                         visibility_boundary={
                             "allowed": ["creative_inbox"],
                             "forbidden": ["private_materials", "legacy_hotspots"],
@@ -343,10 +444,7 @@ class ProductionService:
                             "missing_classes": [],
                         },
                         calibration_state="insufficient",
-                        limitations=[
-                            "模型不可用；确定性骨架产出",
-                            "细节仍需用户确认",
-                        ],
+                        limitations=limitations,
                         output_ref=f"production-thread:{thread_id}",
                         generated_at=now(),
                     ),
