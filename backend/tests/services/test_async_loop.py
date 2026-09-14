@@ -289,3 +289,122 @@ async def test_list_deliverables_sweeps_expired_first(test_db):
         "SELECT status FROM deliverables WHERE id=:id", {"id": deliverable_id}
     )
     assert expired["status"] == "expired"
+
+
+# ==================== AI 消化的真实生成路径（第六轮 C7） ====================
+
+
+class _StubLLM:
+    """记录调用参数并返回结构化草稿的假模型。"""
+
+    model = "stub-writer-v1"
+
+    def __init__(self, draft=None, error=None):
+        self._draft = draft
+        self._error = error
+        self.calls = []
+
+    def generate_structured(self, prompt, schema, system_prompt=None, **kwargs):
+        self.calls.append({"prompt": prompt, "system_prompt": system_prompt})
+        if self._error is not None:
+            raise self._error
+        return schema.model_validate(self._draft)
+
+
+def _ai_draft():
+    return {
+        "title": "断更三天后我改掉的一件事",
+        "body_text": "断更第三天，我把攒着的七条零碎想法一次性丢进收件箱。\n十分钟后两条变成了初稿。",
+        "outline": [
+            {"step": "hook", "label": "断更三天这个具体结果"},
+            {"step": "point", "label": "七条零碎想法一次丢进收件箱"},
+            {"step": "ending", "label": "问读者卡在哪一步"},
+        ],
+        "judgment": {
+            "audience_change": "看完知道断更后可以先用零碎想法重启",
+            "primary_response": "save",
+            "supporting": ["follow"],
+            "window_days": 7,
+        },
+    }
+
+
+@pytest.mark.asyncio
+async def test_digest_uses_model_draft_when_available(test_db):
+    """AI 可用时：正文来自模型，事实仍逐条溯源，trace 记为模型参与。"""
+    from app.services.async_loop import ProductionService
+
+    await insert_user(test_db)
+    item, _ = await InboxService(test_db).add("loop-user", _item("ai-path"))
+    llm = _StubLLM(draft=_ai_draft())
+
+    result = await ProductionService(test_db, llm=llm).digest("loop-user")
+
+    assert llm.calls, "模型必须被调用"
+    d = result["deliverables"][0]
+    assert d["title"] == "断更三天后我改掉的一件事"
+    assert "断更第三天" in d["body_text"]
+    # 模型不产事实：facts 仍来自素材本身
+    assert d["facts"][0]["source_inbox_id"] == item["id"]
+    assert d["outline"][0]["step"] == "hook"
+    assert d["judgment"]["audience_change"].startswith("看完知道断更")
+    assert d["precheck"]["passed"] is True
+
+    row = await test_db.fetch_one(
+        "SELECT capability,policy_version,model_identifier,outcome "
+        "FROM ai_traces_v2 WHERE output_ref=:ref",
+        {"ref": f"production-thread:{result['thread_id']}"},
+    )
+    assert row["capability"] == "text"
+    assert row["policy_version"] == "async-loop-ai-v1"
+    assert row["model_identifier"] == "stub-writer-v1"
+    assert row["outcome"] == "success"
+
+
+@pytest.mark.asyncio
+async def test_digest_falls_back_to_deterministic_skeleton_on_model_failure(test_db):
+    """模型失败时：产出仍可用（骨架），trace 记为降级，事实溯源不变。"""
+    from app.services.async_loop import ProductionService
+
+    await insert_user(test_db)
+    item, _ = await InboxService(test_db).add("loop-user", _item("fallback"))
+    llm = _StubLLM(error=RuntimeError("model down"))
+
+    result = await ProductionService(test_db, llm=llm).digest("loop-user")
+
+    d = result["deliverables"][0]
+    assert d["title"] == "素材 fallback"
+    assert "请在发布前补充并确认具体细节" in d["body_text"]
+    assert d["facts"][0]["source_inbox_id"] == item["id"]
+
+    row = await test_db.fetch_one(
+        "SELECT capability,policy_version,model_identifier,outcome,limitations_json "
+        "FROM ai_traces_v2 WHERE output_ref=:ref",
+        {"ref": f"production-thread:{result['thread_id']}"},
+    )
+    assert row["capability"] == "deterministic_fallback"
+    assert row["policy_version"] == "async-loop-deterministic-v1"
+    assert row["model_identifier"] is None
+    assert row["outcome"] == "fallback"
+
+
+@pytest.mark.asyncio
+async def test_model_draft_still_goes_through_precheck(test_db):
+    """模型输出过不了结构预检时，照样不产 ready（承重墙对 AI 同样生效）。"""
+    from app.services.async_loop import ProductionService
+
+    await insert_user(test_db)
+    await InboxService(test_db).add("loop-user", _item("precheck-ai"))
+    bad = _ai_draft()
+    # 过得了 schema（outline 至少一步），但缺 hook/ending → 预检必须拦下。
+    bad["outline"] = [{"step": "point", "label": "只有要点，没有钩子和结尾"}]
+    llm = _StubLLM(draft=bad)
+
+    result = await ProductionService(test_db, llm=llm).digest("loop-user")
+
+    assert result["deliverables"] == []
+    events = await test_db.fetch_all(
+        "SELECT event_type,detail_json FROM production_events "
+        "WHERE owner_user_id='loop-user' AND event_type='needs_input'"
+    )
+    assert events, "预检未过必须留 needs_input 事件，而不是死路"
