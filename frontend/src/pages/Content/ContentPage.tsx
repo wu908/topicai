@@ -341,14 +341,19 @@ export default function ContentPage() {
                 key={project.id}
                 onClick={() => navigate(`/content/${project.id}`)}
               >
-                <span>
+                <span className="content-project-row-body">
                   <span className="content-project-row-title">{project.title}</span>
                   <span className="content-project-row-meta">
                     {projectIntentLabel(project)}
                   </span>
                 </span>
                 <span className="content-project-row-meta">
-                  {project.orchestrated_action?.title ?? nextActionLabels[project.next_action ?? 'create_version']}
+                  {/* 列表只是索引，右侧该用短动作标签。此前优先取动作标题，而
+                      answer_key_question 的标题是整句问题（"你亲自解决过这个问题的
+                      哪一步最容易被忽略？"），在列表里看起来像标题的延续。 */}
+                  {project.next_action
+                    ? nextActionLabels[project.next_action] ?? project.orchestrated_action?.title
+                    : project.orchestrated_action?.title ?? nextActionLabels.create_version}
                 </span>
               </button>
             ))}
@@ -667,10 +672,14 @@ function IntentActionPanel({
 }) {
   // 未知意图值同时规整到已知集合，避免 MUI select 报 out-of-range。
   const initialIntent = workspace.project.content_intent || workspace.project.retrospective_intent || 'solve';
-  const [intent, setIntent] = useState<ContentIntent>(
-    initialIntent in intentCopy ? initialIntent : 'solve',
+  const normalizedIntent = (initialIntent in intentCopy ? initialIntent : 'solve') as ContentIntent;
+  const [intent, setIntent] = useState<ContentIntent>(normalizedIntent);
+  // 空着会被读成"必填"：提交时本来就会回落到这条建议值（见下方
+  // `audienceChange.trim() || copy.audience`），所以把它预填出来，
+  // 让「确认这个方向」一次点击即可，用户只在不同意时改。
+  const [audienceChange, setAudienceChange] = useState(
+    workspace.project.audience_change || intentCopy[normalizedIntent].audience,
   );
-  const [audienceChange, setAudienceChange] = useState(workspace.project.audience_change || '');
   const [answer, setAnswer] = useState('');
   const [classificationBasis, setClassificationBasis] = useState('');
   const [gate, setGate] = useState<HumanGate | null>(action.human_gate);
@@ -731,15 +740,27 @@ function IntentActionPanel({
       <Paper component="section" variant="outlined" sx={{ p: { xs: 2, sm: 3 }, borderColor: 'var(--v3-border)', boxShadow: 'none' }}>
         <Stack spacing={2}>
           <div><Chip size="small" label="先确认内容目的" /><h2>这条内容想让读者发生什么变化？</h2><p>AI 先给出一个候选方向，你可以直接纠正。确认后，提问、结构和复盘信号会一起改变。</p></div>
-          <TextField select label="内容意图" value={intent} onChange={(event) => setIntent(event.target.value as ContentIntent)}>
+          <TextField
+            select
+            label="内容意图"
+            value={intent}
+            onChange={(event) => setIntent(event.target.value as ContentIntent)}
+            helperText="AI 已按这条内容判断；不对就在这里改。"
+          >
             <MenuItem value="solve">解决：教会一个方法</MenuItem>
             <MenuItem value="share">分享：表达经历或观点</MenuItem>
             <MenuItem value="record">记录：留下过程和变化</MenuItem>
           </TextField>
-          <Alert severity="info">{copy.audience}</Alert>
-          {/* 审计 e54a2643 medium：默认文案只能作为占位提示，写进值里会让
-              输入框行为不一致；copy.audience 恒非空，原禁用条件里的判断是死代码。 */}
-          <TextField label="希望读者发生的变化" value={audienceChange} placeholder={copy.audience} onChange={(event) => setAudienceChange(event.target.value)} multiline minRows={2} />
+          {/* 这句建议现在就在下面的输入框值里（预填），所以不再单独用 Alert 重复一遍；
+              只说明它的来源，免得看起来像用户自己写的。 */}
+          <TextField
+            label="希望读者发生的变化"
+            value={audienceChange}
+            onChange={(event) => setAudienceChange(event.target.value)}
+            multiline
+            minRows={2}
+            helperText="AI 建议的方向；可以直接改成你的说法。"
+          />
           <div className="intent-materials"><strong>后面会收集</strong><span>{copy.materials.join(' · ')}</span><strong>发布后观察</strong><span>{copy.signals.join(' · ')}</span></div>
           <Button variant="contained" startIcon={<CheckCircleOutline />} disabled={busy} onClick={() => void runCommand(() => confirmProjectIntent(workspace.project.id, { content_intent: intent, audience_change: audienceChange.trim() || copy.audience, material_requirements: copy.materials, expected_responses: copy.responses, success_signals: copy.signals, expected_project_version: workspace.project.version, idempotency_key: `intent-${workspace.project.id}-${workspace.project.version}` }))}>确认这个方向</Button>
         </Stack>
