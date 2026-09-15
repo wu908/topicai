@@ -620,9 +620,12 @@ describe('ContentPage', () => {
   });
 
   // 审计 e54a2643 medium：intentCopy[intent] 无守卫，服务端返回未知意图时
-  // copy 为 undefined，读取 copy.audience 崩溃。修复后回退默认意图文案，
-  // “希望读者发生的变化”只把默认文案作为占位提示，不写进输入框值。
-  it('renders the intent confirmation safely for an unknown intent value', async () => {
+  // copy 为 undefined，读取 copy.audience 崩溃。修复后回退默认意图文案。
+  // 2026-09-15 反转了"默认文案只作占位、不写进值里"这半条：提交时本来就会回落到
+  // 这条建议值（`audienceChange.trim() || copy.audience`），空着只会被读成"必填"，
+  // 用户得自己再打一遍或盲点确认；预填出来才是面板自己承诺的"给你一个候选方向，
+  // 可以直接纠正"。
+  it('prefills the suggested direction for an unknown intent value', async () => {
     const draft = {
       ...legacyPublishedProject,
       status: 'preparing' as const,
@@ -637,8 +640,8 @@ describe('ContentPage', () => {
       await screen.findByRole('heading', { name: '这条内容想让读者发生什么变化？' }),
     ).toBeInTheDocument();
     const field = screen.getByLabelText('希望读者发生的变化') as HTMLTextAreaElement;
-    expect(field.value).toBe('');
-    expect(field.placeholder).toBe('读者看完后能开始解决一个具体问题');
+    // 未知意图回退到 solve 的建议值，并且填在值里、可以直接确认。
+    expect(field.value).toBe('读者看完后能开始解决一个具体问题');
     expect(screen.getByRole('button', { name: '确认这个方向' })).toBeEnabled();
   });
 

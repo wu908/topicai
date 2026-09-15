@@ -81,6 +81,14 @@
   outline: none;
 }
 
+/* 标题与意图徽标必须各自成行：此前它们都是行内 span，徽标紧贴在标题后面
+   （"……读者不是来看结论的解决内容"），读起来是一句话。 */
+.content-project-row-body {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
 .content-project-row-title {
   font-size: 14px;
   font-weight: 600;
@@ -88,7 +96,6 @@
 }
 
 .content-project-row-meta {
-  margin-top: 4px;
   color: var(--v3-text-sec);
   font-size: 12px;
 }
@@ -477,7 +484,9 @@
 .workspace-outline,
 .workspace-suggestions {
   min-width: 0;
-  padding: 24px 20px;
+  /* 底部留白：悬浮球固定在右下角，右栏的最后几行原本会被它压住
+     （实走时"补充一段可核验经历"那段就被盖着）。 */
+  padding: 24px 20px 132px;
 }
 
 .workspace-outline {
