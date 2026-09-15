@@ -12,6 +12,38 @@
   margin-bottom: 20px;
 }
 
+/* 机会页工具行：状态筛选与操作分两组，窄屏各占一行。原先九个控件混在同一个
+   换行流里，「筛选」开关会夹在状态按钮和主按钮之间，看起来像一个孤立的词。 */
+.opportunity-toolbar {
+  justify-content: space-between;
+  row-gap: 10px;
+}
+
+.opportunity-tabs,
+.opportunity-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.opportunity-controls {
+  justify-content: flex-end;
+}
+
+@media (max-width: 640px) {
+  .opportunity-tabs,
+  .opportunity-controls {
+    flex: 1 1 100%;
+  }
+
+  .opportunity-controls > .MuiButton-root,
+  .opportunity-controls .MuiTextField-root {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+}
+
 .operations-list {
   display: grid;
   gap: 12px;
@@ -37,6 +69,12 @@
 .operations-row-header {
   align-items: flex-start;
   justify-content: space-between;
+}
+
+/* 说明文字后面紧跟表单时，MUI 的浮动标签会压在说明文字上（实测「创作设置」那行
+   重叠 9px）。给这两种元素之间一点间距，只在该组合出现时生效。 */
+.operations-row-header + .MuiStack-root {
+  margin-top: 14px;
 }
 
 .operations-row h2 {
