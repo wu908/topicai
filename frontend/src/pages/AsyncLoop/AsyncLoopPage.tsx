@@ -122,6 +122,18 @@ export default function AsyncLoopPage() {
 
   const active = deliverables.find((d) => d.id === selectedId) ?? deliverables[0];
 
+  // 右栏默认就展示第一条产出，所以"自动选中"的那条同样要预填。在此之前，
+  // 面板上半部分显示着它的发布判断草案，下面确认区却是空的读者变化 +
+  // 硬编码的「解决」意图：草案里已经写好的那句话要用户再打一遍（认领因此不可用），
+  // 而如果这条产出其实是分享/记录，预选的意图本来就是错的。
+  // 与 StageForms 同一套"渲染期同步"，不做成 effect 以免依赖残缺。
+  const [seededId, setSeededId] = useState<string | null>(null);
+  if (active && seededId !== active.id) {
+    setSeededId(active.id);
+    setAudienceChange(active.judgment.audience_change || '');
+    if (active.content_intent) setIntent(active.content_intent);
+  }
+
   return (
     <div>
       {error ? <p className="login-err" role="alert">{error}</p> : null}
@@ -304,10 +316,13 @@ export default function AsyncLoopPage() {
               </div>
               <div className="sec">
                 <h4>你的确认</h4>
-                <input
-                  className="lm-input"
+                {/* 这句草案常常有几十字，单行输入会把用户要确认的话截断——
+                    确认的前提是能看全。 */}
+                <textarea
+                  className="lm-input lm-input-multiline"
                   aria-label="希望读者的变化（必填）"
                   placeholder="希望读者的变化（必填）"
+                  rows={3}
                   value={audienceChange}
                   onChange={(e) => setAudienceChange(e.target.value)}
                 />
@@ -317,6 +332,8 @@ export default function AsyncLoopPage() {
                       type="button"
                       key={value}
                       className={`ichip${intent === value ? ' on' : ''}`}
+                      // 选中态此前只靠一点明度差表达，屏幕阅读器完全读不到。
+                      aria-pressed={intent === value}
                       onClick={() => setIntent(value)}
                     >
                       {INTENT_LABEL[value]}

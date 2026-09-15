@@ -134,6 +134,9 @@ h1.pg, .pg { font-size: 32px; color: var(--ink); letter-spacing: -0.8px; line-he
   margin-bottom: 12px; font-family: inherit; transition: all 0.2s var(--spring);
 }
 .login-box input:focus, .lm-input:focus { border-color: rgba(143, 190, 232, 0.9); box-shadow: 0 0 0 3px rgba(143, 190, 232, 0.25); outline-color: transparent; }
+/* 多行变体：.lm-input 固定 48px 高会把几十字的草案截断（确认的前提是能看全）。
+   只作用于显式带上这个类的字段，不动共用样式。 */
+.lm-input-multiline { height: auto; min-height: 48px; padding: 12px 16px; line-height: 1.55; resize: vertical; }
 .login-box .btn { width: 100%; }
 .login-hint { margin-top: 20px; font-size: 12px; color: var(--faint); }
 .login-alt { margin-top: 10px; font-size: 12px; color: var(--faint); background: none; border: none; cursor: pointer; font-family: inherit; }
