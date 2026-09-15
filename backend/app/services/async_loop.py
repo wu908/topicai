@@ -600,6 +600,7 @@ class PickupService:
                 idempotency_key=f"pickup-confirm-{row['id']}",
             ),
         )
+        await self._hand_over_produced_work(owner, project["id"], row)
         updated = await self.db.execute(
             "UPDATE deliverables SET status='picked',picked_project_id=:pid,"
             "pickup_idem=:key,proposed_publish_at=COALESCE(:sched,proposed_publish_at),"
@@ -616,6 +617,78 @@ class PickupService:
         fresh = await self._row(owner, deliverable_id)
         return {"project": project,
                 "deliverable": ProductionService._view(fresh)}, False
+
+    async def _hand_over_produced_work(
+        self, owner: str, project_id: str, deliverable: Any
+    ) -> None:
+        """认领即交接：把产出里已经做好的东西交给项目。
+
+        在此之前只搬了标题/意图/读者变化，产出里那版正文草稿、以及事实指回的源素材
+        全留在产出行上——用户认领了一条成品，工作台却因为没有版本退回"先给出一个模糊
+        想法"，并要求他补一段自己的经历才能让 AI 准备候选，等于把做完的一步再做一遍。
+
+        语义上没有跳过任何用户动作：草稿种成首个版本后，工作台会走到「逐段确认」，
+        `can_lock` 只取决于逐段决定，所以"这段是不是我、能不能公开"仍由用户逐段拍板。
+        证据（evidence_items）不在这里伪造——它需要用户显式确认，仍由既有步骤产生。
+        """
+        from app.models.v2.content_project import ContentVersionCreate
+        from app.services.content_version import ContentVersionService
+
+        await self._attach_source_materials(owner, project_id, deliverable)
+
+        project = await self.db.fetch_one(
+            "SELECT version FROM content_projects WHERE id=:id AND owner_user_id=:owner",
+            {"id": project_id, "owner": owner},
+        )
+        if project is None:
+            raise ValueError("project not found after pickup")
+        await ContentVersionService(self.db).create(
+            owner,
+            project_id,
+            ContentVersionCreate(
+                title=deliverable["title"],
+                body_text=deliverable["body_text"],
+                # 这版正文由消化器生成，不是用户写的——来源如实标注。
+                change_origin="ai",
+                change_summary="来自收件箱消化的产出",
+                expected_project_version=project["version"],
+                idempotency_key=f"pickup-version-{deliverable['id']}",
+            ),
+        )
+
+    async def _attach_source_materials(
+        self, owner: str, project_id: str, deliverable: Any
+    ) -> None:
+        """把事实指回的收件箱素材挂到项目上（与「开始一条内容」同一条溯源链）。"""
+        from app.models.v2.material import MaterialCreate
+        from app.services.material import MaterialService
+
+        facts = json.loads(deliverable["facts_json"] or "[]")
+        material_service = MaterialService(self.db)
+        for inbox_id in dict.fromkeys(
+            fact.get("source_inbox_id") for fact in facts if fact.get("source_inbox_id")
+        ):
+            item = await self.db.fetch_one(
+                "SELECT * FROM inbox_items WHERE id=:id AND owner_user_id=:owner",
+                {"id": inbox_id, "owner": owner},
+            )
+            if item is None:
+                # 素材已被清理也要能认领：交不出溯源就少一条，不能因此失败。
+                logger.warning("pickup source inbox item missing: %s", inbox_id)
+                continue
+            await material_service.create(
+                owner,
+                MaterialCreate(
+                    kind="text",
+                    title=(item["title"] or (item["content"] or "")[:40]).strip()
+                    or "收件箱素材",
+                    content=item["content"],
+                    # 与「开始一条内容」一致：素材默认私有，只有生成的内容面向读者。
+                    privacy_level="private",
+                    project_id=project_id,
+                    idempotency_key=f"pickup-material-{deliverable['id']}-{inbox_id}",
+                ),
+            )
 
     async def discard(self, owner: str, deliverable_id: str,
                       body: DiscardRequest) -> dict[str, Any]:
