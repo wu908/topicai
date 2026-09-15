@@ -12,7 +12,17 @@ logger = logging.getLogger(__name__)
 _scheduler: object | None = None
 
 #: 夜间自动消化：每晚 03:00（用户本地时区语义按项目默认时区处理）。
+#: 保留模块常量作为默认值，实际时刻由 settings 提供（可配置，便于真实触发验证）。
 NIGHTLY_DIGEST_HOUR = 3
+NIGHTLY_DIGEST_MINUTE = 0
+
+
+def _digest_clock() -> tuple[int, int]:
+    """夜间消化的触发时刻（小时, 分钟），来自配置。"""
+    from config.settings import get_settings
+
+    settings = get_settings()
+    return settings.nightly_digest_hour, settings.nightly_digest_minute
 #: 每晚每用户最多消化几条——AI 生成有 token 成本，必须封顶。
 NIGHTLY_DIGEST_MAX_ITEMS = 2
 
@@ -68,9 +78,10 @@ def init_scheduler(db: Any) -> object:
     # 夜间任务用 cron 触发器：interval 会在每次重启时立刻跑一次，
     # 那会让「夜里消化」变成「每次部署消化」。
     # 显式带时区，否则按容器本地时区（UTC）解析，承诺的 03:00 会变成 11:00。
+    digest_hour, digest_minute = _digest_clock()
     _scheduler.add_job(
         _run_nightly_digest,
-        CronTrigger(hour=NIGHTLY_DIGEST_HOUR, minute=0, timezone=PRODUCT_TIMEZONE),
+        CronTrigger(hour=digest_hour, minute=digest_minute, timezone=PRODUCT_TIMEZONE),
         id="nightly_inbox_digest",
         name="Nightly Inbox Digest",
         args=[db],

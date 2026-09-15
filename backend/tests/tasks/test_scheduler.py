@@ -245,3 +245,36 @@ def test_nightly_digest_fires_at_the_promised_local_hour(monkeypatch) -> None:
     assert fire is not None
     assert fire.utcoffset() == timedelta(hours=8), "必须按产品时区触发，不能跟着容器走"
     assert (fire.hour, fire.minute) == (scheduler_mod.NIGHTLY_DIGEST_HOUR, 0)
+
+
+def test_nightly_digest_honours_the_configured_time(monkeypatch) -> None:
+    """触发时刻来自配置（默认 03:00）。这让"这条链路会不会真的跑"可以不等凌晨就验证。"""
+    from datetime import UTC, datetime
+
+    from apscheduler.triggers.cron import CronTrigger
+
+    monkeypatch.setenv("NIGHTLY_DIGEST_HOUR", "5")
+    monkeypatch.setenv("NIGHTLY_DIGEST_MINUTE", "30")
+    scheduler_mod._scheduler = None  # noqa: SLF001
+
+    class _StubScheduler:
+        def __init__(self) -> None:
+            self.jobs: list[dict] = []
+
+        def add_job(self, func, trigger, **kwargs):  # noqa: ANN001 - test stub
+            self.jobs.append({"func": func.__name__, "trigger": trigger, **kwargs})
+
+        def start(self) -> None:
+            pass
+
+    stub = _StubScheduler()
+    monkeypatch.setattr(
+        "apscheduler.schedulers.asyncio.AsyncIOScheduler", lambda: stub, raising=False
+    )
+    scheduler_mod.init_scheduler(object())
+
+    trigger = next(j for j in stub.jobs if j["id"] == "nightly_inbox_digest")["trigger"]
+    assert isinstance(trigger, CronTrigger)
+    fire = trigger.get_next_fire_time(None, datetime.now(UTC))
+    assert fire is not None
+    assert (fire.hour, fire.minute) == (5, 30)
