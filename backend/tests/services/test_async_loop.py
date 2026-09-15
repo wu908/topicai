@@ -1,6 +1,7 @@
 """Async creation loop (Spec-013 Phase 1) service contracts."""
 
 import json
+from typing import Any
 
 import pytest
 
@@ -535,3 +536,108 @@ async def test_the_fallback_draft_is_not_rewritten_by_reference_style(test_db):
         {"id": d["id"]},
     )
     assert json.loads(event["detail_json"])["draft_source"] == "deterministic_fallback"
+
+
+# ==================== 认领即交接（走查发现 2026-09-15） ====================
+
+
+async def _picked_project(db, suffix: str) -> tuple[dict, dict, Any]:
+    """走到"已认领"，返回（项目, 产出, 源收件箱素材）。"""
+    await insert_user(db)
+    item, _ = await InboxService(db).add("loop-user", _item(suffix))
+    deliverable = (await ProductionService(db).digest("loop-user"))["deliverables"][0]
+    picked, _ = await PickupService(db).pickup(
+        "loop-user",
+        deliverable["id"],
+        PickupRequest(
+            content_intent="solve",
+            audience_change="看完能改掉一次浇水频率",
+            idempotency_key=f"pickup-{suffix}",
+        ),
+    )
+    return picked["project"], deliverable, item
+
+
+@pytest.mark.asyncio
+async def test_pickup_hands_over_the_draft_as_the_first_version(test_db):
+    """认领要把产出那版草稿种成项目首个版本——否则工作台因为没有版本
+    会退回"先给出一个模糊想法"，并要求用户把做完的一步再做一遍。"""
+    project, deliverable, _ = await _picked_project(test_db, "handover")
+
+    row = await test_db.fetch_one(
+        "SELECT current_version_id FROM content_projects WHERE id=:id",
+        {"id": project["id"]},
+    )
+    assert row["current_version_id"], "认领后项目必须有当前版本"
+
+    version = await test_db.fetch_one(
+        "SELECT * FROM content_versions WHERE project_id=:id AND owner_user_id='loop-user'",
+        {"id": project["id"]},
+    )
+    assert version["body_text"] == deliverable["body_text"]
+    assert version["title"] == deliverable["title"]
+    # 正文是消化器生成的，来源如实标注为 ai，不冒称用户写的。
+    assert version["change_origin"] == "ai"
+
+
+@pytest.mark.asyncio
+async def test_pickup_attaches_the_source_material(test_db):
+    """事实指回的收件箱素材要挂到项目上；R1 在"开始一条内容"做对了这件事，
+    认领这条路径漏了同一件事。"""
+    project, _, item = await _picked_project(test_db, "material")
+
+    usages = await test_db.fetch_all(
+        "SELECT mu.material_id, m.privacy_level, m.content_text FROM material_usages mu "
+        "JOIN materials m ON m.id=mu.material_id WHERE mu.project_id=:id",
+        {"id": project["id"]},
+    )
+    assert len(usages) == 1
+    assert usages[0]["content_text"] == item["content"]
+    # 与「开始一条内容」一致：素材默认私有。
+    assert usages[0]["privacy_level"] == "private"
+
+
+@pytest.mark.asyncio
+async def test_pickup_moves_the_workspace_on_to_reviewing_the_draft(test_db):
+    """交接之后用户看到的下一步不该再是"补一个关键细节"。
+
+    状态机里 `if not current_version_id: return "answer_key_question"`，
+    所以问那个通用问题是"项目没有版本"的症状；有版本之后应进入候选复核，
+    用户仍需逐段确认才能锁定发布（can_lock 只取决于逐段决定）。
+    """
+    from app.services.intent_orchestrator import IntentOrchestratorService
+
+    project, _, _ = await _picked_project(test_db, "nextaction")
+
+    action = await IntentOrchestratorService(test_db).ensure_project_action(
+        "loop-user", project["id"]
+    )
+    assert action["action_type"] == "review_candidate"
+
+
+@pytest.mark.asyncio
+async def test_pickup_survives_a_missing_source_material(test_db):
+    """源素材已被清理时仍要能认领：少一条溯源，不能因此失败。"""
+    await insert_user(test_db)
+    await InboxService(test_db).add("loop-user", _item("missing-source"))
+    deliverable = (await ProductionService(test_db).digest("loop-user"))["deliverables"][0]
+    await test_db.execute(
+        "DELETE FROM inbox_items WHERE owner_user_id='loop-user'"
+    )
+
+    picked, _ = await PickupService(test_db).pickup(
+        "loop-user",
+        deliverable["id"],
+        PickupRequest(
+            content_intent="solve",
+            audience_change="看完能改掉一次浇水频率",
+            idempotency_key=f"pickup-missing-{deliverable['id']}",
+        ),
+    )
+
+    assert picked["deliverable"]["status"] == "picked"
+    row = await test_db.fetch_one(
+        "SELECT current_version_id FROM content_projects WHERE id=:id",
+        {"id": picked["project"]["id"]},
+    )
+    assert row["current_version_id"], "素材缺失不该连带把版本也省掉"
