@@ -50,6 +50,11 @@ PreToolUse **硬超时 1 秒**。所以规则是内置的模式匹配，**规则
 hook 账本（`.mimosa/finding-ledger/`）记录的是另一次：`runner.py` 两条 finding，
 一条 `finding_blocked`，修复后一条 `static_fix_verified`。
 
+> **更正（2026-09-15 决定后复核）**：上表第 4 行说"今天第 344 行 PRAGMA，可同法修"——
+> 我已经把它改掉了（`_table_columns` 复用参数化写法）。但**当时"剩 4 处"是低估**：
+> 我按 `execute(f"` 字符串 grep，漏掉了多行拼接的 f-string 和另外三个重建块。
+> 用 Mimosa 自己的扫描器复核，这个文件里被报的位置是 **8–9 处**，准确分类见第四节末。
+
 **当前项目安全状态**（`mimosa status` 实测）：
 `total=2 · blocked=1 · fixed_static=1 · open=0`，总体"需要处理 · evidence=partial"。
 
@@ -69,6 +74,19 @@ hook 账本（`.mimosa/finding-ledger/`）记录的是另一次：`runner.py` �
    "校验后拼接"都被判高危。要让这三处通过，只能把动态 DDL 拆成一条条字面量语句
    （`ALTER TABLE "effect_reviews" ADD COLUMN ...` 逐条写死）或给每张表各写一份重建流程——
    可行，但把数据驱动的列表换成重复字面量，是**用可维护性换门禁通过**。
+
+### `runner.py` 被报位置的准确清单（2026-09-15 用扫描器逐行复核）
+
+| 类 | 位置 | 形态 | 能否通过 |
+|---|---|---|---|
+| A. 标识符进 DDL | 185 | `ALTER TABLE {table} ADD COLUMN {name} {ddl_type}` | **不能**（SQLite 无法参数化标识符） |
+| A | 358 / 359 | `DROP TABLE {table}` / `ALTER TABLE {new_table} RENAME TO {table}` | **不能** |
+| B. 运行时列名拼进 INSERT | 354-356 / 532-534 / 678-680 / 805-807 | `INSERT INTO {new} ({column_list}) SELECT {column_list} FROM {old}`（四处重建块） | **不能**：列名由 `PRAGMA table_info` 在运行时读出（列集随旧库版本变），改成字面量就得放弃"按实际存在的列拷贝"这一语义 |
+| C. 把 SQL 常量交给变量再 execute | 351 / 526 / 365 | `conn.execute(replacement_sql)`、`conn.execute(statement)`（遍历字面量列表） | 这是**规则的形状误报**：SQL 文本本身是模块级字面量常量，没有任何插值 |
+| — | 529 / 675 / 802 / 836 | `PRAGMA table_info(next_best_actions)` 等**字面量**表名 | 未被报（印证规则针对"动态构造"而非 PRAGMA 本身） |
+
+也就是说：这个文件的迁移架构（按旧库实际列集做 12 步重建）与这条规则的根本冲突不止 3 处，
+而是 A 类 3 处 + B 类 4 处；C 类 3 处则属于误报。
 
 ## 五、有没有"豁免"机制（这是决策的关键）
 
@@ -139,3 +157,55 @@ hook 账本（`.mimosa/finding-ledger/`）记录的是另一次：`runner.py` �
 2. `threatModel.exclusions` 的**真实语义**：实现密封、文档未写，实测未观察到豁免效果，
    但也不能排除它只在别的路径（如 threat-model 校验）生效。要确认只能问厂商。
 3. 是否有更新版本已修上述问题：本机缓存只有 1.0.3。
+
+---
+
+## 十、已决定的处置（2026-09-15：选 A）
+
+**决定：门禁保持关闭**，把它当按需审计工具用。已执行两件事：
+
+1. **把唯一能参数化的那处改掉了**：`runner.py` 的 `PRAGMA table_info({table})` 换成
+   共用助手 `_table_columns()`（表值 PRAGMA + 绑定参数），`_existing_columns()` 复用它。
+   这是与门禁无关就该那么写的改法（减少一处字符串构造），全量后端 492 passed。
+   **注意**：它并没有让这个文件"过门禁"——A 类 3 处与 B 类 4 处仍在（见第四节清单）。
+2. **整理出可直接发出去的报障文本**（三条都可复现，附命令）：
+
+> **Report 1 — 没有 finding 级豁免，导致合法动态 SQL 无法通过门禁**
+> 项目里存在 SQLite 迁移重建逻辑：标识符（表名/列名）必须动态构造，因为 SQLite 不支持
+> 参数化标识符。实测三种写法：`execute(f"ALTER TABLE {table} ...")` 判高危；
+> **标识符校验 + 引号包裹后字符串拼接也判高危**；参数化 `SELECT name FROM pragma_table_info(?)`
+> 通过。结果是这类代码无论怎么写都过不了 PreToolUse 门禁，而包内没有任何减免机制
+> （`allowlist|whitelist|suppress|waiver|baseline|exclude` 在插件包内零命中；
+> `plugin.json` 的 `userConfig` 只有 `engine`；文档开关只有
+> `MIMOSA_HOOK_FAILURE_MODE` / `MIMOSA_GIT_GATE_FAILURE_MODE` / `MIMOSA_HOOK_STATUS` / `MIMOSA_HOOK_PROJECT`）。
+> **期望**：提供 finding 级 waiver（按规则+文件+理由），或识别"已校验标识符"的写法。
+>
+> **Report 2 — `threatModel.exclusions` 语义未文档化，且填错会让策略失效并被判高危**
+> `mimosa policy init` 生成的 `security-policy.json` 含 `threatModel.exclusions`，但无任何文档说明
+> 其字段形状。实测：`["a.py"]` 形式策略合法，但被报的高危**照报**；改成对象形式
+> （`{"path": ...}` / `{"file":...,"rule":...}` / `{"ruleId":...,"path":...}`）则策略被判"无效"，
+> 而**无效策略本身是一条 HIGH（CWE-693）**。**期望**：补文档说明字段语义，或明确它不用于抑制 finding。
+>
+> **Report 3 — Stop 复查在 baseline 失败时静默 `inconclusive`，扫 0 个文件却不提示用户**
+> 本机（Windows，缓存目录被 ACL 保护）连续 3 次 Stop 复查：`runStatus=inconclusive`、
+> `scanned_files: 0 / failed_files: 6`、`rulesVersion: unavailable`，原因是
+> `baseline-enumerate` 对 `.pytest_cache`、`.ci-tmp` 等目录 `EPERM`。记录只落在 `.mimosa/`，
+> 用户侧无任何提示——"任务收尾复查"这道防线等于没在工作却不为人知。
+> 另：`mimosa status` 遇到指向**项目外文件**的 hook-status 记录会直接报错
+> （`file 不是项目相对路径`）。**期望**：覆盖不完整时给出显式提示；status 容忍项目外记录。
+
+## 十一、按需使用（选项 A 的日常操作）
+
+扫描能力不依赖插件启用，需要时直接跑：
+
+```bash
+MIMOSA="$HOME/.zcode/cli/plugins/cache/zcode-plugins-official/mimosa/1.0.3/payload/dist/cli.js"
+node "$MIMOSA" scan <file|dir>        # 单文件/目录静态扫描
+node "$MIMOSA" audit <dir>            # 分级项目审计
+node "$MIMOSA" security-scan run <dir> # 密封深扫（产出报告到 ~/.mimosa）
+node "$MIMOSA" status --project <dir> # 当前项目安全状态与 finding 台账
+```
+
+**已接受的风险（有意保留）**：`runner.py` 的 A 类 3 处 + B 类 4 处会持续被报为高危；
+原因是迁移架构必须动态构造标识符/SQL 文本，而门禁没有豁免路径。
+一旦将来要把它开成强制门禁，先解决"没有豁免"这件事，否则每次合理的动态 SQL 都要改架构。

@@ -128,15 +128,24 @@ def _already_applied(conn: sqlite3.Connection) -> dict[str, str]:
     }
 
 
-def _existing_columns(conn: sqlite3.Connection, table: str) -> set[str]:
-    """Return the column names of ``table`` (empty set if the table does
-    not exist — the table-valued PRAGMA returns no rows for missing
-    tables)."""
+def _table_columns(conn: sqlite3.Connection, table: str) -> list[str]:
+    """Return ``table``'s column names in declaration order (empty if it does
+    not exist — the table-valued PRAGMA returns no rows for missing tables).
+
+    Uses the table-valued ``pragma_table_info`` so the table name can be bound
+    as a parameter instead of interpolated: SQLite cannot parameterize an
+    identifier inside ``PRAGMA table_info(...)``, but it can here.
+    """
     _quote_identifier(table)  # validation guard for downstream DDL use
     rows = conn.execute(
         "SELECT name FROM pragma_table_info(?)", (table,)
     ).fetchall()
-    return {row[0] for row in rows}
+    return [row[0] for row in rows]
+
+
+def _existing_columns(conn: sqlite3.Connection, table: str) -> set[str]:
+    """The set of ``table``'s column names."""
+    return set(_table_columns(conn, table))
 
 
 def _replace_marked_expression(sql: str, marker: str, replacement: str) -> str:
@@ -340,9 +349,7 @@ def _post_step_030_action_lifecycle(conn: sqlite3.Connection) -> None:
         ):
             new_table = f"{table}_lifecycle_new"
             conn.execute(replacement_sql)
-            columns = [
-                row[1] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()
-            ]
+            columns = _table_columns(conn, table)
             column_list = ",".join(columns)
             conn.execute(
                 f"INSERT INTO {new_table} ({column_list}) "
