@@ -205,3 +205,43 @@ async def test_nightly_digest_isolates_one_users_failure(test_db, monkeypatch):
 
     rows = await test_db.fetch_all("SELECT owner_user_id FROM deliverables")
     assert {row["owner_user_id"] for row in rows} == {"night-b"}
+
+
+def test_nightly_digest_fires_at_the_promised_local_hour(monkeypatch) -> None:
+    """UI 承诺「每晚自动整理收件箱（03:00）」，那必须是产品时区的 03:00。
+
+    容器时区是 UTC：不给触发器指定时区，它会按容器本地时区解析，
+    承诺的 03:00 于是变成北京时间 11:00——文案与行为不符，而且凌晨那次不会发生。
+
+    这条断言的哨兵是 CI（UTC 环境）与容器本身：开发机时区就是 +08 时，即使不修它
+    也会通过——所以别把它弱化成"时区名字等于什么"这类判断。
+    """
+    from datetime import UTC, datetime, timedelta
+
+    from apscheduler.triggers.cron import CronTrigger
+
+    scheduler_mod._scheduler = None  # noqa: SLF001
+
+    class _StubScheduler:
+        def __init__(self) -> None:
+            self.jobs: list[dict] = []
+
+        def add_job(self, func, trigger, **kwargs):  # noqa: ANN001 - test stub
+            self.jobs.append({"func": func.__name__, "trigger": trigger, **kwargs})
+
+        def start(self) -> None:
+            pass
+
+    stub = _StubScheduler()
+    monkeypatch.setattr(
+        "apscheduler.schedulers.asyncio.AsyncIOScheduler", lambda: stub, raising=False
+    )
+    scheduler_mod.init_scheduler(object())
+
+    nightly = next(j for j in stub.jobs if j["id"] == "nightly_inbox_digest")
+    trigger = nightly["trigger"]
+    assert isinstance(trigger, CronTrigger)
+    fire = trigger.get_next_fire_time(None, datetime.now(UTC))
+    assert fire is not None
+    assert fire.utcoffset() == timedelta(hours=8), "必须按产品时区触发，不能跟着容器走"
+    assert (fire.hour, fire.minute) == (scheduler_mod.NIGHTLY_DIGEST_HOUR, 0)
