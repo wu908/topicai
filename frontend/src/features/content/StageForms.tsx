@@ -630,6 +630,10 @@ export function PublicationForm({
   const [storedCheck, setStoredCheck] = useState<PublishCheck | null>(null);
   const [checkProjectId, setCheckProjectId] = useState<string | null>(null);
   const [checkErrorProjectId, setCheckErrorProjectId] = useState<string | null>(null);
+  // 首屏慢时（冷启动/低配机）检查结果会晚一点到。这段时间界面此前显示
+  // 「先运行发布前检查」——等于告诉用户"你没跑过"，于是他会重复点运行检查、
+  // 或以为发布按钮坏了。区分"还在读"和"确实没有"是这个状态存在的唯一理由。
+  const [checkLoading, setCheckLoading] = useState(true);
   const [artifactError, setArtifactError] = useState<string | null>(null);
   const [artifacts, setArtifacts] = useState({ copied: false, body: false, images: false });
   const action = workspace.orchestrated_action;
@@ -674,13 +678,18 @@ export function PublicationForm({
           setStoredCheck(latest);
           setCheckProjectId(workspace.project.id);
           setCheckErrorProjectId(null);
+          setCheckLoading(false);
         }
       })
       .catch(() => {
-        if (active) setCheckErrorProjectId(workspace.project.id);
+        if (active) {
+          setCheckErrorProjectId(workspace.project.id);
+          setCheckLoading(false);
+        }
       });
     return () => { active = false; };
   }, [getLatestPublishCheck, workspace.project.id]);
+
 
   const imagePlanText = version ? [
     version.cover_plan ? `封面方案\n${version.cover_plan}` : '',
@@ -694,6 +703,7 @@ export function PublicationForm({
     && !check.stale
     && check.content_version_id === versionId,
   );
+
 
   const runCheck = () => onCommand(async () => {
     if (!versionId) return;
@@ -789,9 +799,11 @@ export function PublicationForm({
             <Typography component="h3" variant="subtitle1" fontWeight={600}>发布前检查</Typography>
             {check ? (
               <Chip size="small" color={checkReady ? 'success' : 'warning'} label={checkReady ? '可以发布' : check.stale ? '检查已过期' : '需要确认'} />
+            ) : checkLoading ? (
+              <Chip size="small" variant="outlined" label="正在读取检查结果…" />
             ) : (
-              // 取不到检查结果时不能什么都不显示：否则「确认已发布」是灰的，
-              // 而这一行没有任何原因说明（实走时就是这样，用户只能自己猜）。
+              // 确认没有检查结果时才让用户去跑：否则「确认已发布」是灰的，
+              // 而这一行没有任何原因说明。
               <Chip size="small" color="warning" variant="outlined" label="先运行发布前检查" />
             )}
             <Button variant="outlined" disabled={busy || !versionId} onClick={() => void runCheck()}>

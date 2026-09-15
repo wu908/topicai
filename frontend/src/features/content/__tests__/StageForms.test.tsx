@@ -448,6 +448,9 @@ describe('PublicationForm', () => {
     );
 
     expect(screen.getByRole('button', { name: '确认已发布' })).toBeDisabled();
+    // 首屏慢时检查结果还没回来：这时必须说「正在读取」，不能说「先运行发布前检查」
+    // ——后者会让用户以为自己没跑过检查，去重复点运行检查。
+    expect(screen.getByText('正在读取检查结果…')).toBeInTheDocument();
     await waitFor(() => expect(getLatestPublishCheck).toHaveBeenCalledWith('p1'));
     // 不能只把按钮变灰：用户得知道为什么不能发布、下一步点哪里。
     expect(await screen.findByText('先运行发布前检查')).toBeInTheDocument();
