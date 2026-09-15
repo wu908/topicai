@@ -136,6 +136,9 @@ export interface ContentProject {
   start_inferred_question: string | null;
   start_inference_confidence: 'high' | 'medium' | 'low' | null;
   audience_change: string | null;
+  /** 消化器起草的 solve 类两项（读者困境 / 你的答案）：锁定发布意图时预填，可改。 */
+  audience_problem: string | null;
+  reader_promise: string | null;
   material_requirements: string[];
   expected_responses: string[];
   success_signals: string[];

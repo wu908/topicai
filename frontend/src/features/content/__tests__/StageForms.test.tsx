@@ -107,6 +107,39 @@ describe('HypothesisForm', () => {
     expect(follow).toBeEnabled();
   });
 
+  it('prefills the two solve fields the digest drafted, so locking needs no retyping', async () => {
+    // 这两句本来就在素材里，消化器已经起草并存在项目上；此前是空框，用户得自己写一遍。
+    const lockHypothesis = vi.fn().mockResolvedValue({});
+    render(
+      <HypothesisForm
+        workspace={{
+          ...workspace,
+          project: {
+            ...workspace.project,
+            audience_problem: '硬憋一整天，一个字没写',
+            reader_promise: '先把一句话丢进收件箱，晚上再消化',
+          },
+        }}
+        busy={false}
+        onCommand={vi.fn(async (command: () => Promise<unknown>) => { await command(); })}
+        lockHypothesis={lockHypothesis}
+        makeKey={() => 'lock-key'}
+      />,
+    );
+
+    expect((screen.getByLabelText('读者遇到什么问题') as HTMLTextAreaElement).value)
+      .toBe('硬憋一整天，一个字没写');
+    expect((screen.getByLabelText('你准备给出的答案') as HTMLTextAreaElement).value)
+      .toBe('先把一句话丢进收件箱，晚上再消化');
+    // 预填后可直接锁定：用户不动一个字也能提交（不同意时才改）。
+    const lock = screen.getByRole('button', { name: '锁定发布意图' });
+    expect(lock).toBeEnabled();
+    fireEvent.click(lock);
+    await waitFor(() => expect(lockHypothesis).toHaveBeenCalled());
+    expect(lockHypothesis.mock.calls[0][1].audience_problem).toBe('硬憋一整天，一个字没写');
+    expect(lockHypothesis.mock.calls[0][1].reader_promise).toBe('先把一句话丢进收件箱，晚上再消化');
+  });
+
   it('submits the complete share Publish Judgment without solve or record fields', async () => {
     const lockHypothesis = vi.fn().mockResolvedValue({});
     const onCommand = vi.fn(async (command: () => Promise<unknown>) => {
