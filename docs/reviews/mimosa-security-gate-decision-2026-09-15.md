@@ -168,7 +168,7 @@ hook 账本（`.mimosa/finding-ledger/`）记录的是另一次：`runner.py` �
    共用助手 `_table_columns()`（表值 PRAGMA + 绑定参数），`_existing_columns()` 复用它。
    这是与门禁无关就该那么写的改法（减少一处字符串构造），全量后端 492 passed。
    **注意**：它并没有让这个文件"过门禁"——A 类 3 处与 B 类 4 处仍在（见第四节清单）。
-2. **整理出可直接发出去的报障文本**（三条都可复现，附命令）：
+2. **整理出可直接发出去的报障文本**（四条都可复现，附命令与日志证据）：
 
 > **Report 1 — 没有 finding 级豁免，导致合法动态 SQL 无法通过门禁**
 > 项目里存在 SQLite 迁移重建逻辑：标识符（表名/列名）必须动态构造，因为 SQLite 不支持
@@ -186,13 +186,42 @@ hook 账本（`.mimosa/finding-ledger/`）记录的是另一次：`runner.py` �
 > （`{"path": ...}` / `{"file":...,"rule":...}` / `{"ruleId":...,"path":...}`）则策略被判"无效"，
 > 而**无效策略本身是一条 HIGH（CWE-693）**。**期望**：补文档说明字段语义，或明确它不用于抑制 finding。
 >
-> **Report 3 — Stop 复查在 baseline 失败时静默 `inconclusive`，扫 0 个文件却不提示用户**
-> 本机（Windows，缓存目录被 ACL 保护）连续 3 次 Stop 复查：`runStatus=inconclusive`、
-> `scanned_files: 0 / failed_files: 6`、`rulesVersion: unavailable`，原因是
-> `baseline-enumerate` 对 `.pytest_cache`、`.ci-tmp` 等目录 `EPERM`。记录只落在 `.mimosa/`，
-> 用户侧无任何提示——"任务收尾复查"这道防线等于没在工作却不为人知。
-> 另：`mimosa status` 遇到指向**项目外文件**的 hook-status 记录会直接报错
-> （`file 不是项目相对路径`）。**期望**：覆盖不完整时给出显式提示；status 容忍项目外记录。
+> **Report 3 — Stop 复查静默失败：scan worker 连续 `spawnSync … ETIMEDOUT`，扫 0 个文件却不提示用户**
+> 本机连续 3 次 Stop 复查都是 `runStatus=inconclusive`、`scanned_files: 0 / failed_files: 6`、
+> `rulesVersion: unavailable`，用户侧无任何提示——"任务收尾复查"这道防线等于没在工作却不为人知。
+> **根因在 `~/.zcode/mimosa-debug.log` 里写得比 `.mimosa/` 报告更直接**：
+> ```
+> [stop-hook] file=.../async-loop.spec.ts scan=empty status=? error=spawnSync G:\nodejs\node.exe ETIMEDOUT
+> ```
+> 六个文件连续同一错误：scan worker 经 `spawnSync` 调本机 node 超时，于是
+> `findings=0 status=inconclusive`。（同一次运行里 baseline 枚举另有 4 处 `EPERM`
+> ——`.pytest_cache`、`.ci-tmp` 等本机 ACL 保护目录——两者叠加。）
+> **期望**：①worker 超时不能当作"干净"，要显式告警；②`spawnSync` 的超时/重试可配置，
+> 或在 node 路径可疑时给出诊断（`mimosa doctor` 目前未提示这一点）。
+>
+> **Report 4 — 项目外文件的 hook 记录会让 `mimosa status` 报错**
+> 编辑仓库外的文件（例如用户级记忆文件）时，PostToolUse 照扫并写入 hook-status 记录
+> （日志可见 `file=C:\Users\...\memories\...md outcome=clear coverage=complete`），
+> 随后 `mimosa status` 直接报 `✗ …：file 不是项目相对路径`。
+> **期望**：要么不记录项目外文件，要么 status 容忍并跳过。
+
+### 投递渠道：查证结果（没有厂商直投通道）
+
+把能找的地方都找了，结论是**这份插件没有对外声明的反馈入口**：
+
+| 检查点 | 结果 |
+|---|---|
+| 插件包内所有文件 | **零个 URL**（`commands/`、`skills/`、README 中英版全查） |
+| `.zcode-plugin/plugin.json` / `.claude-plugin/plugin.json` | 只有 name/version/description/author/license/keywords/commands/skills/userConfig/**mcpServers**，**无 homepage / repository / bugs / contact** |
+| 官方市场清单（`cdn-zcode.z.ai/zcode/official-plugin/marketplace.json`，19 个条目） | mimosa 条目只有 `name / source(zip) / displayName / icon / description / version / author{name:"Mimosa"} / category / keywords` —— **同样没有任何支持字段**；19 个条目全都只有 `author` |
+| 市场本身 | owner 是 **z.ai**（`https://z.ai`），即 ZCode 官方的插件市场，mimosa 由该市场以 zip 分发 |
+| 插件自带的 `knowledge` 通道 | `knowledge health`：**unavailable**（storage/contract/scenarios 全 unknown）；`outbox` 对我们这两条 finding 直接 `skip`（`unsupported_status` / `source_batch_incomplete`），`items=0`，且 `network=false · publish-authorized=false` |
+
+**所以能落地的只有两条路：**
+1. **走 ZCode 官方反馈**（应用内反馈 / 官方支持渠道）——因为 mimosa 是 ZCode 官方市场里的插件、
+   市场归 z.ai，权威接收方就是 ZCode/z.ai 自己。把第十节的四段文本整段贴过去即可（已写成自包含、
+   带复现命令与日志证据）。本机未发现任何 ZCode 反馈页 URL，所以具体入口需要你从应用里找。
+2. **留在自有仓库**（本文件）作为记录——选项 A 下它不阻断任何开发，所以"今天不发"不会丢东西。
 
 ## 十一、按需使用（选项 A 的日常操作）
 
