@@ -69,6 +69,10 @@ class _JudgmentDraft(StrictModel):
         default_factory=list, max_length=2
     )
     window_days: int = Field(default=7, ge=1, le=365)
+    # solve 类（教方法/解决问题）的两项：锁定发布意图时必填，此前要用户自己写，
+    # 而这两句本来就在素材里。其他类型留空——不编造。
+    audience_problem: str | None = Field(default=None, max_length=300)
+    reader_promise: str | None = Field(default=None, max_length=300)
 
 
 class _Draft(StrictModel):
@@ -88,13 +92,18 @@ DIGEST_SYSTEM_PROMPT = (
     "4. 标题不超过 20 字，正文口语化，分 2-4 段。\n"
     "5. outline 给 3 步（hook/point/ending），judgment.audience_change 一句话说清"
     "读者看完能获得什么可判断的变化。\n"
+    "6. judgment.audience_problem 与 judgment.reader_promise：只有这条素材是"
+    "「教方法／解决一个具体问题」时才写——前者一句话说读者在真实场景里遇到的具体困境，"
+    "后者一句话说你基于这次亲身经历能讲清楚的方法或步骤；不是这类就填 null，不要硬凑。\n"
     "只输出一个 JSON 对象，不要任何解释、不要 Markdown 代码块。"
     "字段与类型必须严格如下（字符串内部换行请写成 \\n）：\n"
     '{"title":"标题","body_text":"正文","outline":'
     '[{"step":"hook","label":"钩子"},{"step":"point","label":"要点"},'
     '{"step":"ending","label":"结尾互动"}],'
     '"judgment":{"audience_change":"读者变化","primary_response":"save",'
-    '"supporting":["follow"],"window_days":7}}'
+    '"supporting":["follow"],"window_days":7,'
+    '"audience_problem":"读者遇到的具体困境，非此类填 null",'
+    '"reader_promise":"你准备给出的答案，非此类填 null"}}'
 )
 
 
@@ -109,6 +118,20 @@ OUTLINE = [
     {"step": "point", "label": "要点：你的事实与做法，逐条展开"},
     {"step": "ending", "label": "结尾互动：向读者提一个具体问题"},
 ]
+
+
+def produced_judgment(deliverable: Any) -> dict[str, str]:
+    """产出里起草的 solve 类两项；没有就不传（保持空，不编造）。"""
+    try:
+        judgment = json.loads(deliverable["judgment_json"] or "{}")
+    except (TypeError, ValueError):
+        return {}
+    picked: dict[str, str] = {}
+    for key in ("audience_problem", "reader_promise"):
+        value = judgment.get(key)
+        if isinstance(value, str) and value.strip():
+            picked[key] = value.strip()
+    return picked
 
 
 def _expire_at(ts: str) -> str:
@@ -407,6 +430,9 @@ class ProductionService:
             outline = OUTLINE
             judgment = {
                 "audience_change": "看完能获得一个真实、可判断的变化",
+                # 模型不可用时不编造这两项：留给用户写（锁定那一步是空框）。
+                "audience_problem": None,
+                "reader_promise": None,
                 "primary_response": "save",
                 "supporting": ["follow"],
                 "window_days": 7,
@@ -587,6 +613,8 @@ class PickupService:
                 primary_goal="experiment",
                 content_intent=row["content_intent"] or "share",
                 audience_change=body.audience_change,
+                # 消化器起草的 solve 类两项，一并交给项目（锁定那一步据此预填）。
+                **produced_judgment(row),
                 idempotency_key=f"pickup-project-{row['id']}",
             ),
         )

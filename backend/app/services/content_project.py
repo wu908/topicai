@@ -53,6 +53,8 @@ class ContentProjectService:
                     "intent": candidate_intent,
                     "content_format": body.content_format,
                     "audience_change": body.audience_change.strip() if body.audience_change else None,
+                    "audience_problem": body.audience_problem.strip() if body.audience_problem else None,
+                    "reader_promise": body.reader_promise.strip() if body.reader_promise else None,
                     "start_intent": body.start_inferred_intent,
                     "start_question": body.start_inferred_question,
                     "start_confidence": body.start_inference_confidence,
@@ -68,13 +70,15 @@ class ContentProjectService:
                         "INSERT INTO content_projects ("
                         "id,owner_user_id,title,status,primary_goal,target_audience,"
                         "content_intent,content_format,intent_status,audience_change,"
+                        "audience_problem,reader_promise,"
                         "start_inferred_intent,start_inferred_question,"
                         "start_inference_confidence,"
                         "opportunity_id,starter_sprint_id,planned_publish_at,last_action,"
                         "last_action_at,version,idempotency_key,request_hash,created_at,updated_at"
                         ") VALUES ("
                         ":id,:owner,:title,:status,:goal,:audience,:intent,:content_format,"
-                        "'candidate',:audience_change,:start_intent,:start_question,"
+                        "'candidate',:audience_change,:audience_problem,:reader_promise,"
+                        ":start_intent,:start_question,"
                         ":start_confidence,:opportunity,:sprint,"
                         ":planned,'project_created',:now,1,:key,:hash,:now,:now)"
                     ),

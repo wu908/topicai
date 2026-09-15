@@ -364,8 +364,10 @@ export function HypothesisForm({
   lockHypothesis,
   makeKey,
 }: HypothesisFormProps) {
-  const [problem, setProblem] = useState('');
-  const [promise, setPromise] = useState('');
+  // solve 类的两项由消化器起草（存在项目上），这里预填——用户只在不同意时改。
+  // AI 不可用时项目里为空，仍是空框由用户写（不编造）。
+  const [problem, setProblem] = useState(workspace.project.audience_problem || '');
+  const [promise, setPromise] = useState(workspace.project.reader_promise || '');
   const [viewpoint, setViewpoint] = useState('');
   const [continuation, setContinuation] = useState('');
   const [audienceChange, setAudienceChange] = useState(workspace.project.audience_change || '');
@@ -382,6 +384,8 @@ export function HypothesisForm({
   if (prevProjectId !== workspace.project.id) {
     setPrevProjectId(workspace.project.id);
     setAudienceChange(workspace.project.audience_change || '');
+    setProblem(workspace.project.audience_problem || '');
+    setPromise(workspace.project.reader_promise || '');
   }
   const version = workspace.current_version;
   const intent = workspace.project.content_intent;

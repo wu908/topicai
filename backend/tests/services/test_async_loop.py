@@ -329,6 +329,9 @@ def _ai_draft():
             "primary_response": "save",
             "supporting": ["follow"],
             "window_days": 7,
+            # solve 类的两项：消化器一并起草（此前要用户自己写）
+            "audience_problem": "断更后想重开，但不知道该从哪一篇写起",
+            "reader_promise": "把攒着的零碎想法一次性丢进收件箱，再挑一条写完",
         },
     }
 
@@ -641,3 +644,64 @@ async def test_pickup_survives_a_missing_source_material(test_db):
         {"id": picked["project"]["id"]},
     )
     assert row["current_version_id"], "素材缺失不该连带把版本也省掉"
+
+
+# ==================== 消化器起草 solve 类两项（2026-09-15） ====================
+
+
+@pytest.mark.asyncio
+async def test_digest_drafts_the_two_solve_fields(test_db):
+    """消化器顺带起草「读者遇到什么问题」「你准备给出的答案」——
+    这两句本来就在素材里，此前却要用户在锁定那一步自己重写一遍。"""
+    from app.services.async_loop import ProductionService
+
+    await insert_user(test_db)
+    await InboxService(test_db).add("loop-user", _item("solve-draft"))
+    llm = _StubLLM(draft=_ai_draft())
+
+    result = await ProductionService(test_db, llm=llm).digest("loop-user")
+
+    judgment = result["deliverables"][0]["judgment"]
+    assert judgment["audience_problem"] == "断更后想重开，但不知道该从哪一篇写起"
+    assert judgment["reader_promise"] == "把攒着的零碎想法一次性丢进收件箱，再挑一条写完"
+
+
+@pytest.mark.asyncio
+async def test_pickup_carries_the_drafted_fields_onto_the_project(test_db):
+    """认领时把草案里的两项交给项目，锁定那一步据此预填（用户仍可改）。"""
+    project, deliverable, _ = await _picked_project(test_db, "solve-fields")
+
+    row = await test_db.fetch_one(
+        "SELECT audience_problem, reader_promise FROM content_projects WHERE id=:id",
+        {"id": project["id"]},
+    )
+    assert row["audience_problem"] == deliverable["judgment"]["audience_problem"]
+    assert row["reader_promise"] == deliverable["judgment"]["reader_promise"]
+
+
+@pytest.mark.asyncio
+async def test_fallback_does_not_invent_the_two_solve_fields(test_db):
+    """模型不可用时不编造：项目里这两项保持空，等用户自己写。"""
+    from app.services.async_loop import ProductionService
+
+    await insert_user(test_db)
+    await InboxService(test_db).add("loop-user", _item("fallback-fields"))
+    deliverable = (
+        await ProductionService(test_db, llm=_StubLLM(error=RuntimeError("down"))).digest("loop-user")
+    )["deliverables"][0]
+    picked, _ = await PickupService(test_db).pickup(
+        "loop-user",
+        deliverable["id"],
+        PickupRequest(
+            content_intent="solve",
+            audience_change="看完能改掉一次浇水频率",
+            idempotency_key=f"pickup-fallback-{deliverable['id']}",
+        ),
+    )
+
+    row = await test_db.fetch_one(
+        "SELECT audience_problem, reader_promise FROM content_projects WHERE id=:id",
+        {"id": picked["project"]["id"]},
+    )
+    assert row["audience_problem"] is None
+    assert row["reader_promise"] is None

@@ -367,6 +367,11 @@ class Database:
                             ),
                         ],
                     )
+                elif version == "056_digest_reader_draft":
+                    await ensure_columns(
+                        "content_projects",
+                        [("audience_problem", "TEXT"), ("reader_promise", "TEXT")],
+                    )
                 elif version == "054_reference_samples":
                     await ensure_columns(
                         "imported_notes",

@@ -30,6 +30,9 @@ class ContentProjectCreate(BaseModel):
     content_intent: ContentIntent | None = None
     content_format: Literal["graphic_note", "vlog_plan"] = "graphic_note"
     audience_change: str | None = Field(default=None, max_length=1000)
+    # 消化器起草的 solve 类两项：锁定发布意图时预填，用户可改（AI 不可用时为空）。
+    audience_problem: str | None = Field(default=None, max_length=1000)
+    reader_promise: str | None = Field(default=None, max_length=1000)
     status: ProjectStatus = ProjectStatus.PREPARING
     planned_publish_at: str | None = None
     # 「开始一条内容」的推断结果（R2）：状态机据此跳过重复的意图确认，
