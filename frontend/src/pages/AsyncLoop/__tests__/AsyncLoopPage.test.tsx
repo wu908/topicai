@@ -37,7 +37,7 @@ const readyDeliverable = {
   body_text: '「最意外的是辣椒居然活了。」',
   outline: [],
   facts: [{ statement: '辣椒在北阳台活了', source_inbox_id: 'i1', note: '收件箱素材' }],
-  judgment: { primary_response: 'save', window_days: 7 },
+  judgment: { primary_response: 'save', window_days: 7, audience_change: '看完能避开这五个坑' },
   content_intent: 'solve',
   proposed_publish_at: null,
   is_exploration: false,
@@ -101,25 +101,55 @@ describe('AsyncLoopPage', () => {
     expect(screen.getAllByText(/产出架/).length).toBeGreaterThan(0);
   });
 
-  it('pickup validates audience change and calls the API', async () => {
+  it('prefills the confirmation from the draft so claiming needs no retyping', async () => {
     render(
       <MemoryRouter>
         <AsyncLoopPage />
       </MemoryRouter>,
     );
-    // 双栏布局：右栏默认展示第一张的拾取面板
-    await screen.findByLabelText(/希望读者的变化/);
-    // 初始无受众变化：认领应禁用（不触发）
+    // 右栏默认展示第一张的拾取面板：它显示的草案里已经有希望读者的变化，
+    // 确认框必须预填同一句——否则用户得把系统自己写的话再打一遍，认领还因此不可用。
+    const field = await screen.findByLabelText(/希望读者的变化/);
+    expect((field as HTMLInputElement).value).toBe('看完能避开这五个坑');
+    // 预填之后认领直接可用：点一下就按草案认领，用户只在不同意时才改。
     fireEvent.click(screen.getByText('认领'));
-    await waitFor(() => expect(pickupDeliverable).not.toHaveBeenCalled());
+    await waitFor(() => expect(pickupDeliverable).toHaveBeenCalled());
+    expect(pickupDeliverable.mock.calls[0][0]).toBe('d1');
+    expect(pickupDeliverable.mock.calls[0][1].audience_change).toBe('看完能避开这五个坑');
+    expect(await screen.findByText('已认领。这条产出会在 7 天观察窗内等你发布。')).toBeTruthy();
+  });
+
+  it('sends an edited audience change when the user rewrites the draft', async () => {
+    render(
+      <MemoryRouter>
+        <AsyncLoopPage />
+      </MemoryRouter>,
+    );
     fireEvent.change(await screen.findByLabelText(/希望读者的变化/), {
       target: { value: '看完能避开五个坑' },
     });
     fireEvent.click(screen.getByText('认领'));
     await waitFor(() => expect(pickupDeliverable).toHaveBeenCalled());
-    expect(pickupDeliverable.mock.calls[0][0]).toBe('d1');
     expect(pickupDeliverable.mock.calls[0][1].audience_change).toBe('看完能避开五个坑');
-    expect(await screen.findByText('已认领。这条产出会在 7 天观察窗内等你发布。')).toBeTruthy();
+  });
+
+  it('preselects the intent the draft actually has, not a hardcoded one', async () => {
+    // 产出是记录类：面板预选的意图必须是记录，不能是写死的「解决」。
+    listDeliverables.mockResolvedValue({
+      items: [{ ...readyDeliverable, content_intent: 'record' }],
+      total: 1,
+    });
+    render(
+      <MemoryRouter>
+        <AsyncLoopPage />
+      </MemoryRouter>,
+    );
+    const record = await screen.findByRole('button', { name: '记录意图' });
+    expect(record.getAttribute('aria-pressed')).toBe('true');
+    expect((await screen.findByRole('button', { name: '解决意图' })).getAttribute('aria-pressed')).toBe('false');
+    fireEvent.click(screen.getByText('认领'));
+    await waitFor(() => expect(pickupDeliverable).toHaveBeenCalled());
+    expect(pickupDeliverable.mock.calls[0][1].content_intent).toBe('record');
   });
 
   it('discard sends the chosen reason', async () => {
