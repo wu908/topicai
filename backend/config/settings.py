@@ -58,6 +58,11 @@ class Settings(BaseSettings):
     ai_enabled: bool = Field(default=True, alias="AI_ENABLED")
     vision_enabled: bool = Field(default=False, alias="VISION_ENABLED")
 
+    # 夜间自动消化的触发时刻（产品时区）。默认 03:00，与设置页文案一致；
+    # 做成配置是为了能在不等到凌晨的情况下验证这条链路真的会跑。
+    nightly_digest_hour: int = Field(default=3, ge=0, le=23, alias="NIGHTLY_DIGEST_HOUR")
+    nightly_digest_minute: int = Field(default=0, ge=0, le=59, alias="NIGHTLY_DIGEST_MINUTE")
+
     # ==================== Authentication ====================
     jwt_secret_key: str = Field(
         default="",
