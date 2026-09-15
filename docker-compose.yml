@@ -35,6 +35,10 @@ services:
       - LLM_CAPABILITIES=${LLM_CAPABILITIES:-text}
       - AI_ENABLED=${AI_ENABLED:-true}
       - VISION_ENABLED=${VISION_ENABLED:-false}
+      # 夜间自动消化的触发时刻（产品时区，默认 03:00）。可在服务器 .env 覆盖，
+      # 用于把这条链路指到几分钟后做真实验证。
+      - NIGHTLY_DIGEST_HOUR=${NIGHTLY_DIGEST_HOUR:-3}
+      - NIGHTLY_DIGEST_MINUTE=${NIGHTLY_DIGEST_MINUTE:-0}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:?JWT_SECRET_KEY must be set in .env}
       - ENVIRONMENT=${ENVIRONMENT:-production}
       # 容器默认是 UTC，而产品承诺「每晚 03:00」整理收件箱（见 scheduler 的
