@@ -787,7 +787,13 @@ export function PublicationForm({
         <Box>
           <Box display="flex" alignItems="center" flexWrap="wrap" gap={1} mb={1}>
             <Typography component="h3" variant="subtitle1" fontWeight={600}>发布前检查</Typography>
-            {check ? <Chip size="small" color={checkReady ? 'success' : 'warning'} label={checkReady ? '可以发布' : check.stale ? '检查已过期' : '需要确认'} /> : null}
+            {check ? (
+              <Chip size="small" color={checkReady ? 'success' : 'warning'} label={checkReady ? '可以发布' : check.stale ? '检查已过期' : '需要确认'} />
+            ) : (
+              // 取不到检查结果时不能什么都不显示：否则「确认已发布」是灰的，
+              // 而这一行没有任何原因说明（实走时就是这样，用户只能自己猜）。
+              <Chip size="small" color="warning" variant="outlined" label="先运行发布前检查" />
+            )}
             <Button variant="outlined" disabled={busy || !versionId} onClick={() => void runCheck()}>
               {check?.stale ? '重新检查' : '运行检查'}
             </Button>

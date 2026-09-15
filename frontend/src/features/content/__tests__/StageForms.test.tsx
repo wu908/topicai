@@ -449,6 +449,8 @@ describe('PublicationForm', () => {
 
     expect(screen.getByRole('button', { name: '确认已发布' })).toBeDisabled();
     await waitFor(() => expect(getLatestPublishCheck).toHaveBeenCalledWith('p1'));
+    // 不能只把按钮变灰：用户得知道为什么不能发布、下一步点哪里。
+    expect(await screen.findByText('先运行发布前检查')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '运行检查' }));
     expect(await screen.findByText('避免绝对化承诺')).toBeInTheDocument();
     expect(screen.getByText(/正文第 3–5 字/)).toBeInTheDocument();
