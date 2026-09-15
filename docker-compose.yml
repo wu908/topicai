@@ -37,6 +37,10 @@ services:
       - VISION_ENABLED=${VISION_ENABLED:-false}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:?JWT_SECRET_KEY must be set in .env}
       - ENVIRONMENT=${ENVIRONMENT:-production}
+      # 容器默认是 UTC，而产品承诺「每晚 03:00」整理收件箱（见 scheduler 的
+      # PRODUCT_TIMEZONE）。日志与本地时间语义都按产品时区来，否则排查时看到的是
+      # 前一天 19:00 的记录，会以为任务没跑。
+      - TZ=${TZ:-Asia/Shanghai}
       - SENTRY_DSN=${SENTRY_DSN:-}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/v2/health"]

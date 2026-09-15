@@ -4,7 +4,7 @@ Manages observation-window reminders and the nightly inbox digest.
 """
 
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta, timezone, tzinfo
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -15,6 +15,28 @@ _scheduler: object | None = None
 NIGHTLY_DIGEST_HOUR = 3
 #: 每晚每用户最多消化几条——AI 生成有 token 成本，必须封顶。
 NIGHTLY_DIGEST_MAX_ITEMS = 2
+
+
+def _product_timezone() -> tzinfo:
+    """产品承诺的时区：UI 文案写「每晚自动整理收件箱（03:00）」，`users.timezone`
+    的默认值也是 Asia/Shanghai。
+
+    必须显式指定：容器时区是 UTC，CronTrigger 不指定时区时按容器本地时区解析，
+    "每晚 03:00" 会实际变成北京时间 11:00——文案与行为不符。
+    （用户时区列目前无人改过，所以尚未按每用户时区分别触发；若将来有用户改了时区，
+    这个固定时区就需要改成"按用户本地 03:00 判断"。）
+    """
+    try:
+        from zoneinfo import ZoneInfo
+
+        return ZoneInfo("Asia/Shanghai")
+    except Exception:  # pragma: no cover - 仅当镜像缺少时区数据库时触发
+        # 宁可退回固定偏移，也不能因为缺时区库让整个应用起不来。
+        logger.warning("ZoneInfo unavailable; falling back to a fixed +08:00 offset")
+        return timezone(timedelta(hours=8))
+
+
+PRODUCT_TIMEZONE = _product_timezone()
 
 
 def init_scheduler(db: Any) -> object:
@@ -45,9 +67,10 @@ def init_scheduler(db: Any) -> object:
 
     # 夜间任务用 cron 触发器：interval 会在每次重启时立刻跑一次，
     # 那会让「夜里消化」变成「每次部署消化」。
+    # 显式带时区，否则按容器本地时区（UTC）解析，承诺的 03:00 会变成 11:00。
     _scheduler.add_job(
         _run_nightly_digest,
-        CronTrigger(hour=NIGHTLY_DIGEST_HOUR, minute=0),
+        CronTrigger(hour=NIGHTLY_DIGEST_HOUR, minute=0, timezone=PRODUCT_TIMEZONE),
         id="nightly_inbox_digest",
         name="Nightly Inbox Digest",
         args=[db],
