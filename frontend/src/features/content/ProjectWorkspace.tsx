@@ -370,6 +370,18 @@ export default function ProjectWorkspace({
       : intent === 'record'
         ? '留下一个过程、变化或结果，邀请读者持续关注'
         : null;
+  // 这条内容是什么（AI 命名的开放字段）先说，三值只在没有名字时兜底：
+  // 名字描述内容本身，三值决定机器跑哪套行为。
+  const formName = workspace.project.content_form?.trim() || null;
+  // 表头只说"这是什么"（名字，或没有名字时的行为键）；"读者拿走什么"由下面
+  // 「这篇内容要完成什么」那一块承担——两处都在说同一句话时，读起来是重复。
+  const identityLine = formName
+    ? `这篇是「${formName}」。`
+    : intentLabel ? `这是一条${intentLabel}内容。` : null;
+  // 这句要完成什么：项目自己记下的那句最具体（认领/入口推断都会写下来），
+  // 没有才退回按意图的通用描述。
+  const purposeHeadline = workspace.project.audience_change?.trim()
+    || (purpose ? `这条内容要${purpose}` : '这条内容还没有分类');
   const genome = workspace.content_genome;
 
   return (
@@ -386,9 +398,7 @@ export default function ProjectWorkspace({
             </div>
             <p>{!version
               ? '先给出一个模糊想法，AI 会帮你找到这条内容的目的。'
-              : intentLabel
-                ? `这是一条${intentLabel}内容：${purpose}。`
-                : '这条历史内容还没有回溯分类，先确认它当时想让读者发生什么变化。'}</p>
+              : identityLine ?? '这条历史内容还没有回溯分类，先确认它当时想让读者发生什么变化。'}</p>
           </div>
         </div>
         <div className="workspace-header-actions">
@@ -402,7 +412,7 @@ export default function ProjectWorkspace({
       <section className="workspace-purpose" aria-labelledby="workspace-purpose-heading">
         <div className="workspace-purpose-copy">
           <span className="workspace-eyebrow">这篇内容要完成什么</span>
-          <h2 id="workspace-purpose-heading">{purpose ? `这条内容要${purpose}` : '这条内容还没有分类'}</h2>
+          <h2 id="workspace-purpose-heading">{purposeHeadline}</h2>
           <p>AI 会根据这个目的选择问题、结构和发布后的观察方式。你不需要先学会复杂的方法。</p>
         </div>
         <div className="workspace-next-step">
@@ -445,7 +455,7 @@ export default function ProjectWorkspace({
             <h2>这篇内容的进度</h2>
             <p>完成一个动作，再进入下一步</p>
           </div>
-          <OutlineItem icon={<FactCheckOutlined />} title="内容意图" hint="这条内容想让读者发生什么变化" value={intentLabel ? `${intentLabel}：${purpose}` : '尚未分类，可回溯确认当时的意图'} state={workspace.project.intent_status === 'working_confirmed' || workspace.project.intent_status === 'locked' ? 'confirmed' : 'pending'} />
+          <OutlineItem icon={<FactCheckOutlined />} title="内容意图" hint="这条内容想让读者发生什么变化" value={intentLabel ? `${formName ?? intentLabel}：${purpose}` : '尚未分类，可回溯确认当时的意图'} state={workspace.project.intent_status === 'working_confirmed' || workspace.project.intent_status === 'locked' ? 'confirmed' : 'pending'} />
           <OutlineItem
             icon={<TimelineOutlined />}
             title="需要的真实素材"

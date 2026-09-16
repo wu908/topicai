@@ -139,6 +139,10 @@ export interface ContentProject {
   /** 消化器起草的 solve 类两项（读者困境 / 你的答案）：锁定发布意图时预填，可改。 */
   audience_problem: string | null;
   reader_promise: string | null;
+  /** 这条内容是什么——AI 命名的开放字段（例如「作品展示」「踩坑复盘」），
+   *  Step 1 随产出带到项目上。它不参与路由，也不限制内容形态；
+   *  决定机器行为的仍是 content_intent 那三个值。 */
+  content_form: string | null;
   material_requirements: string[];
   expected_responses: string[];
   success_signals: string[];
