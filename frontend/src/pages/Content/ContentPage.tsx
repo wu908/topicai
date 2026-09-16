@@ -759,7 +759,7 @@ function IntentActionPanel({
             onChange={(event) => setAudienceChange(event.target.value)}
             multiline
             minRows={2}
-            helperText="AI 建议的方向；可以直接改成你的说法。"
+            helperText={`这是「${copy.label}」类内容的通用方向；写成本项目具体的样子会更准。`}
           />
           <div className="intent-materials"><strong>后面会收集</strong><span>{copy.materials.join(' · ')}</span><strong>发布后观察</strong><span>{copy.signals.join(' · ')}</span></div>
           <Button variant="contained" startIcon={<CheckCircleOutline />} disabled={busy} onClick={() => void runCommand(() => confirmProjectIntent(workspace.project.id, { content_intent: intent, audience_change: audienceChange.trim() || copy.audience, material_requirements: copy.materials, expected_responses: copy.responses, success_signals: copy.signals, expected_project_version: workspace.project.version, idempotency_key: `intent-${workspace.project.id}-${workspace.project.version}` }))}>确认这个方向</Button>
