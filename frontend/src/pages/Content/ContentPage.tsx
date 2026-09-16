@@ -745,7 +745,7 @@ function IntentActionPanel({
             label="内容意图"
             value={intent}
             onChange={(event) => setIntent(event.target.value as ContentIntent)}
-            helperText="AI 已按这条内容判断；不对就在这里改。"
+            helperText="这是这个项目原先记下的意图；不对就在这里改。"
           >
             <MenuItem value="solve">解决：教会一个方法</MenuItem>
             <MenuItem value="share">分享：表达经历或观点</MenuItem>
