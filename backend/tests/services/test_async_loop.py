@@ -329,6 +329,8 @@ def _ai_draft():
             "primary_response": "save",
             "supporting": ["follow"],
             "window_days": 7,
+            # 意图由模型读内容判断（不再按介质猜）
+            "content_intent": "share",
             # solve 类的两项：消化器一并起草（此前要用户自己写）
             "audience_problem": "断更后想重开，但不知道该从哪一篇写起",
             "reader_promise": "把攒着的零碎想法一次性丢进收件箱，再挑一条写完",
@@ -705,3 +707,42 @@ async def test_fallback_does_not_invent_the_two_solve_fields(test_db):
     )
     assert row["audience_problem"] is None
     assert row["reader_promise"] is None
+
+
+# ==================== 意图由模型读内容判断（2026-09-16） ====================
+
+
+@pytest.mark.asyncio
+async def test_digest_takes_the_intent_from_the_model_not_the_medium(test_db):
+    """图片素材的介质映射是 record，但内容是讲一段经历——以模型判断为准。
+
+    此前意图按介质猜（text→solve、image→record），于是"讲经历的文字"被当成
+    "解决问题"，系统随即问错问题、盯错信号。"""
+    from app.services.async_loop import ProductionService
+
+    await insert_user(test_db)
+    await InboxService(test_db).add(
+        "loop-user",
+        _item("intent-by-content", kind="image", content="这张图是我第一次办展时拍的，那天我在门口站了很久才敢进去。"),
+    )
+    llm = _StubLLM(draft=_ai_draft())
+
+    result = await ProductionService(test_db, llm=llm).digest("loop-user")
+
+    deliverable = result["deliverables"][0]
+    assert deliverable["content_intent"] == "share"      # 模型的判断
+    assert deliverable["content_intent"] != "record"      # 介质会给出的那个
+
+
+@pytest.mark.asyncio
+async def test_digest_falls_back_to_the_medium_when_the_model_cannot_judge(test_db):
+    """没有模型判断时退回介质映射（旧行为），不猜内容类型。"""
+    from app.services.async_loop import ProductionService
+
+    await insert_user(test_db)
+    await InboxService(test_db).add("loop-user", _item("intent-fallback", kind="image"))
+    llm = _StubLLM(error=RuntimeError("model is down"))
+
+    result = await ProductionService(test_db, llm=llm).digest("loop-user")
+
+    assert result["deliverables"][0]["content_intent"] == "record"

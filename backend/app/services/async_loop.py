@@ -73,6 +73,10 @@ class _JudgmentDraft(StrictModel):
     # 而这两句本来就在素材里。其他类型留空——不编造。
     audience_problem: str | None = Field(default=None, max_length=300)
     reader_promise: str | None = Field(default=None, max_length=300)
+    #: 这条内容对读者做的事。此前是按素材**介质**猜的（粘文字→解决、贴图→记录），
+    #: 于是"讲一段经历的文字"会被当成"解决问题"，系统随即问错问题、盯错信号。
+    #: 现在由模型读内容判断，判断不出（或没有模型）时才退回介质映射。
+    content_intent: Literal["solve", "share", "record"] | None = None
 
 
 class _Draft(StrictModel):
@@ -92,18 +96,21 @@ DIGEST_SYSTEM_PROMPT = (
     "4. 标题不超过 20 字，正文口语化，分 2-4 段。\n"
     "5. outline 给 3 步（hook/point/ending），judgment.audience_change 一句话说清"
     "读者看完能获得什么可判断的变化。\n"
-    "6. judgment.audience_problem 与 judgment.reader_promise：只有这条素材是"
-    "「教方法／解决一个具体问题」时才写——前者一句话说读者在真实场景里遇到的具体困境，"
-    "后者一句话说你基于这次亲身经历能讲清楚的方法或步骤；不是这类就填 null，不要硬凑。\n"
+    "6. judgment.content_intent：读素材判断这条内容**对读者做什么**，只能从这三个里选——"
+    "solve（教一个方法／解决一个具体问题）、share（讲经历、表达观点或展示作品）、"
+    "record（记录一个过程或变化）。**按内容判断，不要因为素材是文字就选 solve、是图片就选 record**。\n"
+    "7. judgment.audience_problem 与 judgment.reader_promise：当 content_intent 是 solve 时"
+    "必须写——前者一句话说读者在真实场景里遇到的具体困境，后者一句话说你基于这次亲身经历"
+    "能讲清楚的方法或步骤；其他类型填 null，不要硬凑。\n"
     "只输出一个 JSON 对象，不要任何解释、不要 Markdown 代码块。"
     "字段与类型必须严格如下（字符串内部换行请写成 \\n）：\n"
     '{"title":"标题","body_text":"正文","outline":'
     '[{"step":"hook","label":"钩子"},{"step":"point","label":"要点"},'
     '{"step":"ending","label":"结尾互动"}],'
     '"judgment":{"audience_change":"读者变化","primary_response":"save",'
-    '"supporting":["follow"],"window_days":7,'
-    '"audience_problem":"读者遇到的具体困境，非此类填 null",'
-    '"reader_promise":"你准备给出的答案，非此类填 null"}}'
+    '"supporting":["follow"],"window_days":7,"content_intent":"share",'
+    '"audience_problem":"仅 solve 时填，否则 null",'
+    '"reader_promise":"仅 solve 时填，否则 null"}}'
 )
 
 
@@ -438,6 +445,12 @@ class ProductionService:
                 "window_days": 7,
             }
             source = "deterministic_fallback"
+        # 意图：模型读内容判断优先；没有模型判断不出时退回介质映射（旧行为）。
+        judged_intent = (
+            draft.judgment.content_intent
+            if draft is not None and draft.judgment.content_intent
+            else INTENT_BY_KIND.get(item["kind"], "share")
+        )
         # 事实始终来自素材本身（不由模型生成），溯源不变式不因 AI 而放松。
         facts = [{"statement": content[:200], "source_inbox_id": item["id"],
                   "note": "收件箱素材"}]
@@ -463,7 +476,7 @@ class ProductionService:
                 "outline": json.dumps(outline, ensure_ascii=False),
                 "facts": json.dumps(facts, ensure_ascii=False),
                 "judgment": json.dumps(judgment, ensure_ascii=False),
-                "intent": INTENT_BY_KIND.get(item["kind"], "share"),
+                "intent": judged_intent,
                 "exp": is_exploration,
                 "expire": _expire_at(ts),
                 "precheck": json.dumps(precheck, ensure_ascii=False),
