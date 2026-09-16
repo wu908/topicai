@@ -77,6 +77,11 @@ class _JudgmentDraft(StrictModel):
     #: 于是"讲一段经历的文字"会被当成"解决问题"，系统随即问错问题、盯错信号。
     #: 现在由模型读内容判断，判断不出（或没有模型）时才退回介质映射。
     content_intent: Literal["solve", "share", "record"] | None = None
+    #: 这条内容**是什么**：作品展示 / 教程 / 清单 / 观点 / 复盘 / 对比 / 故事…
+    #: 开放、由模型命名，只用于展示与提示词上下文，**不参与任何路由判断**。
+    #: 上限刻意留到 40（提示词要求 ≤20）：把长度写死会在模型给长一点的名字时
+    #: 让整份草稿校验失败、退回确定性骨架——那正是 #85 那类"静默降级"。
+    content_form: str | None = Field(default=None, max_length=40)
 
 
 class _Draft(StrictModel):
@@ -102,6 +107,9 @@ DIGEST_SYSTEM_PROMPT = (
     "7. judgment.audience_problem 与 judgment.reader_promise：当 content_intent 是 solve 时"
     "必须写——前者一句话说读者在真实场景里遇到的具体困境，后者一句话说你基于这次亲身经历"
     "能讲清楚的方法或步骤；其他类型填 null，不要硬凑。\n"
+    "8. judgment.content_form：用 4–12 个字给这条内容**命名它是什么**，要具体——"
+    "例如「作品展示」「入门教程」「踩坑复盘」「清单」「观点」「前后对比」。"
+    "不要用「日常分享」「生活记录」这种放在任何内容上都成立的空名；判断不出就填 null。\n"
     "只输出一个 JSON 对象，不要任何解释、不要 Markdown 代码块。"
     "字段与类型必须严格如下（字符串内部换行请写成 \\n）：\n"
     '{"title":"标题","body_text":"正文","outline":'
@@ -109,6 +117,7 @@ DIGEST_SYSTEM_PROMPT = (
     '{"step":"ending","label":"结尾互动"}],'
     '"judgment":{"audience_change":"读者变化","primary_response":"save",'
     '"supporting":["follow"],"window_days":7,"content_intent":"share",'
+    '"content_form":"作品展示",'
     '"audience_problem":"仅 solve 时填，否则 null",'
     '"reader_promise":"仅 solve 时填，否则 null"}}'
 )
@@ -134,7 +143,7 @@ def produced_judgment(deliverable: Any) -> dict[str, str]:
     except (TypeError, ValueError):
         return {}
     picked: dict[str, str] = {}
-    for key in ("audience_problem", "reader_promise"):
+    for key in ("audience_problem", "reader_promise", "content_form"):
         value = judgment.get(key)
         if isinstance(value, str) and value.strip():
             picked[key] = value.strip()
@@ -440,6 +449,8 @@ class ProductionService:
                 # 模型不可用时不编造这两项：留给用户写（锁定那一步是空框）。
                 "audience_problem": None,
                 "reader_promise": None,
+                # 形态也不编造：没有模型就没有名字，界面回落到按行为的标签。
+                "content_form": None,
                 "primary_response": "save",
                 "supporting": ["follow"],
                 "window_days": 7,
@@ -465,11 +476,12 @@ class ProductionService:
             return {}, source
         await self.db.execute(
             "INSERT INTO deliverables (id,owner_user_id,thread_id,title,body_text,"
-            "outline_json,facts_json,judgment_json,content_intent,proposed_publish_at,"
+            "outline_json,facts_json,judgment_json,content_intent,content_form,"
+            "proposed_publish_at,"
             "is_exploration,status,retry_count,expire_at,precheck_json,confidence,version,"
             "idempotency_key,request_hash,created_at,updated_at) VALUES "
             "(:id,:owner,:thread,:title,:body,:outline,:facts,:judgment,:intent,"
-            "NULL,:exp,'ready',0,:expire,:precheck,'medium',1,:key,'',:now,:now)",
+            ":content_form,NULL,:exp,'ready',0,:expire,:precheck,'medium',1,:key,'',:now,:now)",
             {
                 "id": deliverable_id, "owner": owner, "thread": thread_id,
                 "title": title, "body": body_text,
@@ -477,6 +489,8 @@ class ProductionService:
                 "facts": json.dumps(facts, ensure_ascii=False),
                 "judgment": json.dumps(judgment, ensure_ascii=False),
                 "intent": judged_intent,
+                # 形态只写不读（Step 1）：界面上还不显示它。
+                "content_form": (judgment.get("content_form") or None),
                 "exp": is_exploration,
                 "expire": _expire_at(ts),
                 "precheck": json.dumps(precheck, ensure_ascii=False),

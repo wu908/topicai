@@ -331,6 +331,8 @@ def _ai_draft():
             "window_days": 7,
             # 意图由模型读内容判断（不再按介质猜）
             "content_intent": "share",
+            # 内容形态：开放、AI 命名的"这是什么"
+            "content_form": "踩坑复盘",
             # solve 类的两项：消化器一并起草（此前要用户自己写）
             "audience_problem": "断更后想重开，但不知道该从哪一篇写起",
             "reader_promise": "把攒着的零碎想法一次性丢进收件箱，再挑一条写完",
@@ -746,3 +748,99 @@ async def test_digest_falls_back_to_the_medium_when_the_model_cannot_judge(test_
     result = await ProductionService(test_db, llm=llm).digest("loop-user")
 
     assert result["deliverables"][0]["content_intent"] == "record"
+
+
+# ==================== 内容形态（意图拆分 Step 1，2026-09-16） ====================
+
+
+@pytest.mark.asyncio
+async def test_digest_stores_the_ai_named_content_form(test_db):
+    """形态由模型命名并落库——它是开放的（不设枚举），只用于展示与提示词。"""
+    from app.services.async_loop import ProductionService
+
+    await insert_user(test_db)
+    await InboxService(test_db).add("loop-user", _item("form-1"))
+    llm = _StubLLM(draft=_ai_draft())
+
+    result = await ProductionService(test_db, llm=llm).digest("loop-user")
+
+    deliverable_id = result["deliverables"][0]["id"]
+    row = await test_db.fetch_one(
+        "SELECT content_form FROM deliverables WHERE id=:id", {"id": deliverable_id}
+    )
+    assert row["content_form"] == "踩坑复盘"
+    # judgment 里也留着（同一份判断草案），两处一致。
+    assert result["deliverables"][0]["judgment"]["content_form"] == "踩坑复盘"
+
+
+@pytest.mark.asyncio
+async def test_fallback_does_not_invent_a_content_form(test_db):
+    """没有模型就没有名字：不编造，界面回落到按行为的标签。"""
+    from app.services.async_loop import ProductionService
+
+    await insert_user(test_db)
+    await InboxService(test_db).add("loop-user", _item("form-2"))
+    llm = _StubLLM(error=RuntimeError("down"))
+
+    result = await ProductionService(test_db, llm=llm).digest("loop-user")
+
+    row = await test_db.fetch_one(
+        "SELECT content_form FROM deliverables WHERE id=:id",
+        {"id": result["deliverables"][0]["id"]},
+    )
+    assert row["content_form"] is None
+
+
+@pytest.mark.asyncio
+async def test_pickup_carries_the_content_form_onto_the_project(test_db):
+    """认领时形态一并交给项目（与 solve 类两项同一处交接）。
+
+    这里自带模型：助手 `_picked_project` 走的是降级路径，形态为空，
+    断言不了"交过去了"。
+    """
+    from app.services.async_loop import ProductionService
+
+    await insert_user(test_db)
+    await InboxService(test_db).add("loop-user", _item("form-3"))
+    deliverable = (
+        await ProductionService(test_db, llm=_StubLLM(draft=_ai_draft())).digest("loop-user")
+    )["deliverables"][0]
+    assert deliverable["judgment"]["content_form"] == "踩坑复盘"
+
+    picked, _ = await PickupService(test_db).pickup(
+        "loop-user",
+        deliverable["id"],
+        PickupRequest(
+            content_intent="solve",
+            audience_change="看完能改掉一次浇水频率",
+            idempotency_key=f"pickup-form-{deliverable['id']}",
+        ),
+    )
+
+    row = await test_db.fetch_one(
+        "SELECT content_form FROM content_projects WHERE id=:id",
+        {"id": picked["project"]["id"]},
+    )
+    assert row["content_form"] == "踩坑复盘"
+
+
+@pytest.mark.asyncio
+async def test_the_content_form_never_changes_routing(test_db):
+    """形态不参与路由：同一项目有没有形态，推导出的下一步动作必须一样。
+
+    这条是 Step 1 的不变式——拆分之后，「内容是什么」只做展示与提示词，
+    「机器做什么」仍只由 content_intent 决定。
+    """
+    from app.services.intent_orchestrator import IntentOrchestratorService
+
+    project, _, _ = await _picked_project(test_db, "form-4")
+    orchestrator = IntentOrchestratorService(test_db)
+
+    with_form = await orchestrator.ensure_project_action("loop-user", project["id"])
+
+    await test_db.execute(
+        "UPDATE content_projects SET content_form=NULL WHERE id=:id", {"id": project["id"]}
+    )
+    without_form = await orchestrator.ensure_project_action("loop-user", project["id"])
+
+    assert with_form["action_type"] == without_form["action_type"]

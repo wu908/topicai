@@ -367,6 +367,9 @@ class Database:
                             ),
                         ],
                     )
+                elif version == "057_content_form":
+                    await ensure_columns("deliverables", [("content_form", "TEXT")])
+                    await ensure_columns("content_projects", [("content_form", "TEXT")])
                 elif version == "056_digest_reader_draft":
                     await ensure_columns(
                         "content_projects",
