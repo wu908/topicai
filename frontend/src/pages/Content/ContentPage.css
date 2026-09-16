@@ -242,7 +242,9 @@
   grid-template-columns: minmax(0, 1fr) minmax(320px, 0.8fr);
   gap: 28px;
   align-items: stretch;
-  padding: 24px 0;
+  /* 与下方动作区 (.workspace-editor) 的 30px 水平内边距对齐：同一个容器里
+     两个边距不同的块，读起来就是"文字没对齐"。分隔线仍然通栏（内边距在边框内侧）。 */
+  padding: 24px 30px;
   border-bottom: 1px solid var(--v3-border);
 }
 
