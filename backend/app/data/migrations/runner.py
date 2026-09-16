@@ -627,9 +627,11 @@ _INTENT_MODEL_CONTENT_PROJECTS_SQL = """
                                                start_inference_confidence IN ('high','medium','low')),
         -- 消化器起草的 solve 类两项（056）。这张重建表按旧表列集原样拷贝，
         -- 所以 content_projects 每加一列都必须同时加在这里，否则拷贝语句会引用
-        -- 新表没有的列、迁移直接失败（本轮就是踩在这里）。
+        -- 新表没有的列、迁移直接失败（已踩过两次）。
         audience_problem            TEXT,
         reader_promise              TEXT,
+        -- 内容形态（057）：开放字段，只用于展示与提示词，不参与任何路由。
+        content_form                TEXT,
         material_requirements_json  TEXT NOT NULL DEFAULT '[]',
         expected_responses_json     TEXT NOT NULL DEFAULT '[]',
         success_signals_json        TEXT NOT NULL DEFAULT '[]',
@@ -1159,6 +1161,19 @@ def apply(
                             "start_inference_confidence IN ('high','medium','low'))",
                         ),
                     ],
+                )
+                conn.executescript(sql)
+            elif version == "057_content_form":
+                # 内容形态（开放字段，Step 1 只写不读）。两张表都要补。
+                _ensure_columns(
+                    conn,
+                    "deliverables",
+                    [("content_form", "TEXT")],
+                )
+                _ensure_columns(
+                    conn,
+                    "content_projects",
+                    [("content_form", "TEXT")],
                 )
                 conn.executescript(sql)
             elif version == "056_digest_reader_draft":
