@@ -278,3 +278,19 @@ def test_nightly_digest_honours_the_configured_time(monkeypatch) -> None:
     fire = trigger.get_next_fire_time(None, datetime.now(UTC))
     assert fire is not None
     assert (fire.hour, fire.minute) == (5, 30)
+
+
+@pytest.mark.asyncio
+async def test_nightly_digest_reports_every_run(test_db, caplog):
+    """每次运行都要留一行日志——没有用户开启开关时也必须留痕，否则
+    "凌晨到底跑没跑"只能靠拨时钟验证（2026-09-15 就是这么做的）。"""
+    import logging
+
+    with caplog.at_level(logging.INFO, logger="app.tasks.scheduler"):
+        await scheduler_mod._run_nightly_digest(test_db)  # noqa: SLF001
+
+    messages = [record.getMessage() for record in caplog.records]
+    assert "Nightly digest run complete" in messages
+    record = next(r for r in caplog.records if r.getMessage() == "Nightly digest run complete")
+    assert record.__dict__["owners"] == 0
+    assert record.__dict__["deliverables"] == 0

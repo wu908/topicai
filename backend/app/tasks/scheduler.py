@@ -135,6 +135,10 @@ async def _run_nightly_digest(db: Any) -> None:
                 "Nightly digest failed for an owner", extra={"owner": owner},
                 exc_info=True,
             )
-    if digested:
-        logger.info("Nightly digest produced deliverables", extra={"count": digested})
+    # 每次运行都自报一行：没有用户开启开关时也必须留下痕迹，否则"这条链路到底
+    # 有没有在凌晨跑过"只能靠拨时钟去验证（2026-09-15 就是这么做的）。
+    logger.info(
+        "Nightly digest run complete",
+        extra={"owners": len(owners), "deliverables": digested},
+    )
 
