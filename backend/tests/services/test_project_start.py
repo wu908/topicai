@@ -73,7 +73,7 @@ async def test_start_from_one_sentence_infers_intent_without_asking(test_db):
 
     assert llm.calls, "必须调用模型做推断"
     assert result.inference.intent == "solve"
-    assert result.inference.intent_label == "解决"
+    assert result.inference.intent_label == "教方法"
     assert result.inference.source == "ai"
     assert result.inference.next_question == "你试过哪一步？"
     assert result.title, "标题由原料提炼，不让用户先起名"

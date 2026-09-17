@@ -876,7 +876,7 @@ async def test_mixed_series_extension_draft_uses_last_member_intent(series_db):
     # Last member is "share" (second project), so draft should propose share
     assert opportunity["content_intent"] == "share"
     # Limitations should warn about mixed series
-    assert any("多种内容意图" in lim for lim in opportunity["limitations"])
+    assert any("处理方式或格式不一致" in lim for lim in opportunity["limitations"])
 
 
 @pytest.mark.asyncio

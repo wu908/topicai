@@ -193,7 +193,7 @@ describe('ContentPage', () => {
     expect(await screen.findByRole('heading', { name: '开始一条内容' })).toBeInTheDocument();
     expect(screen.getByLabelText('一句话说说你想做什么')).toBeInTheDocument();
     expect(screen.queryByLabelText('项目标题')).toBeNull();
-    expect(screen.queryByLabelText('这条内容更像什么')).toBeNull();
+    expect(screen.queryByLabelText('处理方式')).toBeNull();
   });
 
 
@@ -210,8 +210,8 @@ describe('ContentPage', () => {
 
     expect(await screen.findByText('未分类历史内容')).toBeInTheDocument();
     expect(screen.getByText('未分类内容')).toBeInTheDocument();
-    expect(screen.getByText('分享内容')).toBeInTheDocument();
-    expect(screen.queryByText('记录内容')).not.toBeInTheDocument();
+    expect(screen.getByText('讲经历')).toBeInTheDocument();
+    expect(screen.queryByText('记过程')).not.toBeInTheDocument();
   });
 
   // Step 2：AI 给这条内容起的名字（开放字段）优先显示，三值只在没有名字时兜底。
@@ -227,7 +227,7 @@ describe('ContentPage', () => {
 
     expect(await screen.findByText('作品展示')).toBeInTheDocument();
     // 老项目没有名字，退回三值标签——这正是这个字段存在前的样子。
-    expect(screen.getByText('分享内容')).toBeInTheDocument();
+    expect(screen.getByText('讲经历')).toBeInTheDocument();
   });
 
   it('resumes at manual publication and submits the locked version', async () => {
@@ -640,10 +640,10 @@ describe('ContentPage', () => {
     // 三值不再自称内容的类型，只说明它决定机器接下来怎么跑。
     expect(screen.getByText(/三个值不限制这条内容长什么样/)).toBeInTheDocument();
     // 选择框挪到下面之后，那句通用方向的说明要指得对地方。
-    expect(screen.getByText(/下面「内容意图」对应类别的通用方向/)).toBeInTheDocument();
+    expect(screen.getByText(/下面「处理方式」对应类别的通用方向/)).toBeInTheDocument();
     // 读者变化排在意图之前：用户先回答那件开放的事，再（可选地）改机器行为。
     const audienceField = screen.getByLabelText('希望读者发生的变化');
-    const intentSelect = screen.getByRole('combobox', { name: '内容意图' });
+    const intentSelect = screen.getByRole('combobox', { name: '处理方式' });
     expect(
       audienceField.compareDocumentPosition(intentSelect) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
@@ -811,7 +811,7 @@ describe('推断横幅（R2）', () => {
     renderPage('/content/p1');
 
     // 刷新后横幅仍在——数据来自项目本身，不是路由 state
-    expect(await screen.findByText(/我理解这是「分享」内容/)).toBeTruthy();
+    expect(await screen.findByText(/我按「讲经历」来准备这条/)).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: '不对，我自己选' }));
     await waitFor(() =>

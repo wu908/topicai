@@ -58,7 +58,7 @@ def test_unknown_and_unset_intent_stay_neutral():
 
 
 def test_known_intent_returns_its_own_rubric():
-    assert rubric_for("record")["label"] == "记录"
+    assert rubric_for("record")["label"] == "记过程"
     assert rubric_for("record")["question"] == INTENT_RUBRIC["record"]["question"]
 
 

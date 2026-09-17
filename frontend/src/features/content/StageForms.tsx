@@ -229,15 +229,15 @@ export function ProjectCreateForm({
             />
             <TextField
               select
-              label="这条内容更像什么"
+              label="处理方式"
               value={intent}
               onChange={(event) => setIntent(event.target.value as ContentIntent | '')}
-              helperText="先选一个大致方向，进入项目后仍可纠正。"
+              helperText="它决定 AI 接下来问什么、怎么组织内容；不限制这条内容长什么样。进入项目后仍可纠正。"
             >
               <MenuItem value="">不确定，让 AI 先判断</MenuItem>
-              <MenuItem value="solve">解决：教会一个方法</MenuItem>
-              <MenuItem value="share">分享：表达经历或观点</MenuItem>
-              <MenuItem value="record">记录：留下过程和变化</MenuItem>
+              <MenuItem value="solve">教方法：要问题、你的做法和结果</MenuItem>
+              <MenuItem value="share">讲经历：要你亲历的一件和你的看法</MenuItem>
+              <MenuItem value="record">记过程：要起点、片段和当前结果</MenuItem>
             </TextField>
             <TextField
               label="希望读者发生什么变化（可留空）"

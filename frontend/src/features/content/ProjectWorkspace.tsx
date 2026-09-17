@@ -360,9 +360,10 @@ export default function ProjectWorkspace({
   // ADR 0002：历史内容的发布意图始终为空，能显示的只有回溯分类结果。
   // 两者都没有时不能兜底成“解决”，那等于替用户编造一个他没确认过的意图。
   const intent = workspace.project.content_intent ?? workspace.project.retrospective_intent;
+  // 模式名（Step 3）：这三个值说的是机器怎么做，不是这条内容属于哪一类。
   const intentLabel = intent === 'solve'
-    ? '解决'
-    : intent === 'share' ? '分享' : intent === 'record' ? '记录' : null;
+    ? '教方法'
+    : intent === 'share' ? '讲经历' : intent === 'record' ? '记过程' : null;
   const purpose = intent === 'solve'
     ? '帮助读者解决一个具体问题'
     : intent === 'share'
@@ -377,7 +378,7 @@ export default function ProjectWorkspace({
   // 「这篇内容要完成什么」那一块承担——两处都在说同一句话时，读起来是重复。
   const identityLine = formName
     ? `这篇是「${formName}」。`
-    : intentLabel ? `这是一条${intentLabel}内容。` : null;
+    : intentLabel ? `这条按「${intentLabel}」处理。` : null;
   // 这句要完成什么：项目自己记下的那句最具体（认领/入口推断都会写下来），
   // 没有才退回按意图的通用描述。
   const purposeHeadline = workspace.project.audience_change?.trim()
@@ -455,7 +456,7 @@ export default function ProjectWorkspace({
             <h2>这篇内容的进度</h2>
             <p>完成一个动作，再进入下一步</p>
           </div>
-          <OutlineItem icon={<FactCheckOutlined />} title="内容意图" hint="这条内容想让读者发生什么变化" value={intentLabel ? `${formName ?? intentLabel}：${purpose}` : '尚未分类，可回溯确认当时的意图'} state={workspace.project.intent_status === 'working_confirmed' || workspace.project.intent_status === 'locked' ? 'confirmed' : 'pending'} />
+          <OutlineItem icon={<FactCheckOutlined />} title="处理方式" hint="决定 AI 问什么、怎么组织内容" value={intentLabel ? `${formName ?? intentLabel}：${purpose}` : '尚未分类，可回溯确认当时的意图'} state={workspace.project.intent_status === 'working_confirmed' || workspace.project.intent_status === 'locked' ? 'confirmed' : 'pending'} />
           <OutlineItem
             icon={<TimelineOutlined />}
             title="需要的真实素材"

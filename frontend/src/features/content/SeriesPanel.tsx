@@ -51,10 +51,11 @@ const eligibleStatuses = new Set<ContentProject['status']>([
   'settled',
 ]);
 
+// 模式名（Step 3）：这三个值决定机器怎么做，不是内容分类。
 const intentLabels: Record<ContentIntent, string> = {
-  solve: '解决问题',
-  share: '分享观点',
-  record: '记录过程',
+  solve: '教方法',
+  share: '讲经历',
+  record: '记过程',
 };
 
 const formatLabels: Record<ContentFormat, string> = {
@@ -307,7 +308,7 @@ export default function SeriesPanel({
             <p>{item.confirmed_promise}</p>
             <small>下一篇方向：{item.confirmed_continuation_prompt}</small>
             <small className="series-member-scope">
-              成员意图：{memberIntents(item).map((value) => intentLabels[value]).join(' · ') || '未记录'}
+              成员处理方式：{memberIntents(item).map((value) => intentLabels[value]).join(' · ') || '未记录'}
               {' ｜ '}
               成员格式：{memberFormats(item).map((value) => formatLabels[value]).join(' · ') || '未记录'}
             </small>
@@ -316,16 +317,16 @@ export default function SeriesPanel({
               <div className="series-opportunity">
                 <span className="series-status">下一篇候选 · 尚未创建项目</span>
                 <select
-                  aria-label="下一篇内容意图"
+                  aria-label="下一篇处理方式"
                   value={values.contentIntent}
                   disabled={busy}
                   onChange={(event) => updateOpportunity(
                     'contentIntent', event.target.value as ContentIntent,
                   )}
                 >
-                  <option value="solve">解决问题</option>
-                  <option value="share">分享观点</option>
-                  <option value="record">记录过程</option>
+                  <option value="solve">教方法</option>
+                  <option value="share">讲经历</option>
+                  <option value="record">记过程</option>
                 </select>
                 <select
                   aria-label="下一篇内容格式"

@@ -102,7 +102,11 @@ class ProjectStartService:
             )
             return ProjectStartInference(
                 intent=draft.intent,
-                intent_label={"solve": "解决", "share": "分享", "record": "记录"}[
+                intent_label={
+                    "solve": "教方法",
+                    "share": "讲经历",
+                    "record": "记过程",
+                }[
                     draft.intent
                 ],
                 reason=draft.reason,

@@ -84,7 +84,7 @@ describe('ProjectWorkspace', () => {
     expect(screen.getByText(/这条历史内容还没有回溯分类/)).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '这条内容还没有分类' })).toBeInTheDocument();
     expect(screen.getByText('尚未分类，可回溯确认当时的意图')).toBeInTheDocument();
-    expect(screen.queryByText(/这是一条解决内容/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/这条按「教方法」处理/)).not.toBeInTheDocument();
     expect(screen.queryByText(/帮助读者解决一个具体问题/)).not.toBeInTheDocument();
   });
 
@@ -94,8 +94,8 @@ describe('ProjectWorkspace', () => {
       project: { ...workspace.project, content_intent: null, retrospective_intent: 'share', intent_status: 'retrospective', status: 'published' },
     });
 
-    expect(screen.getByText(/这是一条分享内容/)).toBeInTheDocument();
-    expect(screen.queryByText(/这是一条解决内容/)).not.toBeInTheDocument();
+    expect(screen.getByText(/这条按「讲经历」处理/)).toBeInTheDocument();
+    expect(screen.queryByText(/这条按「教方法」处理/)).not.toBeInTheDocument();
   });
 
   // Step 2：表头说"这是什么"（AI 命名的名字），"读者拿走什么"由下面那块承担——
@@ -111,7 +111,7 @@ describe('ProjectWorkspace', () => {
     });
 
     expect(screen.getByText('这篇是「作品展示」。')).toBeInTheDocument();
-    expect(screen.queryByText(/这是一条分享内容/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/这条按「讲经历」处理/)).not.toBeInTheDocument();
     expect(
       screen.getByRole('heading', { name: '看完愿意把自己那叠画拿出来挑一遍' }),
     ).toBeInTheDocument();
@@ -121,7 +121,7 @@ describe('ProjectWorkspace', () => {
   it('falls back to the intent purpose when the project has no sentence of its own', () => {
     renderWorkspace({ project: { ...workspace.project, content_intent: 'share' } });
 
-    expect(screen.getByText('这是一条分享内容。')).toBeInTheDocument();
+    expect(screen.getByText('这条按「讲经历」处理。')).toBeInTheDocument();
     expect(
       screen.getByRole('heading', { name: '这条内容要让读者理解你的经历、观点或感受' }),
     ).toBeInTheDocument();
@@ -615,9 +615,9 @@ describe('ProjectWorkspace', () => {
       />,
     );
     expect(screen.queryByRole('button', { name: '准备下一篇' })).not.toBeInTheDocument();
-    expect(screen.getByRole('combobox', { name: '下一篇内容意图' })).toHaveValue('share');
+    expect(screen.getByRole('combobox', { name: '下一篇处理方式' })).toHaveValue('share');
     expect(screen.getByRole('combobox', { name: '下一篇内容格式' })).toHaveValue('graphic_note');
-    fireEvent.change(screen.getByRole('combobox', { name: '下一篇内容意图' }), {
+    fireEvent.change(screen.getByRole('combobox', { name: '下一篇处理方式' }), {
       target: { value: 'solve' },
     });
     fireEvent.change(screen.getByRole('combobox', { name: '下一篇内容格式' }), {

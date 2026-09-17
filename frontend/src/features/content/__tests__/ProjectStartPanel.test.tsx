@@ -49,7 +49,7 @@ describe('ProjectStartPanel（创建流程重构 R1）', () => {
       }),
     );
     // 入口不再要求选意图分类、也没有"读者变化"这类必填
-    expect(screen.queryByLabelText('这条内容更像什么')).toBeNull();
+    expect(screen.queryByLabelText('处理方式')).toBeNull();
     expect(screen.queryByLabelText(/希望读者发生什么变化/)).toBeNull();
   });
 

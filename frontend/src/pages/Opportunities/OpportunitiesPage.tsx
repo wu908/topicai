@@ -16,7 +16,8 @@ import { readableRef } from '@/utils/labels';
 import '../Operations.css';
 
 const statusLabels = { proposed: '待确认', saved: '已收藏', accepted: '已采用', rejected: '已放弃' } as const;
-const intentLabels = { solve: '解决', share: '分享', record: '记录' } as const;
+// 模式名（Step 3）：三个值说的是机器怎么做，不是内容分类。
+const intentLabels = { solve: '教方法', share: '讲经历', record: '记过程' } as const;
 const sourceLabels = {
   series_extension: '来自已确认系列',
   user_source: '用户提交来源',
@@ -162,7 +163,7 @@ function OpportunityRow({ item, onChanged }: {
         <div>
           <h2>{item.confirmed_title || item.proposed_title}</h2>
           <p className="operations-meta">
-            {intentLabels[item.content_intent]}内容 · {sourceLabels[item.opportunity_type]}
+            按{intentLabels[item.content_intent]}处理 · {sourceLabels[item.opportunity_type]}
           </p>
         </div>
         <Chip

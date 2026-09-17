@@ -135,10 +135,10 @@ export default function ContentPage() {
           intent: projectInferredIntent,
           intent_label:
             projectInferredIntent === 'solve'
-              ? '解决'
+              ? '教方法'
               : projectInferredIntent === 'record'
-                ? '记录'
-                : '分享',
+                ? '记过程'
+                : '讲经历',
           reason: '这是开始这条内容时我理解的意图——不对的话你说了算。',
           confidence: workspace?.project.start_inference_confidence ?? 'medium',
           next_question: workspace?.project.start_inferred_question ?? '',
@@ -414,7 +414,7 @@ export default function ContentPage() {
           className={`start-inference${inference.confidence === 'low' ? ' weak' : ''}`}
           aria-label="AI 的理解"
         >
-          <span className="tag">我理解这是「{inference.intent_label}」内容</span>
+          <span className="tag">我按「{inference.intent_label}」来准备这条</span>
           <span className="why">{inference.reason}</span>
           <span className="act">
             <button
@@ -645,9 +645,9 @@ function ProjectMaterialsDrawer({
 }
 
 const intentCopy: Record<ContentIntent, { label: string; audience: string; materials: string[]; responses: string[]; signals: string[] }> = {
-  solve: { label: '解决', audience: '读者看完后能开始解决一个具体问题', materials: ['真实问题场景', '你使用的方法', '一个案例或限制'], responses: ['收藏', '关注', '问题型评论'], signals: ['收藏', '新增关注', '问题型评论'] },
-  share: { label: '分享', audience: '读者看完后更理解你的经历、观点或感受', materials: ['真实事件', '当时的感受或观点', '形成这一理解的原因'], responses: ['共鸣评论', '有质量的互动', '关注'], signals: ['共鸣评论', '互动质量', '关注变化'] },
-  record: { label: '记录', audience: '读者看完后愿意持续关注你的过程和变化', materials: ['起点', '过程片段', '转折', '当前结果'], responses: ['持续关注', '追问进展', '系列期待'], signals: ['阅读完成', '回访读者', '系列继续率'] },
+  solve: { label: '教方法', audience: '读者看完后能开始解决一个具体问题', materials: ['真实问题场景', '你使用的方法', '一个案例或限制'], responses: ['收藏', '关注', '问题型评论'], signals: ['收藏', '新增关注', '问题型评论'] },
+  share: { label: '讲经历', audience: '读者看完后更理解你的经历、观点或感受', materials: ['真实事件', '当时的感受或观点', '形成这一理解的原因'], responses: ['共鸣评论', '有质量的互动', '关注'], signals: ['共鸣评论', '互动质量', '关注变化'] },
+  record: { label: '记过程', audience: '读者看完后愿意持续关注你的过程和变化', materials: ['起点', '过程片段', '转折', '当前结果'], responses: ['持续关注', '追问进展', '系列期待'], signals: ['阅读完成', '回访读者', '系列继续率'] },
 };
 
 // ADR 0002：历史内容的发布意图为空，回溯分类结果才是可显示的判断。两者都没有
@@ -660,7 +660,8 @@ function projectIntentLabel(project: ContentProject): string {
   const intent = project.content_intent ?? project.retrospective_intent;
   // 审计 e54a2643 medium：服务端可能返回未知意图值，无守卫索引会崩溃。
   const copy = intent ? intentCopy[intent] : undefined;
-  return copy ? `${copy.label}内容` : '未分类内容';
+  // 没有名字的老项目退回模式名（不再拼「内容」：那是内容分类的说法）。
+  return copy ? copy.label : '未分类内容';
 }
 
 function IntentActionPanel({
@@ -727,9 +728,9 @@ function IntentActionPanel({
         <Stack spacing={2}>
           <div><Chip size="small" label="回溯分类" /><h2>这条已发布的内容，当时想让读者发生什么变化？</h2><p>历史内容不再补填发布意图。AI 只能提议，最终由你确认；确认后只记录你回看时的判断，这条内容的发布意图保持不变。</p></div>
           <TextField select label="回溯意图" value={intent} onChange={(event) => setIntent(event.target.value as ContentIntent)}>
-            <MenuItem value="solve">解决：教会一个方法</MenuItem>
-            <MenuItem value="share">分享：表达经历或观点</MenuItem>
-            <MenuItem value="record">记录：留下过程和变化</MenuItem>
+            <MenuItem value="solve">教方法：当时在教一个方法</MenuItem>
+            <MenuItem value="share">讲经历：当时在讲一段经历</MenuItem>
+            <MenuItem value="record">记过程：当时在记录一个过程</MenuItem>
           </TextField>
           <TextField label="判断依据" value={classificationBasis} onChange={(event) => setClassificationBasis(event.target.value)} multiline minRows={2} helperText="写下你依据什么这样判断，例如当时的读者反馈或你的写作动机。" />
           <Alert severity="info">确认后只写入回溯意图，发布意图仍然为空，不会影响这条内容的历史记录。</Alert>
@@ -760,19 +761,19 @@ function IntentActionPanel({
             helperText={workspace.project.audience_change
               // 项目里已经有这句（入口推断或认领时带过来的），就不能再说它是通用方向。
               ? '这是这个项目已经记下的方向；改了就按你写的来。'
-              : `这是下面「内容意图」对应类别的通用方向；写成本项目具体的样子会更准。`}
+              : `这是下面「处理方式」对应类别的通用方向；写成本项目具体的样子会更准。`}
           />
           {/* 三值在这里被降级为细节：它只决定机器跑哪套行为，不限制内容形态。 */}
           <TextField
             select
-            label="内容意图"
+            label="处理方式"
             value={intent}
             onChange={(event) => setIntent(event.target.value as ContentIntent)}
             helperText="三个值不限制这条内容长什么样；它们决定 AI 接下来问什么、怎么组织内容、发布后看哪些信号。"
           >
-            <MenuItem value="solve">解决：教会一个方法</MenuItem>
-            <MenuItem value="share">分享：表达经历或观点</MenuItem>
-            <MenuItem value="record">记录：留下过程和变化</MenuItem>
+            <MenuItem value="solve">教方法：要问题、你的做法和结果</MenuItem>
+            <MenuItem value="share">讲经历：要你亲历的一件和你的看法</MenuItem>
+            <MenuItem value="record">记过程：要起点、片段和当前结果</MenuItem>
           </TextField>
           <div className="intent-materials"><strong>后面会收集</strong><span>{copy.materials.join(' · ')}</span><strong>发布后观察</strong><span>{copy.signals.join(' · ')}</span></div>
           <Button variant="contained" startIcon={<CheckCircleOutline />} disabled={busy} onClick={() => void runCommand(() => confirmProjectIntent(workspace.project.id, { content_intent: intent, audience_change: audienceChange.trim() || copy.audience, material_requirements: copy.materials, expected_responses: copy.responses, success_signals: copy.signals, expected_project_version: workspace.project.version, idempotency_key: `intent-${workspace.project.id}-${workspace.project.version}` }))}>确认这个方向</Button>
@@ -964,7 +965,7 @@ function LearningConfirmationPanel({
     <Paper component="section" variant="outlined" sx={{ p: { xs: 2, sm: 3 }, borderColor: 'var(--v3-border)', boxShadow: 'none' }}>
       <Stack spacing={2}>
         <div>
-          <Chip size="small" label={`${plan.intent_label}内容复盘`} />
+          <Chip size="small" label={`按${plan.intent_label}复盘`} />
           <h2>确认下一轮只做一个实验</h2>
           <p>AI 先把这次结果分成事实、可能原因和下一步。确认后才会保存为当前项目的长期经验候选。</p>
         </div>

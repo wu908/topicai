@@ -8,10 +8,11 @@ import { createProject, confirmProjectIntent, getProjectNextAction, respondToAct
 const makeKey = (prefix: string) =>
   `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
+// 模式名（Step 3）：这步选的是机器怎么做，不是这条内容属于哪一类。
 const INTENT_CHIPS: Array<{ value: string; label: string }> = [
-  { value: 'record', label: '记录 · 记下这个变化' },
-  { value: 'share', label: '分享 · 传递感受' },
-  { value: 'solve', label: '解决 · 教人方法' },
+  { value: 'record', label: '记过程' },
+  { value: 'share', label: '讲经历' },
+  { value: 'solve', label: '教方法' },
   { value: '', label: '让它判断' },
 ];
 
@@ -105,8 +106,8 @@ export default function UrgentPage() {
         <div className={`step${intent ? ' done' : ''}`}>
           <span className="n">3</span>
           <div style={{ flex: 1 }}>
-            <h3>这条内容属于哪一类？</h3>
-            <p>不确定就让它判断，你确认即可。</p>
+            <h3>AI 按哪种方式帮你？</h3>
+            <p>它决定 AI 问什么、怎么组织内容，不限制这条内容长什么样。不确定就让它判断，你确认即可。</p>
             <div className="fill intent-chips">
               {INTENT_CHIPS.map((chip) => (
                 <button

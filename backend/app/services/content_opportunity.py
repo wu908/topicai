@@ -1206,7 +1206,7 @@ class ContentOpportunityService:
 
         limitations = ["模型不可用；候选直接来自用户已确认的系列延展方向"]
         if mixed_series:
-            limitations.append("系列包含多种内容意图/格式，建议确认前检查 content_intent 和 content_format 是否合适")
+            limitations.append("系列里各篇的处理方式或格式不一致，确认前检查一下是否要统一")
         return SeriesExtensionDraft(
             title=series["confirmed_continuation_prompt"],
             audience_change=series["confirmed_promise"],

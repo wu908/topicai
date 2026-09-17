@@ -238,7 +238,7 @@ function CreatorRuleList({
       <Stack spacing={1.5}>
         {rules.map((rule) => (
           <Paper key={rule.id} component="article" variant="outlined" sx={{ p: 2, borderRadius: '8px', borderColor: 'var(--v3-border)', boxShadow: 'none' }}>
-            <Typography variant="caption" color="text.secondary">{rule.content_intent === 'solve' ? '解决' : rule.content_intent === 'share' ? '分享' : '记录'} · 规则版本 {rule.version}</Typography>
+            <Typography variant="caption" color="text.secondary">{rule.content_intent === 'solve' ? '教方法' : rule.content_intent === 'share' ? '讲经历' : '记过程'} · 规则版本 {rule.version}</Typography>
             {/* 审计 e54a2643 batch C：versions/source_observation_ids 在旧响应
                 里可能缺失，防御性兜底避免整个列表渲染崩溃。 */}
             {(rule.versions ?? []).filter((version) => version.status === 'proposed').map((version) => (
@@ -248,7 +248,7 @@ function CreatorRuleList({
                 <Typography variant="caption" color="text.secondary">来自 {(version.source_observation_ids ?? []).length} 条可比较观察</Typography>
                 {version.conflicts?.length ? (
                   <Alert severity="warning" sx={{ mt: 1 }}>
-                    发现同一意图下的适用范围冲突，请先比较已有经验。
+                    发现同一处理方式下的适用范围冲突，请先比较已有经验。
                   </Alert>
                 ) : null}
                 {onDecideRule ? (
@@ -261,7 +261,7 @@ function CreatorRuleList({
             ))}
             {rule.conflicts?.length ? (
               <Alert severity="warning" sx={{ mt: 1.5 }}>
-                这条经验与同一意图下的另一条经验适用范围重叠。确认前请比较两条规则，避免把不同结论同时用于同一类内容。
+                这条经验与同一处理方式下的另一条经验适用范围重叠。确认前请比较两条规则，避免把不同结论同时用于同一类内容。
                 <Box component="ul" sx={{ m: '6px 0 0', pl: 2.5 }}>
                   {rule.conflicts.map((conflict) => (
                     // 审计 e54a2643 medium：rule_id 不保证唯一，叠加版本 id。

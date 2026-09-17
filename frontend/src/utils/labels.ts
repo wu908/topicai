@@ -26,7 +26,7 @@ export const humanizeGoal = (value: string | null | undefined): string => {
 
 const refLabels: Record<string, string> = {
   'project:title': '你给这条内容的标题或想法',
-  'project:intent': '已确认的内容意图',
+  'project:intent': '已确认的处理方式',
   'content:current_version': '当前候选内容',
   'content:locked_version': '已确认的发布版本',
   'publication:record': '真实发布记录',
