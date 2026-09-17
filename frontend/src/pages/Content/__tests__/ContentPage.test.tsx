@@ -214,6 +214,22 @@ describe('ContentPage', () => {
     expect(screen.queryByText('记录内容')).not.toBeInTheDocument();
   });
 
+  // Step 2：AI 给这条内容起的名字（开放字段）优先显示，三值只在没有名字时兜底。
+  it('prefers the AI-named form over the three-value key in the list', async () => {
+    api.listProjects.mockResolvedValue({
+      items: [
+        { ...project, id: 'named-1', title: '有名字的内容', content_intent: 'share', content_form: '作品展示' },
+        { ...project, id: 'unnamed-1', title: '没有名字的老内容', content_intent: 'share', content_form: null },
+      ],
+      total: 2,
+    });
+    renderPage();
+
+    expect(await screen.findByText('作品展示')).toBeInTheDocument();
+    // 老项目没有名字，退回三值标签——这正是这个字段存在前的样子。
+    expect(screen.getByText('分享内容')).toBeInTheDocument();
+  });
+
   it('resumes at manual publication and submits the locked version', async () => {
     api.listProjects.mockResolvedValue({ items: [project], total: 1 });
     renderPage('/content/p1');
@@ -561,7 +577,7 @@ describe('ContentPage', () => {
     expect(screen.getByText(/AI 只能提议，最终由你确认/)).toBeInTheDocument();
     expect(screen.getByText(/发布意图仍然为空/)).toBeInTheDocument();
     expect(
-      screen.queryByRole('heading', { name: '这条内容想让读者发生什么变化？' }),
+      screen.queryByRole('heading', { name: '这篇要读者拿走什么？' }),
     ).not.toBeInTheDocument();
     expect(screen.queryByLabelText('希望读者发生的变化')).not.toBeInTheDocument();
   });
@@ -598,9 +614,39 @@ describe('ContentPage', () => {
     renderPage('/content/p1');
 
     expect(
-      await screen.findByRole('heading', { name: '这条内容想让读者发生什么变化？' }),
+      await screen.findByRole('heading', { name: '这篇要读者拿走什么？' }),
     ).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '确认回溯分类' })).not.toBeInTheDocument();
+  });
+
+  // Step 2 展示层换位：先问开放的那件事（读者拿走什么），
+  // 三值降级为「机器要跑哪套行为」的选择，并给出这句话的去处。
+  it('asks what the reader takes away, with the three-value key demoted', async () => {
+    const named = {
+      ...legacyPublishedProject,
+      status: 'preparing' as const,
+      intent_status: 'candidate' as const,
+      content_intent: 'share' as const,
+      content_form: '作品展示',
+    };
+    api.listProjects.mockResolvedValue({ items: [named], total: 1 });
+    api.getCalibrationWorkspace.mockResolvedValue(intentActionWorkspace(named));
+    renderPage('/content/p1');
+
+    expect(
+      await screen.findByRole('heading', { name: '这篇要读者拿走什么？' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/AI 把这条读成「作品展示」/)).toBeInTheDocument();
+    // 三值不再自称内容的类型，只说明它决定机器接下来怎么跑。
+    expect(screen.getByText(/三个值不限制这条内容长什么样/)).toBeInTheDocument();
+    // 选择框挪到下面之后，那句通用方向的说明要指得对地方。
+    expect(screen.getByText(/下面「内容意图」对应类别的通用方向/)).toBeInTheDocument();
+    // 读者变化排在意图之前：用户先回答那件开放的事，再（可选地）改机器行为。
+    const audienceField = screen.getByLabelText('希望读者发生的变化');
+    const intentSelect = screen.getByRole('combobox', { name: '内容意图' });
+    expect(
+      audienceField.compareDocumentPosition(intentSelect) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   // 审计 e54a2643 medium：StageAction 的 switch 没有 default 分支，服务端返回
@@ -637,12 +683,31 @@ describe('ContentPage', () => {
     renderPage('/content/p1');
 
     expect(
-      await screen.findByRole('heading', { name: '这条内容想让读者发生什么变化？' }),
+      await screen.findByRole('heading', { name: '这篇要读者拿走什么？' }),
     ).toBeInTheDocument();
     const field = screen.getByLabelText('希望读者发生的变化') as HTMLTextAreaElement;
     // 未知意图回退到 solve 的建议值，并且填在值里、可以直接确认。
     expect(field.value).toBe('读者看完后能开始解决一个具体问题');
     expect(screen.getByRole('button', { name: '确认这个方向' })).toBeEnabled();
+  });
+
+  // 说明的来源必须与字段里那句的真实来源一致：项目已记下方向时，
+  // 不能再把它说成"这个类别的通用方向"（那是"来源说明与实际不符"的老毛病）。
+  it('describes the audience change by where that sentence actually came from', async () => {
+    const draft = {
+      ...legacyPublishedProject,
+      status: 'preparing' as const,
+      intent_status: 'candidate' as const,
+      content_intent: 'share' as const,
+      audience_change: '看完愿意把自己那叠画拿出来挑一遍',
+    };
+    api.listProjects.mockResolvedValue({ items: [draft], total: 1 });
+    api.getCalibrationWorkspace.mockResolvedValue(intentActionWorkspace(draft));
+    renderPage('/content/p1');
+
+    const field = await screen.findByLabelText('希望读者发生的变化') as HTMLTextAreaElement;
+    expect(field.value).toBe('看完愿意把自己那叠画拿出来挑一遍');
+    expect(screen.getByText(/这个项目已经记下的方向/)).toBeInTheDocument();
   });
 
   // 审计 e54a2643 medium：selectedFollowUp 只在挂载时惰性初始化。命令后

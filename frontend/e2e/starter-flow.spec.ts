@@ -44,7 +44,7 @@ test('starter publishes the first experiment and completes the sprint review', a
   await page.locator('.starter-project-list').getByRole('button').first().click();
 
   await page.waitForURL(/\/content\/[0-9a-f-]+$/, { timeout: 15_000 });
-  await expect(page.getByRole('heading', { name: '这条内容想让读者发生什么变化？' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '这篇要读者拿走什么？' })).toBeVisible();
   await page.getByRole('button', { name: '确认这个方向' }).click();
 
   const answer = page.getByLabel('你的回答');

@@ -1618,3 +1618,43 @@ async def test_retrospective_project_is_not_pushed_into_the_publish_pipeline(
     assert action["human_gate_type"] is None
     # The reason must explain why review is impossible, not invite a lock.
     assert "发布前判断" in action["reason"]
+
+
+@pytest.mark.asyncio
+async def test_stale_action_label_is_realigned_with_the_current_spec(client, test_db):
+    """复用一个仍然有效的动作时，标题要按当前规格重算。
+
+    标题是按「当时」的项目状态生成的副本，不是用户输入：这类文案改过之后，
+    用户仍会在「现在先做」里读到旧句（实测：项目当前是分享类，动作卡片上却
+    写着「确认这是一条“解决”内容吗？」）。这里把行里的标题改回旧文案，
+    再读一次，必须被对齐回当前规格、且不新建动作行。
+    """
+    created = await client.post(
+        "/api/v2/projects",
+        json={
+            "title": "分享类项目",
+            "content_intent": "share",
+            "idempotency_key": "stale-label-project",
+        },
+    )
+    project = created.json()["data"]
+    action = (
+        await client.get(f"/api/v2/projects/{project['id']}/next-action")
+    ).json()["data"]
+    assert action["action_type"] == "confirm_intent"
+    assert "解决" not in action["title"]
+
+    await test_db.execute(
+        "UPDATE next_best_actions SET title='确认这是一条“解决”内容吗？',"
+        "reason='旧理由' WHERE id=:id",
+        {"id": action["id"]},
+    )
+    refreshed = (
+        await client.get(f"/api/v2/projects/{project['id']}/next-action")
+    ).json()["data"]
+
+    assert refreshed["id"] == action["id"]
+    assert "解决" not in refreshed["title"]
+    # 动作卡说"要做什么"；「读者拿走什么」那句留给他下面的面板问。
+    assert refreshed["title"] == "先把这篇的目的定下来"
+    assert refreshed["reason"] != "旧理由"

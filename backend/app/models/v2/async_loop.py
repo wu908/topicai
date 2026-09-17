@@ -39,6 +39,10 @@ class DeliverableView(StrictModel):
     facts: list[Any]
     judgment: dict[str, Any]
     content_intent: Literal["solve", "share", "record"] | None
+    # 这条内容是什么（AI 命名的开放字段，Step 1 起随产出写入）。
+    # 刻意不在这里限制长度：这是输出侧校验，卡长度只会让一条略长的名字
+    # 把整个响应打成 500（产出本身没问题）。
+    content_form: str | None = None
     proposed_publish_at: str | None
     is_exploration: bool
     status: Literal[

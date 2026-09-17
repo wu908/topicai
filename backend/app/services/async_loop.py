@@ -588,6 +588,8 @@ class ProductionService:
             "facts": json.loads(row["facts_json"] or "[]"),
             "judgment": json.loads(row["judgment_json"] or "{}"),
             "content_intent": row["content_intent"],
+            # 这条内容是什么（AI 命名的开放字段），与上面那个路由键分开给。
+            "content_form": row["content_form"],
             "proposed_publish_at": row["proposed_publish_at"],
             "is_exploration": bool(row["is_exploration"]),
             "status": row["status"],

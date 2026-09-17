@@ -244,7 +244,11 @@ export default function AsyncLoopPage() {
                 onClick={() => { setSelectedId(d.id); setAudienceChange(d.judgment.audience_change || ''); if (d.content_intent) setIntent(d.content_intent); }}
               >
                 <div className="tags">
-                  {d.content_intent ? <span className="tag">{INTENT_LABEL[d.content_intent]}</span> : null}
+                  {/* 先显示 AI 给这条内容起的名字（开放描述），没有名字的老产出
+                      才退回三值标签——三值只是机器路由键，不是内容的类型。 */}
+                  {d.content_form
+                    ? <span className="tag">{d.content_form}</span>
+                    : d.content_intent ? <span className="tag">{INTENT_LABEL[d.content_intent]}</span> : null}
                   {d.is_exploration ? <span className="tag apri">探索位 · 尝试</span> : null}
                   {d.precheck?.passed ? <span className="tag">结构预检通过</span> : null}
                   <span className="tag">事实 ×{d.facts.length} 已溯源</span>
@@ -316,6 +320,11 @@ export default function AsyncLoopPage() {
               </div>
               <div className="sec">
                 <h4>你的确认</h4>
+                {/* 先让用户看见 AI 给这条内容起的名字，再让他回答读者变化：
+                    名字是开放的，三值只是机器要跑的那套行为。 */}
+                {active.content_form
+                  ? <p className="form-name">AI 把这条读成「{active.content_form}」</p>
+                  : null}
                 {/* 这句草案常常有几十字，单行输入会把用户要确认的话截断——
                     确认的前提是能看全。 */}
                 <textarea
@@ -340,6 +349,7 @@ export default function AsyncLoopPage() {
                     </button>
                   ))}
                 </div>
+                <p className="chips-hint">这三个值不限制这条内容长什么样；它们决定 AI 接下来问什么、怎么组织内容、发布后看哪些信号。</p>
               </div>
               <div className="cta">
                 <button

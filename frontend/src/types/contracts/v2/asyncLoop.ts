@@ -54,6 +54,8 @@ export interface Deliverable {
   facts: DeliverableFact[];
   judgment: DeliverableJudgment;
   content_intent: ContentIntent | null;
+  /** 这条内容是什么（AI 命名的开放字段），展示时优先于 content_intent 那个路由键。 */
+  content_form: string | null;
   proposed_publish_at: string | null;
   is_exploration: boolean;
   status: DeliverableStatus;

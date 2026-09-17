@@ -653,6 +653,10 @@ const intentCopy: Record<ContentIntent, { label: string; audience: string; mater
 // ADR 0002：历史内容的发布意图为空，回溯分类结果才是可显示的判断。两者都没有
 // 就显示“未分类”，不能兜底成某个具体意图。
 function projectIntentLabel(project: ContentProject): string {
+  // AI 给这条内容起的名字（开放字段）优先显示；三值标签只是机器要跑的那套行为，
+  // 没有名字的老项目才退回它——那正是这个字段存在前的样子。
+  const form = project.content_form?.trim();
+  if (form) return form;
   const intent = project.content_intent ?? project.retrospective_intent;
   // 审计 e54a2643 medium：服务端可能返回未知意图值，无守卫索引会崩溃。
   const copy = intent ? intentCopy[intent] : undefined;
@@ -739,18 +743,12 @@ function IntentActionPanel({
     return (
       <Paper component="section" variant="outlined" sx={{ p: { xs: 2, sm: 3 }, borderColor: 'var(--v3-border)', boxShadow: 'none' }}>
         <Stack spacing={2}>
-          <div><Chip size="small" label="先确认内容目的" /><h2>这条内容想让读者发生什么变化？</h2><p>AI 先给出一个候选方向，你可以直接纠正。确认后，提问、结构和复盘信号会一起改变。</p></div>
-          <TextField
-            select
-            label="内容意图"
-            value={intent}
-            onChange={(event) => setIntent(event.target.value as ContentIntent)}
-            helperText="这是这个项目原先记下的意图；不对就在这里改。"
-          >
-            <MenuItem value="solve">解决：教会一个方法</MenuItem>
-            <MenuItem value="share">分享：表达经历或观点</MenuItem>
-            <MenuItem value="record">记录：留下过程和变化</MenuItem>
-          </TextField>
+          {/* 问的是开放的那件事（读者带走什么），不是分类。收获不必是方法：
+              记录类、分享类内容在这里同样答得通。 */}
+          <div><Chip size="small" label="先确认内容目的" /><h2>这篇要读者拿走什么？</h2><p>不一定是一个方法——记住你的一段经历、看懂一个进展，也算。这句话会在 AI 准备候选内容时当作目标。</p></div>
+          {workspace.project.content_form
+            ? <p className="form-name">AI 把这条读成「{workspace.project.content_form}」</p>
+            : null}
           {/* 这句建议现在就在下面的输入框值里（预填），所以不再单独用 Alert 重复一遍；
               只说明它的来源，免得看起来像用户自己写的。 */}
           <TextField
@@ -759,8 +757,23 @@ function IntentActionPanel({
             onChange={(event) => setAudienceChange(event.target.value)}
             multiline
             minRows={2}
-            helperText={`这是「${copy.label}」类内容的通用方向；写成本项目具体的样子会更准。`}
+            helperText={workspace.project.audience_change
+              // 项目里已经有这句（入口推断或认领时带过来的），就不能再说它是通用方向。
+              ? '这是这个项目已经记下的方向；改了就按你写的来。'
+              : `这是下面「内容意图」对应类别的通用方向；写成本项目具体的样子会更准。`}
           />
+          {/* 三值在这里被降级为细节：它只决定机器跑哪套行为，不限制内容形态。 */}
+          <TextField
+            select
+            label="内容意图"
+            value={intent}
+            onChange={(event) => setIntent(event.target.value as ContentIntent)}
+            helperText="三个值不限制这条内容长什么样；它们决定 AI 接下来问什么、怎么组织内容、发布后看哪些信号。"
+          >
+            <MenuItem value="solve">解决：教会一个方法</MenuItem>
+            <MenuItem value="share">分享：表达经历或观点</MenuItem>
+            <MenuItem value="record">记录：留下过程和变化</MenuItem>
+          </TextField>
           <div className="intent-materials"><strong>后面会收集</strong><span>{copy.materials.join(' · ')}</span><strong>发布后观察</strong><span>{copy.signals.join(' · ')}</span></div>
           <Button variant="contained" startIcon={<CheckCircleOutline />} disabled={busy} onClick={() => void runCommand(() => confirmProjectIntent(workspace.project.id, { content_intent: intent, audience_change: audienceChange.trim() || copy.audience, material_requirements: copy.materials, expected_responses: copy.responses, success_signals: copy.signals, expected_project_version: workspace.project.version, idempotency_key: `intent-${workspace.project.id}-${workspace.project.version}` }))}>确认这个方向</Button>
         </Stack>

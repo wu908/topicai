@@ -98,6 +98,35 @@ describe('ProjectWorkspace', () => {
     expect(screen.queryByText(/这是一条解决内容/)).not.toBeInTheDocument();
   });
 
+  // Step 2：表头说"这是什么"（AI 命名的名字），"读者拿走什么"由下面那块承担——
+  // 两处都在说同一句话时读起来是重复，而项目自己记下的那句比通用描述更具体。
+  it('names the content in the header and shows the project sentence as the purpose', () => {
+    renderWorkspace({
+      project: {
+        ...workspace.project,
+        content_intent: 'share',
+        content_form: '作品展示',
+        audience_change: '看完愿意把自己那叠画拿出来挑一遍',
+      },
+    });
+
+    expect(screen.getByText('这篇是「作品展示」。')).toBeInTheDocument();
+    expect(screen.queryByText(/这是一条分享内容/)).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: '看完愿意把自己那叠画拿出来挑一遍' }),
+    ).toBeInTheDocument();
+  });
+
+  // 没有项目自己的那句时，退回按意图的通用描述——那条路径的文案不变。
+  it('falls back to the intent purpose when the project has no sentence of its own', () => {
+    renderWorkspace({ project: { ...workspace.project, content_intent: 'share' } });
+
+    expect(screen.getByText('这是一条分享内容。')).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: '这条内容要让读者理解你的经历、观点或感受' }),
+    ).toBeInTheDocument();
+  });
+
   it('anchors the editor in project evidence and keeps the current stage action available', () => {
     renderWorkspace();
 

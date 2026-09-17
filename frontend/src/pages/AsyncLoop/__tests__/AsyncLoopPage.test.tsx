@@ -152,6 +152,42 @@ describe('AsyncLoopPage', () => {
     expect(pickupDeliverable.mock.calls[0][1].content_intent).toBe('record');
   });
 
+  // Step 2：架子上先说 AI 给这条内容起的名字（开放字段），
+  // 没有名字的老产出才退回三值标签——三值只是机器路由键。
+  it('names the content on the shelf card, falling back to the three-value tag', async () => {
+    listDeliverables.mockResolvedValue({
+      items: [
+        { ...readyDeliverable, id: 'd-named', title: '有名字的产出', content_form: '踩坑复盘' },
+        { ...readyDeliverable, id: 'd-old', title: '没有名字的老产出', content_form: null, content_intent: 'record' },
+      ],
+      total: 2,
+    });
+    const { container } = render(
+      <MemoryRouter>
+        <AsyncLoopPage />
+      </MemoryRouter>,
+    );
+    await screen.findAllByText('有名字的产出');
+    const tags = [...container.querySelectorAll('.deliv .tags')].map((el) => el.textContent ?? '');
+    expect(tags[0]).toContain('踩坑复盘');
+    expect(tags[1]).toContain('记录');
+  });
+
+  it('says what the AI read this content as, and what the three values actually decide', async () => {
+    listDeliverables.mockResolvedValue({
+      items: [{ ...readyDeliverable, content_form: '踩坑复盘' }],
+      total: 1,
+    });
+    render(
+      <MemoryRouter>
+        <AsyncLoopPage />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByText('AI 把这条读成「踩坑复盘」')).toBeInTheDocument();
+    // 三值不再被当成"这条内容的类型"，它只决定机器跑哪套行为。
+    expect(screen.getByText(/这三个值不限制这条内容长什么样/)).toBeInTheDocument();
+  });
+
   it('discard sends the chosen reason', async () => {
     render(
       <MemoryRouter>

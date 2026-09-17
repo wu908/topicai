@@ -466,7 +466,9 @@ class IntentOrchestratorService:
             if current["action_type"] == action_type and (
                 project is None or based_on == project["version"]
             ) and based_on_genome == content_genome["fingerprint"]:
-                return await self._normalize_with_gate(owner_user_id, current)
+                return await self._normalize_with_gate(
+                    owner_user_id, await self._refresh_label(owner_user_id, current, project)
+                )
             await self.db.execute(
                 "UPDATE next_best_actions SET status='superseded',updated_at=:now,"
                 "version=version+1 WHERE id=:id AND owner_user_id=:owner",
@@ -485,7 +487,9 @@ class IntentOrchestratorService:
                 project is None
                 or expected.get("based_on_project_version") == project["version"]
             ):
-                return await self._normalize_with_gate(owner_user_id, cancelled)
+                return await self._normalize_with_gate(
+                    owner_user_id, await self._refresh_label(owner_user_id, cancelled, project)
+                )
 
         spec = self._action_spec(action_type, project)
         genome_refs = [
@@ -633,8 +637,11 @@ class IntentOrchestratorService:
         # ask what the content was for instead of naming an intent the user never
         # chose. Retrospective classification leaves content_intent NULL (ADR 0002).
         if intent:
-            intent_title = f"确认这是一条“{config['label']}”内容吗？"
-            intent_reason = "内容意图会决定 AI 接下来问什么、怎么组织内容以及发布后观察什么。"
+            # 动作卡说"要做什么"，面板问"读者拿走什么"——两句不能是同一句：
+            # 工作台上动作卡与它下面的面板同屏，同题重复读起来是三次一样的话
+            # （E2E 的 strict mode 也正好抓到了三个同名 h2）。
+            intent_title = "先把这篇的目的定下来"
+            intent_reason = "要定的是读者看完能拿走什么：它决定 AI 接下来问什么、怎么组织内容以及发布后观察什么。"
         else:
             intent_title = "这条内容当时想让读者发生什么变化？"
             intent_reason = "先由你说明当时的判断，AI 才能划定学习范围；发布意图不会被补写成发布前就已确认的决定。"
@@ -739,6 +746,39 @@ class IntentOrchestratorService:
             ),
         )
         return trace_id
+
+    async def _refresh_label(
+        self,
+        owner: str,
+        row: dict[str, Any],
+        project: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        """复用一个仍然有效的动作时，把标题与理由对齐成当前规格算出来的那句。
+
+        标题是按「当时」的项目状态生成的副本：意图变了、或者这类文案本身改过
+        之后，行里那句就还在说旧意图（实测：项目当前是分享，动作卡片上仍写着
+        「确认这是一条“解决”内容吗？」）。标题是派生标签、不是用户输入，
+        因此就地更新，不必等状态变化把它顶成新行。
+        """
+        spec = self._action_spec(row["action_type"], project)
+        if row["title"] == spec["title"] and row["reason"] == spec["reason"]:
+            return row
+        await self.db.execute(
+            "UPDATE next_best_actions SET title=:title,reason=:reason,"
+            "content_intent=:intent,updated_at=:now WHERE id=:id AND owner_user_id=:owner",
+            {
+                "title": spec["title"],
+                "reason": spec["reason"],
+                "intent": resolved_action_intent(project),
+                "now": now(),
+                "id": row["id"],
+                "owner": owner,
+            },
+        )
+        return await self.db.fetch_one(
+            "SELECT * FROM next_best_actions WHERE id=:id AND owner_user_id=:owner",
+            {"id": row["id"], "owner": owner},
+        )
 
     async def _normalize_with_gate(self, owner: str, row: dict[str, Any] | None) -> dict[str, Any]:
         if row is None:
