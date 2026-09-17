@@ -42,7 +42,10 @@ class IntentRubric(TypedDict):
 
 INTENT_RUBRIC: dict[str, IntentRubric] = {
     "solve": {
-        "label": "解决",
+        # Step 3：这三个 label 是**机器模式**的名字，不再是内容分类的名字。
+        # 它们决定 AI 问什么、要哪些材料、看哪些信号（见 content_genome 的
+        # 规则适用性匹配）；内容本身是什么由 content_form 那个开放字段说。
+        "label": "教方法",
         "question": "你亲自解决过这个问题的哪一步最容易被忽略？",
         "materials": ["真实问题场景", "本人使用的方法", "一个结果或限制"],
         "responses": ["收藏", "关注", "问题型评论"],
@@ -50,7 +53,7 @@ INTENT_RUBRIC: dict[str, IntentRubric] = {
         "narrative_arc": False,
     },
     "share": {
-        "label": "分享",
+        "label": "讲经历",
         # 兜底问题按"有转折"写——因为推断不可用时它是最常见的分享形态；
         # 成果展示类（narrative_arc=False）由模型推断出的问题覆盖。
         "question": "这段经历里，哪个瞬间改变了你的看法或感受？",
@@ -60,7 +63,7 @@ INTENT_RUBRIC: dict[str, IntentRubric] = {
         "narrative_arc": True,
     },
     "record": {
-        "label": "记录",
+        "label": "记过程",
         "question": "这次变化开始前是什么状态，现在最具体的变化是什么？",
         "materials": ["起点证据", "过程片段", "转折", "当前结果"],
         "responses": ["持续关注", "追问进展", "系列期待"],

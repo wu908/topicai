@@ -14,10 +14,12 @@ import {
 import { openCompanion } from '@/features/companion';
 import type { Deliverable } from '@/types/contracts/v2/asyncLoop';
 
+// 这三个是**机器模式**的名字（Step 3）：它们决定 AI 接下来问什么、要哪些材料、
+// 看哪些信号；这条内容本身是什么，由 AI 命名的 content_form 说。
 const INTENT_LABEL: Record<string, string> = {
-  solve: '解决意图',
-  share: '分享意图',
-  record: '记录意图',
+  solve: '教方法',
+  share: '讲经历',
+  record: '记过程',
 };
 
 const RESPONSE_LABEL: Record<string, string> = {

@@ -108,9 +108,9 @@ describe('SeriesPanel — Spec-011', () => {
     );
 
     // Assert — member intent labels are rendered from scope, not the null scalar
-    const scope = screen.getByText(/成员意图/);
-    expect(scope.textContent).toContain('记录过程');
-    expect(scope.textContent).toContain('解决问题');
+    const scope = screen.getByText(/成员处理方式/);
+    expect(scope.textContent).toContain('记过程');
+    expect(scope.textContent).toContain('教方法');
     // '未记录' must not appear since member_intents is non-empty
     expect(scope.textContent).not.toContain('未记录');
   });

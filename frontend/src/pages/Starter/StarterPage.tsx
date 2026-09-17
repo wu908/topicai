@@ -40,7 +40,8 @@ const makeKey = (prefix: string) =>
 const splitItems = (value: string) =>
   value.split(/[,，\n]/).map((item) => item.trim()).filter(Boolean);
 
-const intentLabels = { solve: '解决', share: '分享', record: '记录' } as const;
+// 模式名（Step 3）：三个值说的是机器怎么做，不是内容分类。
+const intentLabels = { solve: '教方法', share: '讲经历', record: '记过程' } as const;
 
 const projectStatus = {
   inbox: '还未开始',
@@ -261,7 +262,7 @@ function DirectionOption({ candidate, busy, run }: { candidate: DirectionCandida
       <div className="starter-direction-top"><h3>{candidate.label}</h3><Chip size="small" label="低制作成本" /></div>
       <p><strong>适合讲给</strong>{candidate.audience}</p>
       <p><strong>为什么你能讲</strong>{candidate.creator_credibility}</p>
-      <ol>{candidate.first_three_topics.map((topic) => <li key={topic.title}><span>{topic.title}</span><small>{intentLabels[topic.content_intent]}内容 · {topic.audience_change}</small></li>)}</ol>
+      <ol>{candidate.first_three_topics.map((topic) => <li key={topic.title}><span>{topic.title}</span><small>按{intentLabels[topic.content_intent]}处理 · {topic.audience_change}</small></li>)}</ol>
       <p className="starter-validation"><strong>这次验证</strong>{candidate.validation_method}</p>
       <Button variant="outlined" endIcon={<ArrowForward />} disabled={busy} onClick={() => void run(async () => {
         // Audit e54a2643 medium: 幂等键按候选稳定，失败重试复用同一把键。

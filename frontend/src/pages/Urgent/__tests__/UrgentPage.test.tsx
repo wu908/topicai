@@ -48,7 +48,7 @@ describe('UrgentPage', () => {
     fireEvent.change(screen.getByLabelText('这篇想说什么？'), { target: { value: '阳台辣椒结果了' } });
     fireEvent.change(screen.getByLabelText('一句真实经历（它只基于这个写，不编）'), { target: { value: '早上浇水时发现了三个果。' } });
     // 意图芯片
-    fireEvent.click(screen.getByRole('button', { name: '记录 · 记下这个变化' }));
+    fireEvent.click(screen.getByRole('button', { name: '记过程' }));
     fireEvent.click(screen.getByText('生成成品，进入发布检查'));
     await waitFor(() => expect(confirmProjectIntent).toHaveBeenCalled());
     expect(await screen.findByText('工作台 p1')).toBeTruthy();
@@ -74,7 +74,7 @@ it('backfills the urgent experience as the key-question answer (B1)', async () =
   );
   fireEvent.change(screen.getByLabelText('这篇想说什么？'), { target: { value: '阳台辣椒结果了' } });
   fireEvent.change(screen.getByLabelText('一句真实经历（它只基于这个写，不编）'), { target: { value: '早上浇水时发现了三个果。' } });
-  fireEvent.click(screen.getByRole('button', { name: '记录 · 记下这个变化' }));
+  fireEvent.click(screen.getByRole('button', { name: '记过程' }));
   fireEvent.click(screen.getByText('生成成品，进入发布检查'));
   await waitFor(() =>
     expect(respondToAction).toHaveBeenCalledWith(

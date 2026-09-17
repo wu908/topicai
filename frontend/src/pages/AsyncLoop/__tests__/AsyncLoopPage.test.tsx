@@ -144,9 +144,9 @@ describe('AsyncLoopPage', () => {
         <AsyncLoopPage />
       </MemoryRouter>,
     );
-    const record = await screen.findByRole('button', { name: '记录意图' });
+    const record = await screen.findByRole('button', { name: '记过程' });
     expect(record.getAttribute('aria-pressed')).toBe('true');
-    expect((await screen.findByRole('button', { name: '解决意图' })).getAttribute('aria-pressed')).toBe('false');
+    expect((await screen.findByRole('button', { name: '教方法' })).getAttribute('aria-pressed')).toBe('false');
     fireEvent.click(screen.getByText('认领'));
     await waitFor(() => expect(pickupDeliverable).toHaveBeenCalled());
     expect(pickupDeliverable.mock.calls[0][1].content_intent).toBe('record');
@@ -170,7 +170,7 @@ describe('AsyncLoopPage', () => {
     await screen.findAllByText('有名字的产出');
     const tags = [...container.querySelectorAll('.deliv .tags')].map((el) => el.textContent ?? '');
     expect(tags[0]).toContain('踩坑复盘');
-    expect(tags[1]).toContain('记录');
+    expect(tags[1]).toContain('记过程');
   });
 
   it('says what the AI read this content as, and what the three values actually decide', async () => {
