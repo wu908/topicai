@@ -6,6 +6,7 @@ import re
 from typing import Any, TypeVar
 
 from openai import OpenAI
+from pydantic import BaseModel
 
 from config.llm_config import DEFAULT_LLM_PARAMS, get_compatible_llm_config
 from config.settings import get_settings
@@ -100,6 +101,7 @@ class LLMClient:
                 model_version=model or self.model,
             ) from exc
 
+
     def generate_structured(
         self,
         prompt: str,
@@ -109,7 +111,14 @@ class LLMClient:
     ) -> T:
         from app.core.exceptions import LLMStructuredOutputException
 
-        instruction = "Respond only with valid JSON matching the requested schema."
+        instruction = (
+            "Respond only with valid JSON matching the requested schema.\n"
+            # 只写"匹配 schema"是不够的：schema 从未发给模型，模型只能猜字段名与
+            # 结构——实测线上观点提炼连续 4 次解析失败后降级。这里把模型的字段
+            # 骨架（名字 + 类型 + 字面量取值）明写进系统提示，所有调用方一起受益。
+            "Use exactly these fields and types:\n"
+            f"{_schema_skeleton(schema)}"
+        )
         system = f"{system_prompt}\n\n{instruction}" if system_prompt else instruction
         for attempt in range(self._max_retries + 1):
             try:
@@ -156,6 +165,54 @@ class LLMClient:
                 provider="openai_compatible",
                 model_version=self.model,
             ) from exc
+
+
+
+
+def _schema_skeleton(model: type[Any], _depth: int = 0) -> str:
+    """把 pydantic 模型摊成一个可直接照抄的 JSON 骨架示例。
+
+    只用于提示词：给出字段名、类型与字面量取值，避免模型靠猜。
+    """
+    if _depth > 3:  # 防御自引用模型
+        return "{...}"
+
+    def sample(annotation: Any) -> Any:
+        import typing
+
+        origin = typing.get_origin(annotation)
+        args = typing.get_args(annotation)
+        if origin is typing.Union or str(origin) == "types.UnionType":
+            # Optional[X] → 用 X 的骨架（null 由模型按语义决定）
+            concrete = [a for a in args if a is not type(None)]
+            return sample(concrete[0]) if concrete else None
+        if origin is typing.Literal:
+            return args[0] if args else ""
+        if origin in (list, tuple, set):
+            return [sample(args[0])] if args else []
+        if origin is dict:
+            return {}
+        if isinstance(annotation, type) and issubclass(annotation, BaseModel):
+            fields = {
+                name: sample(field.annotation)
+                for name, field in annotation.model_fields.items()
+            }
+            return fields
+        if annotation is bool:
+            return False
+        if annotation is int:
+            return 0
+        if annotation is float:
+            return 0.0
+        return ""
+
+    import json as _json
+
+    fields = {
+        name: sample(field.annotation)
+        for name, field in model.model_fields.items()
+    }
+    return _json.dumps(fields, ensure_ascii=False, indent=2)
 
 
 def _clean_json_response(raw: str) -> str:
