@@ -34,14 +34,14 @@
   align-items: center;
   gap: 6px;
   color: var(--v3-blue);
-  font-size: 12px;
+  font-size: var(--fs-meta);
   font-weight: 600;
 }
 
 .today-action h2 {
   max-width: 680px;
   margin: 22px 0 10px;
-  font-size: 32px;
+  font-size: var(--fs-display);
   line-height: 1.25;
   letter-spacing: 0;
 }
@@ -51,7 +51,7 @@
   max-width: 680px;
   margin: 0;
   color: var(--v3-text-sec);
-  font-size: 15px;
+  font-size: var(--fs-body);
   line-height: 1.75;
 }
 
@@ -67,7 +67,7 @@
 .today-action-meta {
   margin-top: 18px;
   color: var(--v3-text-ter);
-  font-size: 12px;
+  font-size: var(--fs-meta);
 }
 
 .today-action-meta span {
@@ -94,9 +94,9 @@
   border-radius: 6px;
 }
 
-.today-evidence-grid strong { font-size: 12px; }
+.today-evidence-grid strong { font-size: var(--fs-meta); }
 .today-evidence-grid p,
-.today-evidence-grid li { color: var(--v3-text-sec); font-size: 12px; line-height: 1.6; }
+.today-evidence-grid li { color: var(--v3-text-sec); font-size: var(--fs-meta); line-height: 1.6; }
 .today-evidence-grid ul { margin: 8px 0 0; padding-left: 18px; }
 
 .today-action-controls { margin-top: 22px; }
@@ -106,13 +106,13 @@
   gap: 6px;
   margin-top: 18px;
   color: var(--v3-text-ter);
-  font-size: 11px;
+  font-size: var(--fs-meta);
 }
-.today-state-row { margin-top: 24px; color: var(--v3-text-sec); font-size: 12px; }
+.today-state-row { margin-top: 24px; color: var(--v3-text-sec); font-size: var(--fs-meta); }
 
 @media (max-width: 640px) {
   .today-action { margin-top: 16px; padding: 20px; }
-  .today-action h2 { font-size: 26px; }
+  .today-action h2 { font-size: var(--fs-display); }
   .today-evidence-grid { grid-template-columns: 1fr; }
   .today-action-controls > button { width: 100%; }
 }
@@ -123,7 +123,7 @@
   margin-top: 18px;
   display: flex;
   gap: 18px;
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--v3-text-sec);
   flex-wrap: wrap;
 }
@@ -144,7 +144,7 @@
   backdrop-filter: blur(var(--v3-glass-blur)) saturate(var(--v3-glass-saturate));
   padding: 0 18px;
   color: var(--v3-text-sec);
-  font-size: 13px;
+  font-size: var(--fs-meta);
   cursor: pointer;
 }
 

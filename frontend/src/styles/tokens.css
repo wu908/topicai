@@ -46,15 +46,25 @@
   /* Typography */
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Noto Sans SC", sans-serif;
   --font-mono: "SF Mono", "Menlo", "Consolas", monospace;
-  --text-2xs: 0.625rem;
-  --text-xs: 0.6875rem;
-  --text-sm: 0.8125rem;
-  --text-base: 0.9375rem;
-  --text-md: 1.0625rem;
-  --text-lg: 1.25rem;
-  --text-xl: 1.5625rem;
-  --text-2xl: 1.9375rem;
-  --text-3xl: 2.4375rem;
+  /* 五档排版阶梯（唯一允许的字号来源）。
+     之前每个组件各写各的 px——同一个页面量出 12~15 种字号、还都是 10/11/11.3/
+     11.5/12/12.5/13 这样的相邻值，读起来就是"没有层级"。现在只留五档：
+     标题 24 / 区块标题 20 / 卡片标题 16 / 正文 14 / 辅助 12（地板，不再有 10px）。 */
+  --fs-display: 24px;
+  --fs-title: 20px;
+  --fs-subtitle: 16px;
+  --fs-body: 14px;
+  --fs-meta: 12px;
+  /* 旧令牌名保留为别名，指向同一套阶梯，避免别处再长出新的字号。 */
+  --text-2xs: var(--fs-meta);
+  --text-xs: var(--fs-meta);
+  --text-sm: var(--fs-meta);
+  --text-base: var(--fs-body);
+  --text-md: var(--fs-body);
+  --text-lg: var(--fs-subtitle);
+  --text-xl: var(--fs-title);
+  --text-2xl: var(--fs-title);
+  --text-3xl: var(--fs-display);
   --weight-regular: 400;
   --weight-medium: 500;
   --weight-semibold: 600;
