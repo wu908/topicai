@@ -670,6 +670,11 @@ export default function ProjectWorkspace({
             <ViewpointPanel
               viewpoints={workspace.creator_viewpoints ?? []}
               evidence={genome?.evidence_context ?? []}
+              // 后端要求处理方式已确认才能提炼（观点带着它做适用性匹配）。
+              // 未确认时不给可点的按钮——点了必然被拒，还得用户去读报错。
+              blockedReason={
+                intentConfirmed ? null : '先确认这条内容的处理方式，才能提炼观点候选。'
+              }
               busy={busy}
               onPropose={onProposeViewpoint}
               onDecide={onDecideViewpoint}

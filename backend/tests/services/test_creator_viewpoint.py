@@ -6,7 +6,11 @@ import pytest
 import pytest_asyncio
 from sqlalchemy import text
 
-from app.core.exceptions import IdempotencyConflictException, VersionConflictException
+from app.core.exceptions import (
+    IdempotencyConflictException,
+    UserActionRequiredException,
+    VersionConflictException,
+)
 from app.models.v2.content_project import ContentProjectCreate
 from app.models.v2.creator_viewpoint import (
     ViewpointCandidateCreate,
@@ -94,7 +98,7 @@ async def test_candidate_requires_allowed_confirmed_evidence_and_is_not_long_ter
     pending = await _evidence(viewpoint_db, project, suffix="pending", confirm=False)
     service = CreatorViewpointService(viewpoint_db)
 
-    with pytest.raises(ValueError, match="confirmed evidence allowed"):
+    with pytest.raises(UserActionRequiredException, match="不在可引用范围"):
         await service.propose("u1", project["id"], _candidate_input(project, pending))
 
     confirmed = await _evidence(viewpoint_db, project, suffix="confirmed")
@@ -122,7 +126,7 @@ async def test_candidate_requires_allowed_confirmed_evidence_and_is_not_long_ter
 
     other_project = await _confirmed_project(viewpoint_db, owner="u2", suffix="other")
     other_evidence = await _evidence(viewpoint_db, other_project, owner="u2", suffix="other")
-    with pytest.raises(ValueError, match="confirmed evidence allowed"):
+    with pytest.raises(UserActionRequiredException, match="不在可引用范围"):
         await service.propose(
             "u1",
             project["id"],

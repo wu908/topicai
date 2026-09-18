@@ -372,12 +372,13 @@ class IntentOrchestratorService:
     async def _derive_action(self, owner_user_id: str, project: dict[str, Any]) -> str:
         intent_status = effective_intent_status(project)
         if intent_status not in {"working_confirmed", "locked", "retrospective"}:
-            # R2：「开始一条内容」时 AI 已经推断过意图，且用户看得到纠正入口
-            # （工作台顶部的推断横幅）。此时再问一次「确认这是一条 X 内容吗」
-            # 是重复提问——直接进入取素材那一步。用户点「不对，我自己选」
-            # 会清空该列，于是回到既有的确认步骤。
-            if project.get("start_inferred_intent"):
-                return "answer_key_question"
+            # R2 原本在这里凭"有推断记录"直接跳到取素材那一步（再问一次是重复
+            # 提问）。但那一跳只会跳过提问，意图本身仍停在未确认——而发布判断
+            # 锁定、观点提炼、系列发现都要求已确认，于是用户一路走到锁定那一步
+            # 才撞上 400。R8 起：高/中置信度的推断在创建时就落成已确认
+            # （ProjectStartService.start），所以这里不再需要那条捷径；
+            # 走到这里就说明意图确实还没定（低置信度推断、或被撤销），
+            # 按"没人确认过"问一次才是对的。
             return "confirm_intent"
         if not project.get("current_version_id"):
             return "answer_key_question"

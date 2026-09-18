@@ -9,7 +9,11 @@ import pytest
 from app.services.intent_orchestrator import INTENT_CONFIG
 from app.services.intent_rubric import INTENT_RUBRIC, UNRESOLVED_INTENT_RUBRIC, rubric_for
 
-_REQUIRED_KEYS = {"label", "question", "materials", "responses", "signals", "narrative_arc"}
+_REQUIRED_KEYS = {
+    "label", "question", "materials", "responses", "signals", "narrative_arc",
+    #: 推断没给出读者变化时的兜底方向（R8）
+    "default_audience_change",
+}
 
 #: 只有"读者读完这一句就能动手"的问题才真的需要这条内容里有转折。
 #: 一句话里出现这些词，就说明问的人在假设用户经历过一个改变。
@@ -22,6 +26,7 @@ def test_every_intent_declares_the_full_shape():
         assert rubric["label"].strip(), intent
         assert rubric["question"].strip(), intent
         assert isinstance(rubric["narrative_arc"], bool), intent
+        assert rubric["default_audience_change"].strip(), intent
 
 
 @pytest.mark.parametrize("intent", sorted(INTENT_RUBRIC))

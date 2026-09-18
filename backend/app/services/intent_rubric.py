@@ -36,6 +36,9 @@ class IntentRubric(TypedDict):
     responses: list[str]
     #: 发布后观察什么信号
     signals: list[str]
+    #: 通用方向（"这条内容想让读者发生什么变化"）——**不是**针对某个项目的判断。
+    #: 推断没给出读者变化时用它兜底；文案与确认面板预填的那句一致。
+    default_audience_change: str
     #: 这条内容里是否存在"转折/顿悟"——决定叙事型问题是否成立
     narrative_arc: bool
 
@@ -50,6 +53,7 @@ INTENT_RUBRIC: dict[str, IntentRubric] = {
         "materials": ["真实问题场景", "本人使用的方法", "一个结果或限制"],
         "responses": ["收藏", "关注", "问题型评论"],
         "signals": ["favorites", "follows_gained", "question_comments"],
+        "default_audience_change": "读者看完后能开始解决一个具体问题",
         "narrative_arc": False,
     },
     "share": {
@@ -60,6 +64,7 @@ INTENT_RUBRIC: dict[str, IntentRubric] = {
         "materials": ["真实事件", "当时的感受或观点", "形成这一理解的原因"],
         "responses": ["共鸣评论", "有质量的互动", "关注"],
         "signals": ["resonance_comments", "interaction_quality", "follows_gained"],
+        "default_audience_change": "读者看完后更理解你的经历、观点或感受",
         "narrative_arc": True,
     },
     "record": {
@@ -68,6 +73,7 @@ INTENT_RUBRIC: dict[str, IntentRubric] = {
         "materials": ["起点证据", "过程片段", "转折", "当前结果"],
         "responses": ["持续关注", "追问进展", "系列期待"],
         "signals": ["completion", "returning_readers", "series_continuation"],
+        "default_audience_change": "读者看完后愿意持续关注你的过程和变化",
         "narrative_arc": True,
     },
 }
@@ -78,6 +84,8 @@ UNRESOLVED_INTENT_RUBRIC: IntentRubric = {
     "question": "这条内容里，哪个真实信息最关键？",
     "materials": [],
     "responses": [],
+    # 中性占位：意图未定时没有"读者变化"可推荐，兜底方向留空。
+    "default_audience_change": "",
     "signals": [],
     "narrative_arc": False,
 }

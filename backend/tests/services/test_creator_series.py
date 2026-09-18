@@ -7,7 +7,11 @@ import pytest_asyncio
 from pydantic import ValidationError
 from sqlalchemy import text
 
-from app.core.exceptions import IdempotencyConflictException, VersionConflictException
+from app.core.exceptions import (
+    IdempotencyConflictException,
+    UserActionRequiredException,
+    VersionConflictException,
+)
 from app.models.v2.calibration import PublishRecordCreate
 from app.models.v2.content_opportunity import OpportunityDecision, SeriesExtensionCreate
 from app.models.v2.content_project import ContentProjectCreate, ContentVersionCreate
@@ -203,7 +207,7 @@ async def test_candidate_requires_published_same_scope_projects_and_stays_provis
     assert not any(item["node_type"] == "series" for item in genome["nodes"])
 
     draft = await _target_project(series_db, suffix="not-published")
-    with pytest.raises(ValueError, match="published projects"):
+    with pytest.raises(UserActionRequiredException, match="只能由已发布"):
         await service.propose(
             "u1", _candidate_input(first, draft, "series-draft-source")
         )

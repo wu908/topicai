@@ -9,7 +9,11 @@ from typing import Any
 
 from sqlalchemy import text
 
-from app.core.exceptions import IdempotencyConflictException, VersionConflictException
+from app.core.exceptions import (
+    IdempotencyConflictException,
+    UserActionRequiredException,
+    VersionConflictException,
+)
 from app.core.llm import LLMClient, wrap_user_input
 from app.models.v2.action_domain import AITraceCreate
 from app.models.v2.creator_viewpoint import (
@@ -66,7 +70,11 @@ class CreatorViewpointService:
         if project["version"] != body.expected_project_version:
             raise VersionConflictException(project["version"], body.expected_project_version)
         if effective_intent_status(project) not in {"working_confirmed", "locked"}:
-            raise ValueError("content intent must be confirmed before proposing a viewpoint")
+            # 用户能读懂的拒绝：生产环境会把普通 ValueError 的文案换成通用错误，
+            # 所以"要用户做什么"的话必须走类型化异常（R8）。
+            raise UserActionRequiredException(
+                "先确认这条内容的处理方式，才能提炼观点候选。"
+            )
         if body.source_content_version_id:
             version = await self.db.fetch_one(
                 "SELECT id FROM content_versions WHERE id=:id AND owner_user_id=:owner "
@@ -74,7 +82,9 @@ class CreatorViewpointService:
                 {"id": body.source_content_version_id, "owner": owner, "project": project_id},
             )
             if version is None or project.get("current_version_id") != body.source_content_version_id:
-                raise ValueError("viewpoint source must be the current content version")
+                raise UserActionRequiredException(
+                    "候选内容刚刚变过，刷新后再提炼观点候选。"
+                )
 
         genome = await ContentGenomeService(self.db).for_project(owner, project)
         allowed = {
@@ -83,7 +93,9 @@ class CreatorViewpointService:
         }
         source_ids = list(dict.fromkeys(body.source_evidence_ids))
         if any(item not in allowed for item in source_ids):
-            raise ValueError("viewpoint sources must be confirmed evidence allowed in this project")
+            raise UserActionRequiredException(
+                "这些素材已经不在可引用范围内了，刷新后再提炼观点候选。"
+            )
         sources = [allowed[item] for item in source_ids]
         draft, proposal_source = await self._draft(project, sources)
         viewpoint_id = str(uuid.uuid4())

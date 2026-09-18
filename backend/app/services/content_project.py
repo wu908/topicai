@@ -100,9 +100,13 @@ class ContentProjectService:
         清掉之后状态机的「无推断」分支会重新给出意图确认步骤——这就是
         「不对，我自己选」的语义：把决定权交回用户，而不是把推断写死。
         """
+        # R8：推断现在会在创建时落成"已确认"（见 ProjectStartService.start），
+        # 所以撤销推断必须同时把意图状态退回 candidate——否则状态机认为意图
+        # 已定，确认步骤不再出现，用户就没有任何入口改回自己的判断。
         result = await self.db.execute(
             "UPDATE content_projects SET start_inferred_intent=NULL,"
             "start_inferred_question=NULL,start_inference_confidence=NULL,"
+            "intent_status='candidate',"
             "updated_at=:now WHERE id=:id AND owner_user_id=:owner",
             {"now": now(), "id": project_id, "owner": owner},
         )

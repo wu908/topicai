@@ -8,6 +8,8 @@ import type {
 interface ViewpointPanelProps {
   viewpoints: CreatorViewpoint[];
   evidence: ContentGenomeEvidenceContext[];
+  /** 现在还不能提炼的原因（意图未定等）。有值时按钮不出手，只说明原因。 */
+  blockedReason?: string | null;
   busy: boolean;
   onPropose: (sourceEvidenceIds: string[]) => void;
   onDecide: (
@@ -21,6 +23,7 @@ interface ViewpointPanelProps {
 export default function ViewpointPanel({
   viewpoints,
   evidence,
+  blockedReason = null,
   busy,
   onPropose,
   onDecide,
@@ -61,7 +64,9 @@ export default function ViewpointPanel({
         <button
           type="button"
           className="viewpoint-propose-button"
-          disabled={busy || sourceIds.length === 0 || pending.length > 0}
+          disabled={
+            busy || sourceIds.length === 0 || pending.length > 0 || Boolean(blockedReason)
+          }
           onClick={() => onPropose(sourceIds)}
         >
           <AutoAwesomeOutlined fontSize="small" />
@@ -69,8 +74,11 @@ export default function ViewpointPanel({
         </button>
       </div>
 
+      {/* 先说明"为什么现在不能用"：按钮点了必然失败的话，就不该让它可点。 */}
       {sourceIds.length === 0 ? (
         <p className="genome-context-empty">确认一段真实素材后，才能提炼观点候选。</p>
+      ) : blockedReason ? (
+        <p className="genome-context-empty">{blockedReason}</p>
       ) : null}
 
       {pending.map((viewpoint) => {

@@ -6,7 +6,11 @@ from typing import Any
 
 from sqlalchemy import text
 
-from app.core.exceptions import IdempotencyConflictException, VersionConflictException
+from app.core.exceptions import (
+    IdempotencyConflictException,
+    UserActionRequiredException,
+    VersionConflictException,
+)
 from app.models.v2.publish_hypothesis import (
     PublishHypothesisAmendmentCreate,
     PublishHypothesisLock,
@@ -165,7 +169,9 @@ class PublishHypothesisService:
                         project["version"], body.expected_project_version
                     )
                 if effective_intent_status(project) != "working_confirmed":
-                    raise ValueError("intent must be working confirmed before lock")
+                    raise UserActionRequiredException(
+                        "先确认这条内容的处理方式，再锁定发布判断。"
+                    )
                 if project["content_intent"] != body.content_intent.value:
                     raise ValueError("locked content intent must match the working intent")
 
