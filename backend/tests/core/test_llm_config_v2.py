@@ -123,3 +123,36 @@ def test_vision_requires_operator_switch_and_declared_capability(monkeypatch):
         client = LLMClient()
 
     assert client.is_available("vision") is True
+
+
+def test_generate_structured_tells_the_model_the_field_names():
+    """结构化调用必须把字段骨架写进系统提示。
+
+    背景：`generate_structured` 只说"返回符合 schema 的 JSON"，而 schema 本身
+    从未发给模型——模型只能猜字段名。线上实测：观点提炼连续 4 次解析失败后
+    降级为 deterministic_fallback；同类的提示词还有机会、系列、规则、发布前检查。
+    """
+    from pydantic import BaseModel
+
+    from app.core.llm import LLMClient
+
+    class Draft(BaseModel):
+        statement: str
+        limitations: list[str]
+
+    seen: dict[str, str] = {}
+    client = LLMClient.__new__(LLMClient)  # 跳过 __init__ 对配置/网络的依赖
+    client._max_retries = 0
+
+    def fake_generate(prompt, system=None, **kwargs):  # type: ignore[no-untyped-def]
+        seen["system"] = system or ""
+        return '{"statement": "一句话", "limitations": []}'
+
+    client.generate = fake_generate  # type: ignore[method-assign]
+
+    out = client.generate_structured("素材", Draft, "你是观点提炼助手")
+
+    assert '"statement"' in seen["system"]
+    assert '"limitations"' in seen["system"]
+    assert "你是观点提炼助手" in seen["system"]
+    assert out.statement == "一句话"
