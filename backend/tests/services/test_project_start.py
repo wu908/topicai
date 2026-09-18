@@ -245,3 +245,84 @@ async def test_fallback_leaves_audience_change_for_the_confirmation_step(test_db
     )
     assert project["audience_change"] is None
     assert started.inference.audience_change is None
+
+
+@pytest.mark.asyncio
+async def test_confident_inference_is_settled_so_later_steps_can_run(test_db):
+    """R8：高/中置信度的推断在创建时就落成"已确认的工作意图"。
+
+    在此之前，状态机凭"有推断记录"跳过了意图确认步骤（R2：再问一次是重复
+    提问），却从未把意图落定——intent_status 一直停在 candidate，而发布判断
+    锁定、观点提炼、系列发现都要求 working_confirmed。用户会一路走到"锁定
+    发布判断"才撞上 400，生产环境还会把它换成通用的「请求参数无效」。
+    """
+    from app.services.content_project import ContentProjectService
+    from app.services.intent_orchestrator import IntentOrchestratorService
+
+    await _seed_user(test_db)
+    llm = _StubLLM(payload=_payload("share", "你拿它试的第一件真实任务是什么？"))
+    result = await ProjectStartService(test_db, llm=llm).start(
+        "u1",
+        ProjectStartRequest(
+            raw_input="试了三天智能体，想说说值不值得试",
+            idempotency_key="start-settled-1",
+        ),
+    )
+
+    project = await ContentProjectService(test_db).get("u1", result.project_id)
+    assert project["intent_status"] == "working_confirmed"
+    assert project["content_intent"] == "share"
+    # 推断没给读者变化时用 rubric 的通用方向兜底，而不是留下空值。
+    assert project["audience_change"] == "看完知道断更后可以先用零碎想法重启"
+
+    # 意图已定：状态机不再问一次，直接进入取素材那一步。
+    action = await IntentOrchestratorService(test_db).ensure_project_action(
+        "u1", dict(project)
+    )
+    assert action["action_type"] == "answer_key_question"
+
+
+@pytest.mark.asyncio
+async def test_low_confidence_inference_still_asks_the_user(test_db):
+    """低置信度推断**不**落成已确认：AI 自己都不确定时，该问一次。"""
+    from app.services.content_project import ContentProjectService
+    from app.services.intent_orchestrator import IntentOrchestratorService
+
+    await _seed_user(test_db)
+    payload = {**_payload("share", "这件事里哪一步最费劲？"), "confidence": "low"}
+    result = await ProjectStartService(test_db, llm=_StubLLM(payload=payload)).start(
+        "u1",
+        ProjectStartRequest(raw_input="随手记一下今天的事", idempotency_key="start-low-1"),
+    )
+
+    project = await ContentProjectService(test_db).get("u1", result.project_id)
+    assert project["intent_status"] == "candidate"
+    action = await IntentOrchestratorService(test_db).ensure_project_action(
+        "u1", dict(project)
+    )
+    assert action["action_type"] == "confirm_intent"
+
+
+@pytest.mark.asyncio
+async def test_dismissing_the_inference_reopens_the_intent_question(test_db):
+    """「不对，我自己选」必须真的把决定权还回来。
+
+    推断现在会落成已确认，所以撤销动作必须同时把意图状态退回 candidate，
+    否则状态机认为意图已定，用户没有任何入口改回自己的判断。
+    """
+    from app.services.content_project import ContentProjectService
+    from app.services.intent_orchestrator import IntentOrchestratorService
+
+    await _seed_user(test_db)
+    result = await ProjectStartService(test_db, llm=_StubLLM(payload=_payload("share"))).start(
+        "u1",
+        ProjectStartRequest(raw_input="讲一段经历", idempotency_key="start-dismiss-1"),
+    )
+    await ContentProjectService(test_db).dismiss_start_inference("u1", result.project_id)
+
+    project = await ContentProjectService(test_db).get("u1", result.project_id)
+    assert project["intent_status"] == "candidate"
+    action = await IntentOrchestratorService(test_db).ensure_project_action(
+        "u1", dict(project)
+    )
+    assert action["action_type"] == "confirm_intent"

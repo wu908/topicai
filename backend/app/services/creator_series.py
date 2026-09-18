@@ -9,7 +9,11 @@ from typing import Any
 
 from sqlalchemy import text
 
-from app.core.exceptions import IdempotencyConflictException, VersionConflictException
+from app.core.exceptions import (
+    IdempotencyConflictException,
+    UserActionRequiredException,
+    VersionConflictException,
+)
 from app.core.llm import LLMClient, wrap_user_input
 from app.models.v2.action_domain import AITraceCreate
 from app.models.v2.creator_series import (
@@ -398,8 +402,8 @@ class CreatorSeriesService:
                 or row["status"] not in ELIGIBLE_SERIES_STATUSES
                 or not row.get("locked_publish_version_id")
             ):
-                raise ValueError(
-                    "series sources must be published projects with confirmed intent"
+                raise UserActionRequiredException(
+                    "系列只能由已发布、且处理方式已确认的内容组成；先完成这几篇再回来。"
                 )
             projects.append(dict(row))
         return projects

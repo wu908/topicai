@@ -6,7 +6,11 @@ import pytest
 import pytest_asyncio
 from sqlalchemy import text
 
-from app.core.exceptions import IdempotencyConflictException, VersionConflictException
+from app.core.exceptions import (
+    IdempotencyConflictException,
+    UserActionRequiredException,
+    VersionConflictException,
+)
 from app.models.v2.content_project import ContentProjectCreate, ContentVersionCreate
 from app.models.v2.publish_hypothesis import (
     PublishHypothesisAmendmentCreate,
@@ -145,7 +149,7 @@ async def test_lock_requires_working_intent_confirmation(seeded_db):
         idempotency_key="candidate-lock",
     )
 
-    with pytest.raises(ValueError, match="working confirmed"):
+    with pytest.raises(UserActionRequiredException, match="先确认这条内容的处理方式"):
         await PublishHypothesisService(seeded_db).lock("u1", project["id"], body)
 
 
@@ -169,7 +173,7 @@ async def test_lock_rejects_legacy_confirmed_row_with_lock_evidence(seeded_db):
         idempotency_key="legacy-locked-row",
     )
 
-    with pytest.raises(ValueError, match="working confirmed"):
+    with pytest.raises(UserActionRequiredException, match="先确认这条内容的处理方式"):
         await PublishHypothesisService(seeded_db).lock("u1", project["id"], body)
 
 

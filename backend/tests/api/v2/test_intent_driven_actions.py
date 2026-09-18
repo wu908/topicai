@@ -1658,3 +1658,33 @@ async def test_stale_action_label_is_realigned_with_the_current_spec(client, tes
     # 动作卡说"要做什么"；「读者拿走什么」那句留给他下面的面板问。
     assert refreshed["title"] == "先把这篇的目的定下来"
     assert refreshed["reason"] != "旧理由"
+
+
+@pytest.mark.asyncio
+async def test_viewpoint_refusal_reaches_the_client_in_plain_words(client):
+    """提炼观点候选被拒时，用户要能读到为什么。
+
+    这条拒绝原本是普通 ValueError，而被丢弃的 ValueError 在生产环境会被换成
+    通用文案（防泄漏），于是用户只看到「请求参数无效」——步骤做不下去，也
+    不知道下一步该做什么。领域拒绝必须是类型化异常，文案才会原样送达。
+    """
+    created = await client.post(
+        "/api/v2/projects",
+        json={"title": "还没确认处理方式的项目", "idempotency_key": "vp-refusal"},
+    )
+    project = created.json()["data"]
+    assert project["intent_status"] == "candidate"
+
+    response = await client.post(
+        f"/api/v2/projects/{project['id']}/viewpoint-candidates",
+        json={
+            "source_evidence_ids": ["any-evidence-id"],
+            "expected_project_version": project["version"],
+            "idempotency_key": "vp-refusal-1",
+        },
+    )
+
+    assert response.status_code == 400
+    body = response.json()
+    assert body["message"] == "先确认这条内容的处理方式，才能提炼观点候选。"
+    assert body["meta"]["error_code"] == "USER_ACTION_REQUIRED"

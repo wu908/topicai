@@ -480,6 +480,9 @@ describe('ContentPage', () => {
     api.listProjects.mockResolvedValue({ items: [project], total: 1 });
     api.getCalibrationWorkspace.mockResolvedValue({
       ...workspace,
+      // 提炼观点候选要求处理方式已确认（后端前置条件），夹具必须落在那个状态，
+      // 否则测的就是"被拦住的按钮"而不是这次要测的引用过滤。
+      project: { ...project, intent_status: 'working_confirmed' },
       creator_viewpoints: [],
       content_genome: {
         project_id: 'p1',
@@ -526,6 +529,55 @@ describe('ContentPage', () => {
         }),
       );
     });
+  });
+
+  // R8：后端要求处理方式已确认才能提炼观点候选。未确认时不应给出可点的按钮
+  // ——点了必然被拒（生产环境还只报通用错误），用户白跑一趟。
+  it('does not offer the viewpoint action before the processing mode is settled', async () => {
+    api.listProjects.mockResolvedValue({ items: [project], total: 1 });
+    api.getCalibrationWorkspace.mockResolvedValue({
+      ...workspace,
+      project: { ...project, intent_status: 'candidate' as const },
+      creator_viewpoints: [],
+      content_genome: {
+        project_id: 'p1',
+        query: { content_intent: 'solve', intent_confirmed: false, audience: '', format: 'graphic_note', experiment: '' },
+        fingerprint: 'genome-viewpoint-blocked',
+        nodes: [],
+        edges: [],
+        decision_context: [],
+        evidence_context: [{
+          source_ref: 'evidence:e1',
+          statement: '我连续写完十篇内容',
+          source_type: 'user_fact',
+          privacy_level: 'private',
+          project_id: 'p1',
+          reusable: true,
+          reason: 'current_project_confirmed',
+        }],
+        viewpoint_context: [],
+        series_context: [],
+        insight_context: [],
+        summary: {
+          relevant_rule_count: 0,
+          applicable_rule_count: 0,
+          withheld_rule_count: 0,
+          open_conflict_count: 0,
+          applicable_evidence_count: 1,
+          applicable_viewpoint_count: 0,
+          applicable_series_count: 0,
+          applicable_insight_count: 0,
+        },
+      },
+    });
+    renderPage('/content/p1');
+
+    const button = await screen.findByRole('button', { name: '提炼候选' });
+    expect(button).toBeDisabled();
+    expect(
+      screen.getByText('先确认这条内容的处理方式，才能提炼观点候选。'),
+    ).toBeInTheDocument();
+    expect(api.proposeViewpointCandidate).not.toHaveBeenCalled();
   });
 
   it('submits the selected published projects as a series candidate', async () => {

@@ -171,6 +171,37 @@ class ProjectStartService:
             ),
         )
 
+        # R8 修复：高/中置信度的推断在创建时就记为"已确认的工作意图"。
+        #
+        # 状态机早就在有推断时跳过重复的意图确认（R2：再问一次是重复提问），
+        # 但那一跳只跳过了提问、没有把意图落成已确认——于是项目的 intent_status
+        # 一直停在 candidate，而发布判断锁定、观点提炼、系列发现都要求
+        # working_confirmed：用户会一路走到"锁定发布判断"才撞上 400，报的还是
+        # 生产环境统一的「请求参数无效」。低置信度**不**落成已确认，让状态机
+        # 真的问一次（见 _derive_action），因为那时 AI 自己都不确定。
+        if inference.intent and inference.confidence in {"high", "medium"}:
+            from app.models.v2.intent_actions import IntentConfirmation
+            from app.services.intent_actions import IntentConfirmationService
+            from app.services.intent_rubric import rubric_for
+
+            rubric = rubric_for(inference.intent)
+            await IntentConfirmationService(self.db).confirm(
+                owner,
+                created["id"],
+                IntentConfirmation(
+                    content_intent=inference.intent,
+                    audience_change=(
+                        inference.audience_change
+                        or rubric["default_audience_change"]
+                    ),
+                    material_requirements=rubric["materials"],
+                    expected_responses=rubric["responses"],
+                    success_signals=rubric["signals"],
+                    expected_project_version=created["version"],
+                    idempotency_key=f"start-intent-{body.idempotency_key}",
+                ),
+            )
+
         material_id = None
         if item is not None:
             material_id = await self._attach_material(owner, created["id"], item)

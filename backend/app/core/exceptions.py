@@ -170,6 +170,19 @@ class IdempotencyConflictException(AppException):
         )
 
 
+class UserActionRequiredException(AppException):
+    """A domain refusal the user is expected to act on.
+
+    Bare ValueErrors from services are deliberately replaced with a generic
+    message in production (they can carry SQL/paths). Refusals that tell the
+    creator *what to do next* must therefore be typed, so their message
+    survives the production filter and reaches the client.
+    """
+
+    def __init__(self, message: str):
+        super().__init__(message, 400, "USER_ACTION_REQUIRED")
+
+
 class MaterialInUseException(AppException):
     def __init__(self, details: dict):
         super().__init__(
