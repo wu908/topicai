@@ -1,13 +1,15 @@
 """Typed contracts for lightweight personal materials."""
 
 import re
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import Field, field_validator, model_validator
 
 from app.models.v2.intent_actions import StrictModel
 
-MaterialKind = Literal["text", "link", "image", "document"]
+#: audio/video 从第一天就在数据库 CHECK 里（045 迁移），只是 Python 契约没暴露。
+#: 音视频需要全模态模型识别（见 app/core/omni.py），识别结果写回素材文本。
+MaterialKind = Literal["text", "link", "image", "document", "audio", "video"]
 MaterialPrivacy = Literal["public", "private", "sensitive"]
 
 # Strict ``type/subtype`` token form. The stored value is later echoed as
@@ -38,8 +40,10 @@ class MaterialCreate(StrictModel):
     def validate_content(self):
         if self.kind in {"text", "link"} and not (self.content or "").strip():
             raise ValueError("text and link materials require content")
-        if self.kind in {"image", "document"} and not self.content_base64:
-            raise ValueError("image and document materials require base64 content")
+        if self.kind in {"image", "document", "audio", "video"} and not self.content_base64:
+            raise ValueError(
+                "image, document, audio and video materials require base64 content"
+            )
         return self
 
 
@@ -61,13 +65,25 @@ class MaterialUsageView(StrictModel):
     used_at: str
 
 
+class MaterialAnalysisView(StrictModel):
+    """音视频素材的识别来源：界面据此说明这段文字是模型读出来的。"""
+
+    source: Literal["omni"]
+    model: str | None = None
+    analyzed_at: str
+    usage: dict[str, Any] = Field(default_factory=dict)
+
+
 class MaterialView(StrictModel):
     id: str
     title: str
     kind: MaterialKind
     mime_type: str
     size: int = Field(ge=0)
+    #: 文字/链接素材是原文；音视频素材是识别出来的文本；图片/文档为空
     content: str | None = None
+    #: 有值时说明 content 来自全模态识别（音视频）
+    analysis: MaterialAnalysisView | None = None
     privacy_level: MaterialPrivacy
     version: int = Field(ge=1)
     usages: list[MaterialUsageView]

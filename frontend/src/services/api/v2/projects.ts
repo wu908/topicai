@@ -170,6 +170,14 @@ export const listCreatorViewpoints = () =>
     v2Client.get<ApiEnvelope<{ items: CreatorViewpoint[] }>>('/creator-viewpoints'),
   );
 
+export const analyzeMaterial = (materialId: string) =>
+  getData(
+    v2Client.post<ApiEnvelope<Material>>(
+      `/materials/${encodeURIComponent(materialId)}:analyze`,
+      {},
+    ),
+  );
+
 export const suggestFieldCandidates = (
   projectId: string,
   input: FieldSuggestionsInput,

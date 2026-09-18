@@ -299,6 +299,8 @@ class Database:
                         [
                             ("content_text", "TEXT"),
                             ("storage_path", "TEXT"),
+                            # 音视频识别的来源（模型/时间/用量）
+                            ("analysis_json", "TEXT"),
                             (
                                 "privacy_level",
                                 "TEXT NOT NULL DEFAULT 'private' CHECK "
@@ -367,6 +369,8 @@ class Database:
                             ),
                         ],
                     )
+                elif version == "058_material_analysis":
+                    await ensure_columns("materials", [("analysis_json", "TEXT")])
                 elif version == "057_content_form":
                     await ensure_columns("deliverables", [("content_form", "TEXT")])
                     await ensure_columns("content_projects", [("content_form", "TEXT")])

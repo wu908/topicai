@@ -54,6 +54,19 @@ class Settings(BaseSettings):
     llm_timeout_seconds: float = Field(default=30.0, alias="LLM_TIMEOUT_SECONDS", gt=0)
     llm_capabilities: str = Field(default="text", alias="LLM_CAPABILITIES")
 
+    # ==================== 全模态（音视频素材识别） ====================
+    # 小米 MiMo 开放平台的 omni 模型：音/视频 → 文本。
+    # 与主 LLM 分开配置：它按模态与计费都独立，且 base_url 不同（官方 OpenAI
+    # 兼容端点 https://api.xiaomimimo.com/v1）。模型 id 是 **mimo-v2.5**
+    # （历史上那个 mimo-v2-omni 已于 2026-06-30 下线，写 "v2.5-omni" 会 404）。
+    omni_enabled: bool = Field(default=False, alias="OMNI_ENABLED")
+    omni_base_url: str = Field(default="https://api.xiaomimimo.com/v1", alias="OMNI_BASE_URL")
+    omni_api_key: str = Field(default="", alias="OMNI_API_KEY")
+    omni_model: str = Field(default="mimo-v2.5", alias="OMNI_MODEL")
+    omni_timeout_seconds: float = Field(default=120.0, alias="OMNI_TIMEOUT_SECONDS", gt=0)
+    # 官方限制：base64 字符串 ≤50MB（视频 URL ≤300MB）。留出余量后按原始字节判定。
+    omni_max_media_bytes: int = Field(default=45_000_000, alias="OMNI_MAX_MEDIA_BYTES")
+
     # ==================== Content Project v2 ====================
     ai_enabled: bool = Field(default=True, alias="AI_ENABLED")
     vision_enabled: bool = Field(default=False, alias="VISION_ENABLED")

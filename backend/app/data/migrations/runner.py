@@ -1093,6 +1093,9 @@ def apply(
                     [
                         ("content_text", "TEXT"),
                         ("storage_path", "TEXT"),
+                        # 音视频识别来源（模型/时间/用量）：界面据此说明
+                        # "这段文字是模型读出来的"，而不是当成作者写的素材。
+                        ("analysis_json", "TEXT"),
                         (
                             "privacy_level",
                             "TEXT NOT NULL DEFAULT 'private' CHECK "
@@ -1163,6 +1166,12 @@ def apply(
                     ],
                 )
                 conn.executescript(sql)
+            elif version == "058_material_analysis":
+                _ensure_columns(
+                    conn,
+                    "materials",
+                    [("analysis_json", "TEXT")],
+                )
             elif version == "057_content_form":
                 # 内容形态（开放字段，Step 1 只写不读）。两张表都要补。
                 _ensure_columns(

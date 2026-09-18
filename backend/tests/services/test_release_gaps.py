@@ -81,6 +81,8 @@ async def test_material_crud_usage_and_locked_reference_snapshot(test_db):
         "mime_type",
         "size",
         "content",
+        # 音视频素材的识别来源（有值时界面要如实说明这段文字是模型读出来的）
+        "analysis",
         "privacy_level",
         "version",
         "usages",

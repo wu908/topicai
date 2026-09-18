@@ -8,10 +8,11 @@ import {
   Stack,
   TextField,
 } from '@mui/material';
-import { Add, DeleteOutline, LinkOutlined, UploadFile } from '@mui/icons-material';
+import { Add, DeleteOutline, GraphicEqOutlined, LinkOutlined, UploadFile } from '@mui/icons-material';
 import PageContainer from '@/components/layout/PageContainer';
 import {
   addMaterialUsage,
+  analyzeMaterial,
   createMaterial,
   deleteMaterial,
   listMaterials,
@@ -22,7 +23,20 @@ import { extractErrorMessage } from '@/utils/error';
 import '../Operations.css';
 
 const privacyLabels = { public: '公开', private: '私密', sensitive: '敏感' } as const;
-const kindLabels = { text: '文字', link: '链接', image: '图片', document: '文档' } as const;
+const kindLabels = {
+  text: '文字',
+  link: '链接',
+  image: '图片',
+  document: '文档',
+  // 音视频要交给全模态模型识别；识别结果写回素材文本。
+  audio: '音频',
+  video: '视频',
+} as const;
+const fileAccept: Partial<Record<Material['kind'], string>> = {
+  image: 'image/*',
+  audio: 'audio/*',
+  video: 'video/*',
+};
 const key = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
 async function fileBase64(file: File) {
@@ -166,7 +180,22 @@ export default function MaterialsPage() {
     }
   };
 
-  const needsFile = kind === 'image' || kind === 'document';
+  const analyze = async (materialId: string) => {
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      await analyzeMaterial(materialId);
+      setNotice('识别完成：文字已写进这条素材，可以在项目里引用它。');
+      await load();
+    } catch (err) {
+      setError(extractErrorMessage(err, '识别失败，稍后再试'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const needsFile = kind === 'image' || kind === 'document' || kind === 'audio' || kind === 'video';
   const canSave = Boolean(title.trim() && (needsFile ? file : content.trim()));
 
   return (
@@ -186,7 +215,7 @@ export default function MaterialsPage() {
             {needsFile ? (
               <Button component="label" variant="outlined" startIcon={<UploadFile />}>
                 {file?.name || '选择文件'}
-                <input hidden type="file" accept={kind === 'image' ? 'image/*' : undefined} onChange={(event) => setFile(event.target.files?.[0] || null)} />
+                <input hidden type="file" accept={fileAccept[kind]} onChange={(event) => setFile(event.target.files?.[0] || null)} />
               </Button>
             ) : (
               <TextField label="素材内容" value={content} onChange={(event) => setContent(event.target.value)} type={kind === 'link' ? 'url' : 'text'} multiline={kind === 'text'} minRows={kind === 'text' ? 4 : undefined} required />
@@ -216,6 +245,20 @@ export default function MaterialsPage() {
                 <Chip size="small" label={privacyLabels[material.privacy_level]} color={material.privacy_level === 'sensitive' ? 'warning' : 'default'} />
               </div>
               {material.content ? <p className="operations-row-copy">{material.content}</p> : null}
+              {/* 音视频素材的文字是模型读出来的——必须在界面上说明，不能当成作者写的。 */}
+              {material.analysis ? (
+                <p className="operations-helper">
+                  这段文字是模型（{material.analysis.model || '全模态模型'}）读出来的，
+                  可能听错或漏读；「未能确认」的地方请自己核对。
+                </p>
+              ) : null}
+              {material.kind === 'audio' || material.kind === 'video' ? (
+                material.content ? null : (
+                  <p className="operations-helper">
+                    这条{kindLabels[material.kind]}还没有识别过；识别会把它发给外部模型（敏感素材不会被发送）。
+                  </p>
+                )
+              ) : null}
               <p className="operations-helper">
                 {material.usages.length ? `正在用于：${material.usages.map((usage) => usage.project_title).join('、')}` : '尚未关联内容项目'}
               </p>
@@ -246,6 +289,15 @@ export default function MaterialsPage() {
                   {projects.filter((project) => !material.usages.some((usage) => usage.project_id === project.id)).map((project) => <MenuItem key={project.id} value={project.id}>{project.title}</MenuItem>)}
                 </TextField>
                 <Button startIcon={<LinkOutlined />} disabled={busy || !reuseProject[material.id]} onClick={() => void link(material.id)}>关联</Button>
+                {(material.kind === 'audio' || material.kind === 'video') ? (
+                  <Button
+                    startIcon={<GraphicEqOutlined />}
+                    disabled={busy}
+                    onClick={() => void analyze(material.id)}
+                  >
+                    {material.content ? '重新识别' : '识别内容'}
+                  </Button>
+                ) : null}
                 <Button color="error" startIcon={<DeleteOutline />} disabled={busy} onClick={() => void remove(material)}>删除</Button>
               </div>
             </article>

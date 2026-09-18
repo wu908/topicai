@@ -7,6 +7,7 @@ const listProjects = vi.fn();
 const createMaterial = vi.fn();
 const addMaterialUsage = vi.fn();
 const deleteMaterial = vi.fn();
+const analyzeMaterial = vi.fn();
 
 vi.mock('@/services/api/v2/projects', () => ({
   listMaterials: (...args: unknown[]) => listMaterials(...args),
@@ -14,11 +15,55 @@ vi.mock('@/services/api/v2/projects', () => ({
   createMaterial: (...args: unknown[]) => createMaterial(...args),
   addMaterialUsage: (...args: unknown[]) => addMaterialUsage(...args),
   deleteMaterial: (...args: unknown[]) => deleteMaterial(...args),
+  analyzeMaterial: (...args: unknown[]) => analyzeMaterial(...args),
 }));
 
 import MaterialsPage from '../MaterialsPage';
 
 describe('MaterialsPage', () => {
+  // 音视频素材：识别是"用户主动触发 + 说明来源"的动作，不做成自动跑。
+  it('offers recognition for audio material and explains where the text came from', async () => {
+    listMaterials.mockResolvedValue({
+      items: [{
+        id: 'a1', title: '复更那天的口述', kind: 'audio', mime_type: 'audio/mpeg', size: 2048,
+        content: '【内容摘要】断更两周后换了选题方式。',
+        analysis: { source: 'omni', model: 'mimo-v2.5', analyzed_at: '2026-09-18T00:00:00Z', usage: {} },
+        privacy_level: 'private', version: 2, usages: [],
+        created_at: '2026-09-18T00:00:00Z', updated_at: '2026-09-18T00:00:00Z',
+      }],
+      total: 1,
+    });
+    render(
+      <MemoryRouter>
+        <MaterialsPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText(/是模型（mimo-v2.5）读出来的/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '重新识别' })).toBeInTheDocument();
+  });
+
+  it('marks a not-yet-recognized clip and warns that it goes to an external model', async () => {
+    listMaterials.mockResolvedValue({
+      items: [{
+        id: 'v1', title: '阳台片段', kind: 'video', mime_type: 'video/mp4', size: 4096,
+        content: null, analysis: null,
+        privacy_level: 'sensitive', version: 1, usages: [],
+        created_at: '2026-09-18T00:00:00Z', updated_at: '2026-09-18T00:00:00Z',
+      }],
+      total: 1,
+    });
+    render(
+      <MemoryRouter>
+        <MaterialsPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText(/还没有识别过；识别会把它发给外部模型/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '识别内容' }));
+    await waitFor(() => expect(analyzeMaterial).toHaveBeenCalledWith('v1'));
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     listProjects.mockResolvedValue({
@@ -37,6 +82,7 @@ describe('MaterialsPage', () => {
     createMaterial.mockResolvedValue({ id: 'm2' });
     addMaterialUsage.mockResolvedValue({ id: 'm1' });
     deleteMaterial.mockResolvedValue({});
+    analyzeMaterial.mockResolvedValue({ id: 'm1' });
   });
 
   it('lists reusable materials with privacy and project usages', async () => {
