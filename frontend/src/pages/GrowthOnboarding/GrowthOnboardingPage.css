@@ -31,12 +31,12 @@
 .growth-heading > span {
   width: 100%;
   color: var(--v3-text-ter);
-  font-size: 12px;
+  font-size: var(--fs-meta);
 }
 
 .growth-heading h2 {
   margin: 0;
-  font-size: 20px;
+  font-size: var(--fs-title);
   line-height: 1.35;
   letter-spacing: 0;
 }
@@ -53,7 +53,7 @@
   align-items: center;
   gap: 10px;
   color: var(--v3-text-sec);
-  font-size: 13px;
+  font-size: var(--fs-meta);
 }
 
 .growth-evidence {

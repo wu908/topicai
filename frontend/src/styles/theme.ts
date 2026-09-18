@@ -101,16 +101,23 @@ const theme = createTheme({
       '"Noto Sans SC"',
       'sans-serif',
     ].join(','),
-    h1: { fontSize: '2rem', fontWeight: 800, lineHeight: 1.35, letterSpacing: '-0.025em' },
-    h2: { fontSize: '1.5rem', fontWeight: 700, lineHeight: 1.4, letterSpacing: '-0.02em' },
-    h3: { fontSize: '1.25rem', fontWeight: 700, lineHeight: 1.35 },
-    h4: { fontSize: '1.125rem', fontWeight: 700, lineHeight: 1.4 },
-    h5: { fontSize: '1rem', fontWeight: 700, lineHeight: 1.5 },
-    h6: { fontSize: '0.9375rem', fontWeight: 600, lineHeight: 1.5 },
-    body1: { fontSize: '0.9375rem', fontWeight: 400, lineHeight: 1.7 },
-    body2: { fontSize: '0.8125rem', fontWeight: 400, lineHeight: 1.6 },
+    // 与 tokens.css 的 --fs-* 同一套五档阶梯。MUI 组件（按钮、标签、helper）
+    // 曾经各自带一套 rem 值，于是同一屏里出现 11.3px、12.5px 这种相邻档——
+    // 层级读不出来，就是因为档太多。
+    // 字距：界面 95% 是中文，负字距会把汉字挤在一起（这是当初照搬西文标题
+    // 规则留下的），中文排版只需要不额外加宽。
+    h1: { fontSize: '1.5rem', fontWeight: 700, lineHeight: 1.35 },
+    h2: { fontSize: '1.25rem', fontWeight: 700, lineHeight: 1.4 },
+    h3: { fontSize: '1rem', fontWeight: 600, lineHeight: 1.4 },
+    h4: { fontSize: '1rem', fontWeight: 600, lineHeight: 1.4 },
+    h5: { fontSize: '0.875rem', fontWeight: 600, lineHeight: 1.5 },
+    h6: { fontSize: '0.875rem', fontWeight: 600, lineHeight: 1.5 },
+    subtitle1: { fontSize: '1rem', fontWeight: 600, lineHeight: 1.5 },
+    subtitle2: { fontSize: '0.875rem', fontWeight: 600, lineHeight: 1.5 },
+    body1: { fontSize: '0.875rem', fontWeight: 400, lineHeight: 1.7 },
+    body2: { fontSize: '0.75rem', fontWeight: 400, lineHeight: 1.6 },
     caption: {
-      fontSize: '0.6875rem',
+      fontSize: '0.75rem',
       fontWeight: 400,
       lineHeight: 1.5,
       // text-sec instead of text-ter: tertiary fails WCAG AA on glass
@@ -123,12 +130,19 @@ const theme = createTheme({
     borderRadius: 15,
   },
   components: {
+    MuiInputLabel: {
+      styleOverrides: {
+        // MUI 默认把浮动标签缩到 0.75：14px → 10.5px，比正文小太多也读不清。
+        // 缩到 0.86（约 12px）与 --fs-meta 对齐。
+        shrink: { transform: 'translate(14px, -9px) scale(0.86)' },
+      },
+    },
     MuiButton: {
       styleOverrides: {
         root: {
           borderRadius: 9999,
           padding: '8px 20px',
-          fontSize: '0.8125rem',
+          fontSize: '0.875rem',
           fontWeight: 600,
           textTransform: 'none',
           transition:

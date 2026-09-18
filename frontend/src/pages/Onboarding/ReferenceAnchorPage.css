@@ -35,32 +35,32 @@
 .anchor-heading > span {
   width: 100%;
   color: var(--v3-text-ter);
-  font-size: 12px;
+  font-size: var(--fs-meta);
 }
 
 .anchor-heading h2 {
   margin: 0;
-  font-size: 20px;
+  font-size: var(--fs-title);
   line-height: 1.35;
 }
 
 .anchor-block-head h2,
 .anchor-block-head h3 {
   margin: 0;
-  font-size: 16px;
+  font-size: var(--fs-subtitle);
   line-height: 1.4;
 }
 
 .anchor-hint,
 .anchor-note {
   color: var(--v3-text-ter);
-  font-size: 13px;
+  font-size: var(--fs-meta);
 }
 
 .anchor-preview {
   display: grid;
   gap: 8px;
-  font-size: 13px;
+  font-size: var(--fs-meta);
   color: var(--v3-text-sec);
 }
 
@@ -118,18 +118,18 @@
 }
 
 .anchor-item-main strong {
-  font-size: 15px;
+  font-size: var(--fs-body);
   line-height: 1.45;
 }
 
 .anchor-support {
   color: var(--v3-text-ter);
-  font-size: 12px;
+  font-size: var(--fs-meta);
 }
 
 .anchor-item-limitation {
   color: var(--v3-text-ter);
-  font-size: 12px;
+  font-size: var(--fs-meta);
 }
 
 .anchor-empty-block {
@@ -139,7 +139,7 @@
 
 .anchor-empty-block h3 {
   margin: 0;
-  font-size: 16px;
+  font-size: var(--fs-subtitle);
 }
 
 .anchor-limitations {
@@ -148,7 +148,7 @@
   display: grid;
   gap: 5px;
   color: var(--v3-text-ter);
-  font-size: 12px;
+  font-size: var(--fs-meta);
 }
 
 .anchor-rewrite {
