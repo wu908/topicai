@@ -4,17 +4,23 @@ from fastapi import APIRouter, Depends, Response
 
 from app.api.deps import get_current_user, get_db
 from app.core.database import Database
+from app.core.llm import LLMClient
 from app.models.common import ApiResponse
 from app.models.v2.content_project import (
     ContentProjectCreate,
     ContentVersionCreate,
     ProjectTransition,
 )
+from app.models.v2.field_suggestion import (
+    FieldSuggestionRequest,
+    FieldSuggestionsView,
+)
 from app.models.v2.project_start import ProjectStartRequest
 from app.models.v2.publish_hypothesis import PublishHypothesisLock
 from app.services.calibration_workspace import CalibrationWorkspaceService
 from app.services.content_project import ContentProjectService
 from app.services.content_version import ContentVersionService
+from app.services.field_suggestions import FieldSuggestionService
 from app.services.project_start import ProjectStartService
 from app.services.project_state import ProjectStateService
 from app.services.publish_hypothesis import PublishHypothesisService
@@ -45,6 +51,38 @@ async def create_project(
         data=project,
         meta={"idempotency_replayed": replayed},
     )
+
+
+def _suggestion_service(db: Database) -> FieldSuggestionService:
+    """与观点提炼同一套注入：测试环境不建 LLM 客户端，其余按配置。"""
+    llm = None
+    try:
+        from config.settings import get_settings
+
+        if get_settings().environment != "test":
+            llm = LLMClient()
+    except Exception:
+        llm = None
+    return FieldSuggestionService(db, llm=llm)
+
+
+@router.post(
+    "/{project_id}/field-suggestions",
+    response_model=ApiResponse[FieldSuggestionsView],
+)
+async def suggest_field_candidates(
+    project_id: str,
+    body: FieldSuggestionRequest,
+    user=Depends(get_current_user),
+    db: Database = Depends(get_db),
+):
+    """给一个可填字段提候选：点了就填进输入框，用户仍可任意改写。
+
+    不是"从选项里选一个"——候选只是把"面对空输入框"变成"改一句话"。
+    AI 不可用时返回通用方向/写法骨架，并在 limitations 里说明。
+    """
+    result = await _suggestion_service(db).suggest(user["id"], project_id, body)
+    return ApiResponse(data=result)
 
 
 @router.post("/start", status_code=201)

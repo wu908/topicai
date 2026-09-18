@@ -32,6 +32,7 @@ const api = vi.hoisted(() => ({
   classifyRetrospectiveIntent: vi.fn(),
   dismissStartInference: vi.fn(),
   startProject: vi.fn(),
+  suggestFieldCandidates: vi.fn(),
 }));
 
 vi.mock('@/services/api/v2/projects', () => api);
@@ -142,6 +143,14 @@ describe('ContentPage', () => {
     api.listProjects.mockResolvedValue({ items: [], total: 0 });
     api.getCalibrationWorkspace.mockResolvedValue(workspace);
     api.createProject.mockResolvedValue({ id: 'new-project' });
+    // 候选面板进入就取一次；默认给一条，避免每个用例都卡在这个请求上。
+    api.suggestFieldCandidates.mockResolvedValue({
+      field: 'answer',
+      candidates: [{ text: '第三天上午我让它整理会议纪要，它把断句切错了两处。', why: '' }],
+      source: 'ai',
+      limitations: [],
+      context_refs: [],
+    });
     api.getLatestPublishCheck.mockResolvedValue({
       id: 'publish-check',
       content_version_id: 'v1',
@@ -228,6 +237,32 @@ describe('ContentPage', () => {
     expect(await screen.findByText('作品展示')).toBeInTheDocument();
     // 老项目没有名字，退回三值标签——这正是这个字段存在前的样子。
     expect(screen.getByText('讲经历')).toBeInTheDocument();
+  });
+
+  // R9：面对空输入框是最难的一步。面板要先把候选摆出来，点一下填进去，
+  // 文字仍然可以自己改——它不是"从选项里选一个"。
+  it('offers answer candidates that fill the box and stay editable', async () => {
+    api.listProjects.mockResolvedValue({ items: [project], total: 1 });
+    api.getCalibrationWorkspace.mockResolvedValue({
+      ...workspace,
+      project: { ...project, intent_status: 'working_confirmed' },
+      orchestrated_action: {
+        ...workspace.orchestrated_action!,
+        action_type: 'answer_key_question',
+        title: '这两天试的过程里，哪个环节让你下了判断？',
+        human_gate: null,
+      },
+    });
+    renderPage('/content/p1');
+
+    const chip = await screen.findByText(/第三天上午我让它整理会议纪要/);
+    fireEvent.click(chip);
+
+    const answer = screen.getByLabelText('你的回答') as HTMLTextAreaElement;
+    expect(answer.value).toBe('第三天上午我让它整理会议纪要，它把断句切错了两处。');
+    // 还能继续改：候选只是起点。
+    fireEvent.change(answer, { target: { value: '我自己改写的一句话' } });
+    expect(answer.value).toBe('我自己改写的一句话');
   });
 
   it('resumes at manual publication and submits the locked version', async () => {

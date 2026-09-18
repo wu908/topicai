@@ -1,3 +1,4 @@
+import FieldSuggestions from './FieldSuggestions';
 import { useEffect, useState } from 'react';
 import { METRIC_LABELS, PRIMARY_RESPONSE_LABELS } from '@/features/content/labels';
 import {
@@ -421,6 +422,13 @@ export function HypothesisForm({
         已完成“工作意图确认”。现在补全发布判断；锁定后，意图和判断将作为本次发布不可覆盖的历史依据。
       </Typography>
       <Stack spacing={2}>
+        <FieldSuggestions
+          projectId={workspace.project.id}
+          field="audience_change"
+          currentText={audienceChange}
+          onPick={setAudienceChange}
+          disabled={busy}
+        />
         <TextField
           label="预期受众变化"
           value={audienceChange}
@@ -430,6 +438,13 @@ export function HypothesisForm({
           helperText="例如：看完后愿意试一次这个方法，或想继续关注我的变化"
         />
         {intent === 'solve' ? <>
+          <FieldSuggestions
+            projectId={workspace.project.id}
+            field="audience_problem"
+            currentText={problem}
+            onPick={setProblem}
+            disabled={busy}
+          />
           <TextField
             label="读者遇到什么问题"
             value={problem}
@@ -437,6 +452,13 @@ export function HypothesisForm({
             multiline
             minRows={2}
             helperText="用一句话描述读者在真实场景里遇到的具体困境"
+          />
+          <FieldSuggestions
+            projectId={workspace.project.id}
+            field="reader_promise"
+            currentText={promise}
+            onPick={setPromise}
+            disabled={busy}
           />
           <TextField
             label="你准备给出的答案"
@@ -448,6 +470,14 @@ export function HypothesisForm({
           />
         </> : null}
         {intent === 'share' ? (
+          <>
+          <FieldSuggestions
+            projectId={workspace.project.id}
+            field="viewpoint_anchor"
+            currentText={viewpoint}
+            onPick={setViewpoint}
+            disabled={busy}
+          />
           <TextField
             label="创作者视角或经历锚点"
             value={viewpoint}
@@ -456,8 +486,17 @@ export function HypothesisForm({
             minRows={2}
             helperText="这次分享所依据的真实经历或你坚持的观点"
           />
+          </>
         ) : null}
         {intent === 'record' ? (
+          <>
+          <FieldSuggestions
+            projectId={workspace.project.id}
+            field="continuation_promise"
+            currentText={continuation}
+            onPick={setContinuation}
+            disabled={busy}
+          />
           <TextField
             label="读者可持续关注的过程或变化"
             value={continuation}
@@ -466,6 +505,7 @@ export function HypothesisForm({
             minRows={2}
             helperText="读者之后可以继续追踪的后续进展，例如：每周更新一次进度"
           />
+          </>
         ) : null}
         <TextField
           select
