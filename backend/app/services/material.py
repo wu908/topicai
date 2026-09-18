@@ -2,6 +2,7 @@
 
 import base64
 import binascii
+import json
 import mimetypes
 import uuid
 from typing import Any
@@ -26,6 +27,8 @@ from app.services.v2_utils import now, request_hash
 
 class MaterialService:
     MAX_FILE_BYTES = 10 * 1024 * 1024
+    #: 音视频要送给全模态模型：官方 base64 上限 50MB，这里留余量（base64 会膨胀 4/3）。
+    MAX_MEDIA_BYTES = 40 * 1024 * 1024
 
     def __init__(self, db: Any, storage: LocalObjectStorage | None = None):
         self.db = db
@@ -87,8 +90,16 @@ class MaterialService:
                 payload = base64.b64decode(body.content_base64 or "", validate=True)
             except (ValueError, binascii.Error) as exc:
                 raise ValueError("material content is not valid base64") from exc
-            if not payload or len(payload) > self.MAX_FILE_BYTES:
-                raise ValueError("material file must be between 1 byte and 10 MB")
+            limit = (
+                self.MAX_MEDIA_BYTES
+                if body.kind in {"audio", "video"}
+                else self.MAX_FILE_BYTES
+            )
+            if not payload or len(payload) > limit:
+                raise ValueError(
+                    "material file must be between 1 byte and "
+                    f"{limit // (1024 * 1024)} MB"
+                )
             if body.kind == "image" and not mime_type.startswith("image/"):
                 raise ValueError("image material requires an image MIME type")
             extension = mimetypes.guess_extension(mime_type) or ".bin"
@@ -242,6 +253,30 @@ class MaterialService:
             await self.storage.delete(material["storage_path"])
         return deleted.rowcount == 1
 
+    async def store_analysis(
+        self,
+        owner: str,
+        material_id: str,
+        text: str,
+        analysis: dict[str, Any],
+    ) -> None:
+        """把识别出来的文本与来源写回素材。
+
+        content_text 是下游（项目素材、参考栏）真正读的字段，所以识别结果写这里；
+        analysis_json 单独存来源与用量，界面据此说明"这段文字是模型读出来的"。
+        """
+        await self.db.execute(
+            "UPDATE materials SET content_text=:text,analysis_json=:analysis,"
+            "version=version+1,updated_at=:now WHERE id=:id AND owner_user_id=:owner",
+            {
+                "text": text,
+                "analysis": json.dumps(analysis, ensure_ascii=False),
+                "now": now(),
+                "id": material_id,
+                "owner": owner,
+            },
+        )
+
     async def content_bytes(self, owner: str, material_id: str) -> tuple[bytes, str]:
         material = await self._row(owner, material_id)
         if not material.get("storage_path"):
@@ -258,8 +293,18 @@ class MaterialService:
             if record["kind"] == "text"
             else record.get("source_url")
             if record["kind"] == "link"
+            # 音视频素材的 content_text 是全模态识别写回来的文本
+            else record.get("content_text")
+            if record["kind"] in {"audio", "video"}
             else None
         )
+        analysis = None
+        raw_analysis = record.get("analysis_json")
+        if raw_analysis:
+            try:
+                analysis = json.loads(raw_analysis)
+            except (TypeError, ValueError):
+                analysis = None
         usages = await self.db.fetch_all(
             "SELECT mu.id,mu.project_id,cp.title AS project_title,mu.used_at "
             "FROM material_usages mu JOIN content_projects cp ON cp.id=mu.project_id "
@@ -275,6 +320,7 @@ class MaterialService:
                 "mime_type": record["mime_type"],
                 "size": record["size"],
                 "content": content,
+                "analysis": analysis,
                 "privacy_level": record["privacy_level"],
                 "version": record["version"],
                 "usages": [dict(item) for item in usages],

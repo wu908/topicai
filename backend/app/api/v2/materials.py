@@ -13,6 +13,7 @@ from app.models.v2.material import (
     MaterialView,
 )
 from app.services.material import MaterialService
+from app.services.material_analysis import MaterialAnalysisService
 
 router = APIRouter(prefix="/materials", tags=["Materials v2"])
 
@@ -41,6 +42,24 @@ async def create_material(
         data=result,
         meta={"idempotency_replayed": replayed},
     )
+
+
+@router.post(
+    "/{material_id}:analyze",
+    response_model=ApiResponse[MaterialView],
+)
+async def analyze_material(
+    material_id: str,
+    user=Depends(get_current_user),
+    db: Database = Depends(get_db),
+):
+    """识别一条音/视频素材（全模态模型），把读出来的文字写回素材。
+
+    用户主动触发：素材会被发到外部模型，所以不自动跑，也不对敏感素材跑。
+    未配置模型时给出可读的拒绝（而不是静默失败）。
+    """
+    result = await MaterialAnalysisService(db).analyze(user["id"], material_id)
+    return ApiResponse(data=result)
 
 
 @router.get("/{material_id}", response_model=ApiResponse[MaterialView])

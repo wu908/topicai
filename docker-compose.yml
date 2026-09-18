@@ -35,6 +35,12 @@ services:
       - LLM_CAPABILITIES=${LLM_CAPABILITIES:-text}
       - AI_ENABLED=${AI_ENABLED:-true}
       - VISION_ENABLED=${VISION_ENABLED:-false}
+      # 音视频素材识别（全模态）：默认关。打开需要 OMNI_API_KEY（小米 MiMo
+      # 开放平台），模型 id 是 mimo-v2.5（旧名 mimo-v2-omni 已于 2026-06-30 下线）。
+      - OMNI_ENABLED=${OMNI_ENABLED:-false}
+      - OMNI_BASE_URL=${OMNI_BASE_URL:-https://api.xiaomimimo.com/v1}
+      - OMNI_API_KEY=${OMNI_API_KEY:-}
+      - OMNI_MODEL=${OMNI_MODEL:-mimo-v2.5}
       # 夜间自动消化的触发时刻（产品时区，默认 03:00）。可在服务器 .env 覆盖，
       # 用于把这条链路指到几分钟后做真实验证。
       - NIGHTLY_DIGEST_HOUR=${NIGHTLY_DIGEST_HOUR:-3}

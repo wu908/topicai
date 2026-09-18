@@ -257,13 +257,23 @@ export interface MaterialUsage {
   used_at: string;
 }
 
+export interface MaterialAnalysis {
+  /** 音频/视频素材的识别来源：界面据此说明"这段文字是模型读出来的" */
+  source: 'omni';
+  model?: string | null;
+  analyzed_at: string;
+  usage?: Record<string, number | null>;
+}
+
 export interface Material {
   id: string;
   title: string;
-  kind: 'text' | 'link' | 'image' | 'document';
+  kind: 'text' | 'link' | 'image' | 'document' | 'audio' | 'video';
   mime_type: string;
   size: number;
+  /** 文字/链接是原文；音视频是识别出来的文本 */
   content?: string | null;
+  analysis?: MaterialAnalysis | null;
   privacy_level: 'public' | 'private' | 'sensitive';
   version: number;
   usages: MaterialUsage[];
