@@ -23,6 +23,7 @@ import {
   ScienceOutlined,
 } from '@mui/icons-material';
 import { extractErrorMessage } from '@/utils/error';
+import FieldSuggestions from '@/features/content/FieldSuggestions';
 import { readableRef } from '@/utils/labels';
 import {
   appendSnapshot,
@@ -750,6 +751,13 @@ function IntentActionPanel({
           {workspace.project.content_form
             ? <p className="form-name">AI 把这条读成「{workspace.project.content_form}」</p>
             : null}
+          <FieldSuggestions
+            projectId={workspace.project.id}
+            field="audience_change"
+            currentText={audienceChange}
+            onPick={setAudienceChange}
+            disabled={busy}
+          />
           {/* 这句建议现在就在下面的输入框值里（预填），所以不再单独用 Alert 重复一遍；
               只说明它的来源，免得看起来像用户自己写的。 */}
           <TextField
@@ -830,6 +838,15 @@ function IntentActionPanel({
       <Paper component="section" variant="outlined" sx={{ p: { xs: 2, sm: 3 }, borderColor: 'var(--v3-border)', boxShadow: 'none' }}>
         <Stack spacing={2}>
           <div><Chip size="small" label={projectIntentLabel(workspace.project)} /><h2>{action.title}</h2><p>{action.reason}</p></div>
+          {/* 面对空输入框是最难的一步：先给几条可以照抄/改写的话，再由用户决定。 */}
+          <FieldSuggestions
+            projectId={workspace.project.id}
+            field="answer"
+            question={action.title}
+            currentText={answer}
+            onPick={setAnswer}
+            disabled={busy}
+          />
           <TextField label="你的回答" value={answer} onChange={(event) => setAnswer(event.target.value)} multiline minRows={6} placeholder="写下你亲自经历的细节，不需要先写成完整笔记。" />
           <Button variant="contained" startIcon={<ArrowForward />} disabled={busy || answer.trim().length < 10} onClick={() => void runCommand(() => respondToAction(action.id, { decision: 'accept', response_payload: { answer: answer.trim() }, expected_action_version: action.version, idempotency_key: `answer-${action.id}-${action.version}` }))}>让 AI 准备候选内容</Button>
         </Stack>

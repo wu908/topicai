@@ -4,6 +4,8 @@ import type {
   BlindReviewInput,
   CalibrationWorkspace,
   ContentProject,
+  FieldSuggestions,
+  FieldSuggestionsInput,
   HypothesisLockInput,
   ObservationInput,
   ObservationTransitionInput,
@@ -166,6 +168,17 @@ export const revokeEvidence = (evidenceId: string, input: EvidenceRevocationInpu
 export const listCreatorViewpoints = () =>
   getData(
     v2Client.get<ApiEnvelope<{ items: CreatorViewpoint[] }>>('/creator-viewpoints'),
+  );
+
+export const suggestFieldCandidates = (
+  projectId: string,
+  input: FieldSuggestionsInput,
+) =>
+  getData(
+    v2Client.post<ApiEnvelope<FieldSuggestions>>(
+      `/projects/${encodeURIComponent(projectId)}/field-suggestions`,
+      input,
+    ),
   );
 
 export const proposeViewpointCandidate = (

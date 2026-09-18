@@ -1405,3 +1405,88 @@
   text-decoration: underline;
 }
 .start-inference .act button:hover { color: var(--ink, #191e26); }
+
+/* ---- AI 候选（R9）：点一下填进输入框，不是"从选项里选一个" ---- */
+.field-suggestions {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.field-suggestions-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: var(--fs-meta);
+  color: var(--color-text-secondary);
+}
+
+.field-suggestions-head span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.field-suggestions-refresh,
+.field-suggestions-retry {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: var(--fs-meta);
+  color: var(--color-primary);
+  cursor: pointer;
+}
+
+.field-suggestions-refresh:disabled,
+.field-suggestions-retry:disabled {
+  color: var(--color-text-tertiary);
+  cursor: default;
+}
+
+.field-suggestions-chips {
+  display: grid;
+  gap: 8px;
+}
+
+/* 候选是"可以照抄的一句话"，所以整块可点、文字左对齐，不做成胶囊标签。 */
+.field-suggestion {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--color-border-light);
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--fs-body);
+  cursor: pointer;
+  transition: border-color 0.18s var(--color-spring, ease), background 0.18s ease;
+}
+
+.field-suggestion:hover:not(:disabled) {
+  border-color: var(--color-primary-muted);
+  background: #fff;
+}
+
+.field-suggestion:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.field-suggestion small {
+  font-size: var(--fs-meta);
+  color: var(--color-text-secondary);
+}
+
+.field-suggestions-note {
+  margin: 0 0 10px;
+  font-size: var(--fs-meta);
+  color: var(--color-text-secondary);
+}

@@ -451,6 +451,39 @@ export interface CreatorRule {
   conflicts: CreatorRuleConflict[];
 }
 
+/** 需要 AI 候选的可填字段（与后端契约同名）。 */
+export type SuggestionField =
+  | 'answer'
+  | 'audience_change'
+  | 'audience_problem'
+  | 'reader_promise'
+  | 'viewpoint_anchor'
+  | 'continuation_promise';
+
+export interface FieldSuggestionCandidate {
+  text: string;
+  /** 为什么推荐这一条（一句话） */
+  why: string;
+}
+
+export interface FieldSuggestions {
+  field: SuggestionField;
+  candidates: FieldSuggestionCandidate[];
+  /** ai = 模型给的；deterministic_fallback = AI 不可用时的通用方向/写法骨架 */
+  source: 'ai' | 'deterministic_fallback';
+  limitations: string[];
+  context_refs: string[];
+}
+
+export interface FieldSuggestionsInput {
+  field: SuggestionField;
+  /** 正在回答的问题（answer 用） */
+  question?: string;
+  /** 已经写下的内容：给了就按它改进 */
+  current_text?: string;
+  count?: number;
+}
+
 export interface CreatorViewpoint {
   id: string;
   project_id: string;
