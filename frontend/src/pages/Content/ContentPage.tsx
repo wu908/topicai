@@ -68,7 +68,6 @@ import {
 import type {
   CalibrationWorkspace,
   ContentProject,
-  NextAction,
   Observation,
   ObservationStatus,
   ContentIntent,
@@ -94,20 +93,12 @@ import {
 } from '@/features/content/StageForms';
 import ProjectStartPanel from '@/features/content/ProjectStartPanel';
 import ProjectWorkspace from '@/features/content/ProjectWorkspace';
+import ProjectListRow from '@/features/content/ProjectListRow';
+import { nextActionLabels } from '@/features/content/projectListModel';
 import './ContentPage.css';
 
-const nextActionLabels: Record<NextAction, string> = {
-  create_version: '先写下真实经历',
-  lock_hypothesis: '锁定发布意图',
-  record_publication: '记录已经发布',
-  await_observation_window: '等待观察窗口结束',
-  add_snapshot: '回填实际表现',
-  run_blind_review: '对照发布结果',
-  create_observation: '决定下一次怎么验证',
-  manage_observations: '处理已经记录的观察',
-  add_comparable_snapshot: '补充一条对照数据',
-  review_calibration_issue: '修正数据问题',
-};
+// G4: next-action copy is owned by projectListModel; list and workspace share it.
+void nextActionLabels;
 
 const makeKey = (prefix: string) =>
   `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
@@ -360,29 +351,14 @@ export default function ContentPage() {
             }}
           />
         ) : (
-            <div className="content-project-list">
+            <div className="content-project-list" data-testid="project-list">
             {projects.map((project) => (
-              <button
-                type="button"
-                className="content-project-row"
+              <ProjectListRow
                 key={project.id}
-                onClick={() => navigate(`/content/${project.id}`)}
-              >
-                <span className="content-project-row-body">
-                  <span className="content-project-row-title">{project.title}</span>
-                  <span className="content-project-row-meta">
-                    {projectIntentLabel(project)}
-                  </span>
-                </span>
-                <span className="content-project-row-meta">
-                  {/* 列表只是索引，右侧该用短动作标签。此前优先取动作标题，而
-                      answer_key_question 的标题是整句问题（"你亲自解决过这个问题的
-                      哪一步最容易被忽略？"），在列表里看起来像标题的延续。 */}
-                  {project.next_action
-                    ? nextActionLabels[project.next_action] ?? project.orchestrated_action?.title
-                    : project.orchestrated_action?.title ?? nextActionLabels.create_version}
-                </span>
-              </button>
+                project={project}
+                selected={false}
+                onSelect={(id) => navigate(`/content/${id}`)}
+              />
             ))}
           </div>
         )}
