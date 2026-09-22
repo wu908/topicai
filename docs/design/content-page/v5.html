@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TopicAI · 内容页原型 V5 · 分面工作台</title>
+<link rel="stylesheet" href="lumen-prototype.css">
+<style>
+/* ============================================================================
+   V5 · 分面工作台 Faceted Table — 版本说明
+   ----------------------------------------------------------------------------
+   核心主张 / core thesis
+     当项目数量超过"一眼能看完"的规模，内容页的主角就不再是卡片，而是一张
+     可以被切分、排序、批量操作的表。视图（谁在等我）+ 分面（意图/阶段）+
+     列排序 + 批量动作，让"在一堆项目里找到某一个"从浏览变成检索。
+
+   优化 / optimises
+     · 6 件必答题中的第 5 件（如何找到某一个）：保存视图 + 两个分面 + 搜索 + 7 列排序
+     · 第 1、3、4 件：阶段、进度 n/5、观察窗剩余天数、更新时间全部成为可比较的列
+     · 规模化：7 行填满视口，1 屏 = 7 个项目的完整状态，无 450px 死白
+     · F7 修正：悬浮球停靠在标题行右侧的内容配列栏内，悬于表格卡片之外，
+       不覆盖任何控件（区别于线上版本固定右下 80×80 压住右栏 8–9% 面积）
+
+   放弃 / gives up
+     · 首次使用的温度感 —— 表格是冷的，新用户第一眼看不到"叙事"
+     · 主题式漫游 —— 一屏 7 行，没有卡片留白给"灵感浏览"
+     · 手机端的信息密度（见下方移动端降级）
+
+   移动端降级 / mobile degradation  (<= 860px)
+     表格在窄屏不再成立，退化为堆叠卡片：
+       0. 左栏被 .sidebar 的固定宽度挤扁内容，故窄屏隐藏左栏（导航收进顶部抽屉）；
+       1. 表头整行 display:none，thead 不再占位；
+       2. 每个 <tr> 变成 display:block 的卡片，除标题/勾选外的 6 个单元格各自成为
+          "字段标签 + 值"的左右两栏（标签由 ::before + data-label 提供），不再依赖列对齐；
+       3. 分面下拉与密度切换折行排列、搜索框占满整行，4 个保存视图 chip 仍可横滑；
+          批量操作条吸底（position: sticky; bottom: 0）；
+       4. 排序能力保留（列头隐藏后由卡片右上角"排序"进入底部抽屉），因为窄屏下
+          排序比列宽更重要；
+       5. 悬浮球由绝对定位退回文档流，排在标题上方，卡片铺满后也不会被遮挡。
+   ============================================================================ */
+
+/* ---------- shell / main : 视口高度锁定，表格撑满，不留死白 ---------- */
+.shell { height: 100vh; min-height: 100vh; overflow: hidden; }
+.main  { padding: 18px 30px 20px; display: flex; flex-direction: column; min-height: 0; overflow: hidden; position: relative; }
+
+/* ---------- page head ---------- */
+.page-head { margin-bottom: 36px; align-items: center; }
+.page-title { font-size: var(--fs-display); margin: 0 0 4px; }
+.page-sub { font-size: var(--fs-meta); }
+
+/* ---------- 悬浮球停靠：标题行右侧的配列栏，悬于所有内容之外 ----------
+   线上版本把球固定右下 80×80，压住右栏控件 8–9%（F7）。这里改为绝对定位
+   在标题行的右配列栏内（表格与工具条之外），因此不与任何控件重叠。
+   共享样式表把 .ball 定为 position:fixed，故此处以四层选择器 + !important 锁定。 */
+.ball-dock {
+  position: absolute; top: 0; right: 30px;
+  width: 80px; height: 80px; pointer-events: none; z-index: 20;
+}
+.main .ball-dock .ball {
+  position: absolute !important; top: 0 !important; left: 0 !important;
+  right: auto !important; bottom: auto !important;
+  pointer-events: auto;
+}
+.ball-dock .ball-note {
+  position: absolute; top: 82px; right: -14px; width: 108px; text-align: right;
+  font-size: var(--fs-meta); color: var(--v3-text-faint); line-height: 1.4;
+  white-space: nowrap;
+}
+.head-actions { margin-right: 104px; }   /* 为球让位：主动作永不与球相叠 */
+
+/* ---------- 工具条：保存视图 + 分面 + 搜索 + 密度 ---------- */
+.toolbar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 10px; margin-bottom: 10px;
+  border-radius: var(--v3-radius);
+}
+.tb-views { display: flex; align-items: center; gap: 6px; }
+.tb-sep { width: 1px; align-self: stretch; margin: 2px 4px; background: var(--v3-border-strong); flex: 0 0 1px; }
+.spacer { flex: 1 1 auto; }
+
+/* 保存视图 chip —— 计数用 tabular，active 状态不可误读 */
+.viewchip {
+  font-family: inherit; font-size: var(--fs-meta); line-height: 1;
+  padding: 7px 12px; border-radius: var(--v3-radius-pill);
+  border: 1px solid var(--v3-border); background: var(--v3-tag-bg);
+  color: var(--v3-text-sec); cursor: pointer;
+  display: inline-flex; align-items: center; gap: 7px; white-space: nowrap;
+}
+.viewchip:hover { background: var(--v3-surface-hover); }
+.viewchip .num { color: var(--v3-text-faint); }
+.viewchip[aria-pressed="true"] {
+  background: var(--v3-accent); color: #fff; border-color: var(--v3-accent);
+  box-shadow: 0 8px 20px rgba(25, 30, 38, 0.2);
+}
+.viewchip[aria-pressed="true"] .num { color: rgba(255, 255, 255, 0.72); }
+
+/* 分面下拉：真 select，样式化外壳，非假输入框 */
+.field-wrap { position: relative; display: inline-flex; align-items: center; }
+.field-wrap .fd-ico {
+  position: absolute; right: 12px; font-size: 10px; color: var(--v3-text-ter);
+  pointer-events: none;
+}
+select.facet {
+  font-family: inherit; font-size: var(--fs-meta); line-height: 1;
+  padding: 8px 30px 8px 13px; border-radius: var(--v3-radius-pill);
+  border: 1px solid var(--v3-border); background: var(--v3-surface-solid);
+  color: var(--v3-text-sec); cursor: pointer; appearance: none;
+  -webkit-appearance: none; box-shadow: 0 6px 16px rgba(70, 95, 130, 0.08);
+}
+select.facet:hover { border-color: var(--v3-border-hover); }
+select.facet:focus-visible { outline: 2px solid var(--v3-light); outline-offset: 1px; }
+
+/* 搜索：真输入框 */
+.search {
+  position: relative; display: inline-flex; align-items: center;
+  width: 236px;
+}
+.search .s-ico {
+  position: absolute; left: 13px; font-size: var(--fs-meta);
+  color: var(--v3-text-ter); pointer-events: none;
+}
+.search input {
+  font-family: inherit; font-size: var(--fs-meta); line-height: 1;
+  width: 100%; padding: 9px 14px 9px 32px; border-radius: var(--v3-radius-pill);
+  border: 1px solid var(--v3-border); background: var(--v3-surface-solid);
+  color: var(--v3-text); box-shadow: 0 6px 16px rgba(70, 95, 130, 0.08);
+}
+.search input::placeholder { color: var(--v3-text-faint); }
+.search input:focus-visible { outline: 2px solid var(--v3-light); outline-offset: 1px; }
+.search kbd {
+  position: absolute; right: 10px; font-family: var(--font-grotesk);
+  font-size: 10px; color: var(--v3-text-faint);
+  border: 1px solid var(--v3-border-strong); border-radius: 6px; padding: 1px 5px;
+}
+
+/* 密度切换：舒适 active */
+.density {
+  display: inline-flex; align-items: center; gap: 2px; padding: 3px;
+  border-radius: var(--v3-radius-pill); background: var(--v3-accent-soft);
+  border: 1px solid var(--v3-border-light);
+}
+.density button {
+  font-family: inherit; font-size: var(--fs-meta); line-height: 1;
+  padding: 6px 12px; border-radius: var(--v3-radius-pill);
+  border: 1px solid transparent; background: transparent;
+  color: var(--v3-text-ter); cursor: pointer;
+}
+.density button[aria-pressed="true"] {
+  background: var(--v3-surface-solid); color: var(--v3-text);
+  border-color: var(--v3-border); box-shadow: 0 4px 12px rgba(70, 95, 130, 0.12);
+}
+.viewchip:focus-visible, .density button:focus-visible, .pager button:focus-visible,
+.btn:focus-visible, .btn-link:focus-visible, th.sortable:focus-visible {
+  outline: 2px solid var(--v3-light); outline-offset: 1px;
+}
+
+/* ---------- 表格卡片 ---------- */
+.table-panel { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+
+/* 批量操作条：以"已选 2 项"状态呈现（静态原型，交互可见） */
+.bulkbar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 16px; border-bottom: 1px solid var(--v3-border-strong);
+  background: var(--v3-light-wash);
+  border-radius: var(--v3-radius-lg) var(--v3-radius-lg) 0 0;
+}
+.bulkbar .bk-kicker {
+  font-family: var(--font-grotesk); font-size: 10px; font-weight: 600;
+  letter-spacing: 0.16em; color: var(--v3-blue); text-transform: uppercase;
+}
+.bulkbar .bk-count { font-size: var(--fs-meta); font-weight: 700; color: var(--v3-text); }
+.bulkbar .btn { background: rgba(255, 255, 255, 0.72); box-shadow: none; }
+.bulkbar .btn:hover { background: #fff; }
+.bulkbar .bk-clear { margin-left: auto; }
+
+/* 表格本体 */
+.tscroll { flex: 1 1 auto; min-height: 0; overflow: auto; }
+table.grid { width: 100%; border-collapse: separate; border-spacing: 0; }
+
+table.grid thead th {
+  position: sticky; top: 0; z-index: 3;
+  background: rgba(255, 255, 255, 0.66);
+  backdrop-filter: blur(var(--v3-glass-blur)) saturate(var(--v3-glass-saturate));
+  -webkit-backdrop-filter: blur(var(--v3-glass-blur)) saturate(var(--v3-glass-saturate));
+  border-bottom: 1px solid var(--v3-border-strong);
+  padding: 11px 12px; text-align: left; white-space: nowrap;
+  font-size: var(--fs-meta); font-weight: 600; color: var(--v3-text-ter);
+}
+th.sortable { cursor: pointer; user-select: none; }
+th.sortable:hover { color: var(--v3-text); background: rgba(255, 255, 255, 0.86); }
+th.sortable .caret { color: var(--v3-text-faint); font-size: 10px; margin-left: 3px; }
+th.sortable:hover .caret { color: var(--v3-text-ter); }
+th[aria-sort="descending"], th[aria-sort="ascending"] { color: var(--v3-text); }
+th[aria-sort="descending"] .caret, th[aria-sort="ascending"] .caret {
+  color: var(--v3-blue); font-weight: 700;
+}
+
+/* 行 —— 玻璃行：半透明底 + 冷调发丝线 + 悬停提亮，不是深色平网格 */
+tbody tr { transition: background 0.14s ease; }
+tbody td {
+  padding: 12px; border-bottom: 1px solid rgba(23, 28, 38, 0.05);
+  vertical-align: middle; background: rgba(255, 255, 255, 0.14);
+}
+tbody tr:hover td { background: rgba(255, 255, 255, 0.58); }
+tbody tr.selected td { background: var(--v3-light-wash); }
+tbody tr.selected td:first-child { box-shadow: inset 3px 0 0 var(--v3-light); }
+tbody tr.selected:hover td { background: rgba(143, 190, 232, 0.3); }
+tbody tr:last-child td { border-bottom: none; }
+
+/* 列宽 */
+.c-check { width: 42px; padding-left: 16px; }
+.c-title { width: 32%; }
+.c-intent { width: 88px; }
+.c-stage  { width: 114px; }
+.c-prog   { width: 132px; }
+.c-watch  { width: 82px; }
+.c-upd    { width: 96px; }
+.c-op     { width: 168px; padding-right: 16px; text-align: right; }
+
+/* checkbox */
+.grid input[type="checkbox"] {
+  appearance: none; -webkit-appearance: none;
+  width: 15px; height: 15px; border-radius: 5px; margin: 0;
+  border: 1px solid rgba(23, 28, 38, 0.2); background: rgba(255, 255, 255, 0.8);
+  cursor: pointer; position: relative; vertical-align: middle;
+}
+.grid input[type="checkbox"]:hover { border-color: var(--v3-border-hover); }
+.grid input[type="checkbox"]:checked {
+  background: var(--v3-accent); border-color: var(--v3-accent);
+}
+.grid input[type="checkbox"]:checked::after {
+  content: "✓"; position: absolute; inset: 0; color: #fff;
+  font-size: 10px; line-height: 14px; text-align: center; font-weight: 700;
+}
+
+/* 标题列：主行 + 一行上下文 */
+.t-title { font-size: var(--fs-body); font-weight: 600; color: var(--v3-text); line-height: 1.4; }
+.t-context { font-size: var(--fs-meta); color: var(--v3-text-ter); margin-top: 3px; line-height: 1.4; }
+
+/* 意图 chip */
+.ichip { font-size: var(--fs-meta); padding: 3px 10px; }
+.ichip.intent-solve  { color: var(--v3-text); background: rgba(143, 190, 232, 0.18); border-color: rgba(143, 190, 232, 0.5); }
+.ichip.intent-share  { color: var(--v3-text-sec); background: rgba(255, 255, 255, 0.72); }
+.ichip.intent-record { color: var(--v3-text-sec); background: rgba(201, 138, 75, 0.1); border-color: rgba(201, 138, 75, 0.34); }
+
+/* 阶段：序号 tabular + 名称，可扫读 */
+.stage { display: flex; align-items: baseline; gap: 6px; white-space: nowrap; }
+.stage .idx { font-size: var(--fs-meta); color: var(--v3-text-faint); }
+.stage .nm  { font-size: var(--fs-meta); color: var(--v3-text-sec); }
+
+/* 进度 n/5 + 5 段细条 */
+.prog { display: flex; align-items: center; gap: 9px; }
+.prog .frac { font-size: var(--fs-meta); color: var(--v3-text-sec); white-space: nowrap; }
+.segbar { display: flex; gap: 3px; }
+.segbar i {
+  display: block; width: 11px; height: 5px; border-radius: 9999px;
+  background: rgba(23, 28, 38, 0.1);
+}
+.segbar i.on { background: var(--v3-light); }
+.segbar i.on.last { background: var(--v3-explore); }
+
+/* 观察窗 / 更新时间：tabular */
+.watch { font-size: var(--fs-meta); color: var(--v3-text-ter); white-space: nowrap; }
+.watch.due { color: var(--v3-amber); font-weight: 600; }
+.watch.none { color: var(--v3-text-faint); }
+.upd { font-size: var(--fs-meta); color: var(--v3-text-ter); }
+
+/* 操作列：每行恰好一个动作 */
+.row-act { display: inline-flex; justify-content: flex-end; }
+.row-act .btn { white-space: nowrap; }
+.btn-link {
+  background: none; border: none; padding: 2px 0; cursor: pointer;
+  font-family: inherit; font-size: var(--fs-meta); color: var(--v3-text-ter);
+  border-bottom: 1px solid var(--v3-border-strong);
+}
+.btn-link:hover { color: var(--v3-text); border-bottom-color: var(--v3-text-ter); }
+
+/* 页脚 */
+.tfoot {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 16px; border-top: 1px solid var(--v3-border-strong);
+  background: rgba(255, 255, 255, 0.42);
+}
+.tfoot .tf-count { font-size: var(--fs-meta); color: var(--v3-text-ter); }
+.tfoot .tf-page { display: inline-flex; align-items: center; gap: 7px; font-size: var(--fs-meta); color: var(--v3-text-ter); }
+.tfoot .pager { display: inline-flex; gap: 4px; }
+.pager button {
+  font-family: inherit; font-size: var(--fs-meta); line-height: 1; min-width: 26px;
+  padding: 5px 8px; border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--v3-border); background: var(--v3-surface-solid); color: var(--v3-text-ter);
+}
+.pager button[aria-current="page"] { background: var(--v3-accent); color: #fff; border-color: var(--v3-accent); }
+.pager button[disabled] { opacity: 0.45; cursor: not-allowed; }
+
+/* ---------- 移动端：表格 → 堆叠卡片 ---------- */
+@media (max-width: 860px) {
+  .sidebar { display: none; }   /* 窄屏让位给堆叠卡片；导航收进顶部抽屉 */
+  .main { overflow: auto; padding: 16px 16px 20px; }
+  .ball-dock { position: static; margin: 0 0 12px; z-index: auto; }
+  .main .ball-dock .ball { position: static !important; }
+  .ball-dock .ball-note { position: static; width: auto; text-align: left; margin-top: 6px; }
+  .head-actions { margin-right: 0; }
+  .toolbar { flex-wrap: wrap; }
+  .search { width: 100%; }
+  table.grid thead { display: none; }
+  table.grid, table.grid tbody, table.grid tr, table.grid td { display: block; width: auto; }
+  tbody tr {
+    margin: 10px; border-radius: var(--v3-radius); border: 1px solid var(--v3-border);
+    background: rgba(255, 255, 255, 0.5); overflow: hidden;
+  }
+  tbody td { display: flex; justify-content: space-between; gap: 12px; border-bottom: 1px solid rgba(23, 28, 38, 0.05); padding: 9px 12px; }
+  tbody td::before { content: attr(data-label); font-size: var(--fs-meta); color: var(--v3-text-faint); }
+  tbody td.c-title, tbody td.c-check { display: block; }
+  td.c-check::before, td.c-title::before { content: none; }
+  .c-op { text-align: left; }
+  .t-context { margin-top: 4px; }
+  .bulkbar { position: sticky; bottom: 0; border-radius: 0; }
+}
+</style>
+</head>
+<body>
+
+<div class="field" aria-hidden="true">
+  <span class="orb a"></span><span class="orb b"></span><span class="orb c"></span>
+</div>
+
+<div class="shell">
+
+  <!-- ============ 侧栏 ============ -->
+  <aside class="sidebar glass">
+    <div class="brand"><span class="mark">T</span>TopicAI</div>
+    <a class="navlink" href="#"><span class="nicon">◈</span>今日晨报</a>
+    <a class="navlink" href="#"><span class="nicon">▤</span>产出架</a>
+    <a class="navlink" href="#"><span class="nicon">▽</span>收件箱</a>
+    <a class="navlink" href="#"><span class="nicon">◔</span>急稿</a>
+    <a class="navlink" href="#"><span class="nicon">◌</span>周复盘</a>
+    <a class="navlink" href="#"><span class="nicon">◇</span>成长</a>
+    <div class="nav-group">管理</div>
+    <a class="navlink active" href="#"><span class="nicon">◫</span>内容</a>
+    <a class="navlink" href="#"><span class="nicon">◎</span>机会</a>
+    <a class="navlink" href="#"><span class="nicon">▧</span>素材</a>
+    <a class="navlink" href="#"><span class="nicon">○</span>我的</a>
+    <div class="sb-foot">
+      <div class="ai"><b></b>AI 会话正常</div>
+      <div class="rowline"><span>本月产出</span><span class="num">7</span></div>
+      <div class="rowline"><span>待你确认</span><span class="num">3</span></div>
+    </div>
+  </aside>
+
+  <!-- ============ 主区 ============ -->
+  <main class="main">
+
+    <!-- 悬浮球停靠区：标题行右侧配列栏，不覆盖任何内容 -->
+    <div class="ball-dock" aria-hidden="true">
+      <div class="ball">✦</div>
+      <div class="ball-note">随时叫我</div>
+    </div>
+
+    <header class="page-head">
+      <div>
+        <h1 class="page-title">内容</h1>
+        <p class="page-sub">7 个项目 · 3 个在等你确认 · 最近更新 12 分钟前</p>
+      </div>
+      <div class="head-actions">
+        <button class="btn btn-primary">新建内容项目</button>
+      </div>
+    </header>
+
+    <!-- ---------- 工具条 ---------- -->
+    <div class="toolbar glass">
+      <div class="tb-views" role="group" aria-label="保存视图">
+        <button class="viewchip" aria-pressed="true">全部 <span class="num">7</span></button>
+        <button class="viewchip" aria-pressed="false">需要我 <span class="num">3</span></button>
+        <button class="viewchip" aria-pressed="false">观察中 <span class="num">2</span></button>
+        <button class="viewchip" aria-pressed="false">已完成 <span class="num">1</span></button>
+      </div>
+
+      <span class="tb-sep" aria-hidden="true"></span>
+
+      <div class="field-wrap">
+        <select class="facet" aria-label="按意图筛选">
+          <option>全部意图</option>
+          <option>教方法 solve</option>
+          <option>踩坑复盘 solve</option>
+          <option>记录 record</option>
+          <option>分享 share</option>
+        </select>
+        <span class="fd-ico" aria-hidden="true">▾</span>
+      </div>
+
+      <div class="field-wrap">
+        <select class="facet" aria-label="按阶段筛选">
+          <option>全部阶段</option>
+          <option>意图确认</option>
+          <option>证据采访</option>
+          <option>候选内容</option>
+          <option>发布前检查</option>
+          <option>观察与复盘</option>
+        </select>
+        <span class="fd-ico" aria-hidden="true">▾</span>
+      </div>
+
+      <span class="spacer"></span>
+
+      <div class="search">
+        <span class="s-ico" aria-hidden="true">⌕</span>
+        <input type="search" placeholder="搜索标题、经验、素材" aria-label="搜索项目">
+        <kbd>/</kbd>
+      </div>
+
+      <div class="density" role="group" aria-label="表格密度">
+        <button aria-pressed="false">紧凑</button>
+        <button aria-pressed="true">舒适</button>
+      </div>
+    </div>
+
+    <!-- ---------- 表格卡片 ---------- -->
+    <section class="table-panel glass" aria-label="内容项目表">
+
+      <!-- 批量操作条（静态原型，固定呈现"已选 2 项"） -->
+      <div class="bulkbar">
+        <span class="bk-kicker">Bulk</span>
+        <span class="bk-count">已选 <span class="num">2</span> 项</span>
+        <button class="btn btn-sm">批量归档</button>
+        <button class="btn btn-sm">导出清单</button>
+        <button class="btn btn-sm">改观察窗</button>
+        <button class="btn btn-text btn-sm bk-clear">取消选择</button>
+      </div>
+
+      <div class="tscroll">
+        <table class="grid">
+          <thead>
+            <tr>
+              <th class="c-check"><input type="checkbox" aria-label="全选当前视图"></th>
+              <th class="c-title sortable" aria-sort="none">标题<span class="caret">↑↓</span></th>
+              <th class="c-intent sortable" aria-sort="none">意图<span class="caret">↑↓</span></th>
+              <th class="c-stage sortable" aria-sort="none">阶段<span class="caret">↑↓</span></th>
+              <th class="c-prog sortable" aria-sort="none">进度<span class="caret">↑↓</span></th>
+              <th class="c-watch sortable" aria-sort="none">观察窗<span class="caret">↑↓</span></th>
+              <th class="c-upd sortable" aria-sort="descending">更新时间<span class="caret">↓</span></th>
+              <th class="c-op">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+
+            <tr class="selected">
+              <td class="c-check" data-label="选择"><input type="checkbox" checked aria-label="选择 新手养多肉为什么总烂根"></td>
+              <td class="c-title" data-label="标题">
+                <div class="t-title">新手养多肉为什么总烂根</div>
+                <div class="t-context">素材 3 条 · 已标 1 条事实待核</div>
+              </td>
+              <td class="c-intent" data-label="意图"><span class="chip ichip intent-solve">教方法</span></td>
+              <td class="c-stage" data-label="阶段"><span class="stage"><span class="idx num">1/5</span><span class="nm">意图确认</span></span></td>
+              <td class="c-prog" data-label="进度">
+                <span class="prog"><span class="frac num">1/5</span>
+                  <span class="segbar"><i class="on last"></i><i></i><i></i><i></i><i></i></span>
+                </span>
+              </td>
+              <td class="c-watch none" data-label="观察窗"><span class="watch none">—</span></td>
+              <td class="c-upd" data-label="更新时间"><time class="upd">今天 10:12</time></td>
+              <td class="c-op" data-label="操作">
+                <span class="row-act"><button class="btn btn-primary btn-sm">确认内容目的</button></span>
+              </td>
+            </tr>
+
+            <tr class="selected">
+              <td class="c-check" data-label="选择"><input type="checkbox" checked aria-label="选择 番茄钟别在下班后补，改到第二天早上"></td>
+              <td class="c-title" data-label="标题">
+                <div class="t-title">番茄钟别在下班后补，改到第二天早上</div>
+                <div class="t-context">候选 2 版 · 等你选一版</div>
+              </td>
+              <td class="c-intent" data-label="意图"><span class="chip ichip intent-solve">踩坑复盘</span></td>
+              <td class="c-stage" data-label="阶段"><span class="stage"><span class="idx num">2/5</span><span class="nm">候选内容</span></span></td>
+              <td class="c-prog" data-label="进度">
+                <span class="prog"><span class="frac num">2/5</span>
+                  <span class="segbar"><i class="on"></i><i class="on last"></i><i></i><i></i><i></i></span>
+                </span>
+              </td>
+              <td class="c-watch none" data-label="观察窗"><span class="watch none">—</span></td>
+              <td class="c-upd" data-label="更新时间"><time class="upd">今天 09:58</time></td>
+              <td class="c-op" data-label="操作">
+                <span class="row-act"><button class="btn btn-primary btn-sm">确认候选表达</button></span>
+              </td>
+            </tr>
+
+            <tr>
+              <td class="c-check" data-label="选择"><input type="checkbox" aria-label="选择 阳台辣椒终于结果了"></td>
+              <td class="c-title" data-label="标题">
+                <div class="t-title">阳台辣椒终于结果了</div>
+                <div class="t-context">采访提纲 4 问 · 未回答</div>
+              </td>
+              <td class="c-intent" data-label="意图"><span class="chip ichip intent-record">记录</span></td>
+              <td class="c-stage" data-label="阶段"><span class="stage"><span class="idx num">2/5</span><span class="nm">证据采访</span></span></td>
+              <td class="c-prog" data-label="进度">
+                <span class="prog"><span class="frac num">1/5</span>
+                  <span class="segbar"><i class="on last"></i><i></i><i></i><i></i><i></i></span>
+                </span>
+              </td>
+              <td class="c-watch none" data-label="观察窗"><span class="watch none">—</span></td>
+              <td class="c-upd" data-label="更新时间"><time class="upd">今天 09:41</time></td>
+              <td class="c-op" data-label="操作">
+                <span class="row-act"><button class="btn btn-primary btn-sm">补充真实经历</button></span>
+              </td>
+            </tr>
+
+            <tr>
+              <td class="c-check" data-label="选择"><input type="checkbox" aria-label="选择 我用了三个月把通勤时间变成读书时间"></td>
+              <td class="c-title" data-label="标题">
+                <div class="t-title">我用了三个月把通勤时间变成读书时间</div>
+                <div class="t-context">敏感词 1 处 · 事实清单已核</div>
+              </td>
+              <td class="c-intent" data-label="意图"><span class="chip ichip intent-share">分享</span></td>
+              <td class="c-stage" data-label="阶段"><span class="stage"><span class="idx num">4/5</span><span class="nm">发布前检查</span></span></td>
+              <td class="c-prog" data-label="进度">
+                <span class="prog"><span class="frac num">4/5</span>
+                  <span class="segbar"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on last"></i><i></i></span>
+                </span>
+              </td>
+              <td class="c-watch none" data-label="观察窗"><span class="watch none">—</span></td>
+              <td class="c-upd" data-label="更新时间"><time class="upd">昨天 21:30</time></td>
+              <td class="c-op" data-label="操作">
+                <span class="row-act"><button class="btn btn-primary btn-sm">运行发布前检查</button></span>
+              </td>
+            </tr>
+
+            <tr>
+              <td class="c-check" data-label="选择"><input type="checkbox" aria-label="选择 第一次做手冲咖啡翻车记录"></td>
+              <td class="c-title" data-label="标题">
+                <div class="t-title">第一次做手冲咖啡翻车记录</div>
+                <div class="t-context">已发布 · 观察窗 9-15 起</div>
+              </td>
+              <td class="c-intent" data-label="意图"><span class="chip ichip intent-record">记录</span></td>
+              <td class="c-stage" data-label="阶段"><span class="stage"><span class="idx num">5/5</span><span class="nm">观察窗口</span></span></td>
+              <td class="c-prog" data-label="进度">
+                <span class="prog"><span class="frac num">5/5</span>
+                  <span class="segbar"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on last"></i></span>
+                </span>
+              </td>
+              <td class="c-watch" data-label="观察窗"><time class="watch due">剩 4 天</time></td>
+              <td class="c-upd" data-label="更新时间"><time class="upd">3 天前</time></td>
+              <td class="c-op" data-label="操作">
+                <span class="row-act"><button class="btn btn-primary btn-sm">回填实际表现</button></span>
+              </td>
+            </tr>
+
+            <tr>
+              <td class="c-check" data-label="选择"><input type="checkbox" aria-label="选择 租房改造：800 元把阳台变成工作角"></td>
+              <td class="c-title" data-label="标题">
+                <div class="t-title">租房改造：800 元把阳台变成工作角</div>
+                <div class="t-context">数据已回填 · 待写复盘</div>
+              </td>
+              <td class="c-intent" data-label="意图"><span class="chip ichip intent-share">分享</span></td>
+              <td class="c-stage" data-label="阶段"><span class="stage"><span class="idx num">5/5</span><span class="nm">待复盘</span></span></td>
+              <td class="c-prog" data-label="进度">
+                <span class="prog"><span class="frac num">5/5</span>
+                  <span class="segbar"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on last"></i></span>
+                </span>
+              </td>
+              <td class="c-watch none" data-label="观察窗"><span class="watch none">—</span></td>
+              <td class="c-upd" data-label="更新时间"><time class="upd">5 天前</time></td>
+              <td class="c-op" data-label="操作">
+                <span class="row-act"><button class="btn btn-primary btn-sm">对照发布结果</button></span>
+              </td>
+            </tr>
+
+            <tr>
+              <td class="c-check" data-label="选择"><input type="checkbox" aria-label="选择 如何判断自己适合做知识博主"></td>
+              <td class="c-title" data-label="标题">
+                <div class="t-title">如何判断自己适合做知识博主</div>
+                <div class="t-context">已沉淀 1 条长期经验</div>
+              </td>
+              <td class="c-intent" data-label="意图"><span class="chip ichip intent-share">分享</span></td>
+              <td class="c-stage" data-label="阶段"><span class="stage"><span class="idx num">5/5</span><span class="nm">已完成</span></span></td>
+              <td class="c-prog" data-label="进度">
+                <span class="prog"><span class="frac num">5/5</span>
+                  <span class="segbar"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on last"></i></span>
+                </span>
+              </td>
+              <td class="c-watch none" data-label="观察窗"><span class="watch none">—</span></td>
+              <td class="c-upd" data-label="更新时间"><time class="upd">12 天前</time></td>
+              <td class="c-op" data-label="操作">
+                <span class="row-act"><button class="btn-link">查看经验</button></span>
+              </td>
+            </tr>
+
+          </tbody>
+        </table>
+      </div>
+
+      <footer class="tfoot">
+        <span class="tf-count">共 <span class="num">7</span> 个项目 · 显示 <span class="num">1</span>–<span class="num">7</span></span>
+        <span class="spacer"></span>
+        <span class="tf-page">每页
+          <span class="field-wrap">
+            <select class="facet" aria-label="每页条数">
+              <option>20 条</option>
+              <option>50 条</option>
+              <option>100 条</option>
+            </select>
+            <span class="fd-ico" aria-hidden="true">▾</span>
+          </span>
+        </span>
+        <span class="pager">
+          <button disabled aria-label="上一页">‹</button>
+          <button aria-current="page" class="num">1</button>
+          <button disabled aria-label="下一页">›</button>
+        </span>
+      </footer>
+
+    </section>
+  </main>
+</div>
+
+<div class="proto-badge">V5 · 分面工作台</div>
+
+</body>
+</html>

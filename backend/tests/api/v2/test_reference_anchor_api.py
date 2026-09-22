@@ -73,3 +73,40 @@ async def test_the_reading_survives_a_reload_and_can_be_rewritten(client):
 
     assert stale.status_code == 409
     assert stale.json()["meta"]["details"]["current_version"] == data["version"]
+
+
+@pytest.mark.asyncio
+async def test_tagless_references_still_return_a_reading_not_a_400(client):
+    """F25 回归（用户验收测试 2026-09-19）。
+
+    真实前端的 parseReferences 给每条参考都写 ``tags: []``——上面那些用例都带标签，
+    所以这条真实路径从未被测过。修复前它会返回 400，且 message 是一段英文 pydantic
+    原文（`1 validation error for _AnchorDraft topics ...`），用户完全无法理解。
+    """
+    imported = await client.post(
+        "/api/v2/reference-imports",
+        json={
+            "method": "manual",
+            "items": [
+                {"title": "12 平的出租屋，我按动线重排了三次", "tags": [], "source_handle": "@甲"},
+                {"title": "搬了四次家之后，我只留这些东西", "tags": [], "source_handle": "@乙"},
+            ],
+            "idempotency_key": "anchor-http-tagless",
+        },
+    )
+    assert imported.status_code == 201
+
+    response = await client.get("/api/v2/reference-anchor")
+
+    assert response.status_code == 200
+    body = response.json()
+    data = body["data"]
+    assert data["reference_count"] == 2
+    # 没有标签时退到参考标题，仍然给得出可核对的选题。
+    assert [item["value"] for item in data["topics"]] == [
+        "12 平的出租屋，我按动线重排了三次",
+        "搬了四次家之后，我只留这些东西",
+    ]
+    # 用户可见文案里不得出现 pydantic / 内部模型名。
+    assert "pydantic" not in body["message"].lower()
+    assert "_AnchorDraft" not in body["message"]

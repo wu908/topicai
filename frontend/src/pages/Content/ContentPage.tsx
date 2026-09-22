@@ -282,10 +282,36 @@ export default function ContentPage() {
   };
 
   if (loading) {
+    // F5（用户验收测试 2026-09-19）：这里原来整页只剩一个 spinner。
+    // DESIGN.md §9 要的是**骨架**，NN/g 也把「该用骨架的地方用 spinner」
+    // 列为反模式——spinner 不告诉用户将要出现什么，也不知道要等几行。
+    // 改成：页头照常出现（位置不跳动），列表区给出内容形状的占位行。
     return (
-      <Box minHeight={320} display="grid" sx={{ placeItems: 'center' }}>
-        <CircularProgress size={28} aria-label="加载内容项目" />
-      </Box>
+      <div className="content-page">
+        <header className="content-page-header">
+          <div>
+            <h1 className="content-page-title">内容</h1>
+            <p className="content-page-subtitle">从一次真实经历开始，完成一篇发布并复盘它。</p>
+          </div>
+        </header>
+        <div
+          className="content-project-list"
+          data-testid="content-skeleton"
+          role="status"
+          aria-busy="true"
+          aria-label="正在加载内容项目"
+        >
+          {[0, 1, 2].map((index) => (
+            <div className="content-project-row content-project-row-skeleton" key={index}>
+              <span className="content-project-row-body">
+                <span className="sk-line sk-line-title" />
+                <span className="sk-line sk-line-meta" />
+              </span>
+              <span className="sk-line sk-line-status" />
+            </div>
+          ))}
+        </div>
+      </div>
     );
   }
 
@@ -1038,7 +1064,9 @@ function ReviewPlanSection({ title, items }: { title: string; items: string[] })
   );
 }
 
-function CandidateReviewPanel({
+// 导出仅为可测：逐段确认是产品承诺「保留 / 拒绝 / 替换」的落点，
+// 但此前没有任何测试覆盖（F2，用户验收测试 2026-09-19）。
+export function CandidateReviewPanel({
   review,
   projectVersion,
   busy,
@@ -1053,13 +1081,21 @@ function CandidateReviewPanel({
 }) {
   const [replacements, setReplacements] = useState<Record<string, string>>({});
   // 审计修复 2026-08-16 UX-L4：已确认段落不再重复展示确认/拒绝按钮，
-  // 需要改时通过「重新修改这一段」展开。
+  // 需要改时通过「撤销确认」展开。
   const [reopenIds, setReopenIds] = useState<Record<string, boolean>>({});
+  // F2（用户验收测试 2026-09-19）：文案承诺「保留、拒绝或替换任意一段」，
+  // 但替换输入框原先只在**拒绝之后**才出现——承诺里的第三个选项要先做另一个动作。
+  // 这里让「替换这一段」在待确认状态下就是并列的第三颗按钮。
+  const [replacingIds, setReplacingIds] = useState<Record<string, boolean>>({});
   const pendingCount = review.segments.filter((segment) => !segment.decision).length;
   const rejectedCount = review.segments.filter((segment) => segment.decision?.decision === 'rejected').length;
 
   const decide = (segment: CandidateSegment, decision: 'accept' | 'reject' | 'replace') => {
     const current = segment.decision;
+    if (decision === 'replace') {
+      // 提交后收起输入框，避免它留在屏幕上让人以为还没提交。
+      setReplacingIds((items) => ({ ...items, [segment.id]: false }));
+    }
     void runCommand(() => decideCandidateSegment(review.project_id, segment.id, {
       content_version_id: review.content_version_id,
       decision,
@@ -1087,6 +1123,12 @@ function CandidateReviewPanel({
         {review.segments.map((segment) => {
           const decision = segment.decision;
           const label = segment.segment_type === 'title' ? '标题' : `正文 ${segment.ordinal}`;
+          // F2：替换输入框在「被拒绝」或「用户主动点了替换」时出现。
+          // 单独提出来是为了让下面的三元链保持可读，也避免 TS 在嵌套条件里
+          // 把 decision 收窄到 `=== 'rejected'` 永远不成立。
+          const showReplace = Boolean(
+            decision?.decision === 'rejected' || replacingIds[segment.id],
+          );
           return (
             <Box
               key={segment.id}
@@ -1101,7 +1143,7 @@ function CandidateReviewPanel({
               <Box sx={{ mt: 1, whiteSpace: 'pre-wrap', lineHeight: 1.75 }}>{segment.text}</Box>
               {/* 审计修复 2026-08-16 UX-H3：依据引用经 readableRef 转换，UUID 不外露。 */}
               {segment.source_refs.length > 0 ? <small>依据：{segment.source_refs.map(readableRef).join('、')}</small> : <small>依据：当前版本中的用户确认素材</small>}
-              {!readOnly && decision?.decision === 'rejected' ? (
+              {!readOnly && (decision?.decision === 'rejected' || replacingIds[segment.id]) ? (
                 <Stack spacing={1} sx={{ mt: 1.5 }}>
                   <TextField
                     size="small"
@@ -1115,14 +1157,18 @@ function CandidateReviewPanel({
                 </Stack>
               ) : null}
               {!readOnly ? (
-                decision && !reopenIds[segment.id] ? (
+                decision && !reopenIds[segment.id] && !replacingIds[segment.id] ? (
                   <Stack sx={{ mt: 1.5 }}>
-                    <Button size="small" color="inherit" disabled={busy} onClick={() => setReopenIds((items) => ({ ...items, [segment.id]: true }))}>重新修改这一段</Button>
+                    {/* 原名「重新修改这一段」听着像可以编辑，实际只是把决定退回未决。
+                        改成它真正做的事（F2）。 */}
+                    <Button size="small" color="inherit" disabled={busy} onClick={() => setReopenIds((items) => ({ ...items, [segment.id]: true }))}>撤销确认</Button>
                   </Stack>
-                ) : (
+                ) : showReplace ? null : (
                   <Stack direction="row" spacing={1} sx={{ mt: 1.5 }}>
-                    <Button size="small" variant={decision?.decision === 'accepted' ? 'contained' : 'outlined'} disabled={busy} onClick={() => decide(segment, 'accept')}>确认保留</Button>
-                    <Button size="small" color="inherit" variant={decision?.decision === 'rejected' ? 'contained' : 'outlined'} disabled={busy} onClick={() => decide(segment, 'reject')}>拒绝这一段</Button>
+                    <Button size="small" variant="outlined" disabled={busy} onClick={() => decide(segment, 'accept')}>确认保留</Button>
+                    {/* F2：替换与保留/拒绝并列为第三个选项，不必先拒绝。 */}
+                    <Button size="small" color="inherit" variant="outlined" disabled={busy} onClick={() => setReplacingIds((items) => ({ ...items, [segment.id]: true }))}>替换这一段</Button>
+                    <Button size="small" color="inherit" variant="outlined" disabled={busy} onClick={() => decide(segment, 'reject')}>拒绝这一段</Button>
                   </Stack>
                 )
               ) : null}

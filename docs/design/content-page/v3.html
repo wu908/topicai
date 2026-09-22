@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TopicAI 内容页 · V3 双栏总览</title>
+<link rel="stylesheet" href="lumen-prototype.css">
+<!--
+  ============================================================================
+  V3 · 双栏总览 (Master–Detail)
+  ----------------------------------------------------------------------------
+  核心主张 / Core thesis
+    内容页不该只是"入口列表"，而应该是一台总览台。左栏用一眼可扫的密集列表
+    回答"每个项目现在在哪一步"，右栏用常驻预览面板回答"这一步要做什么"，
+    于是 7 个项目能在同一屏里被逐个分诊，不必进工作台再退出来。
+
+  优化什么 / Optimises
+    - F11 信息量不足：每行补齐「阶段标签 + 5 段进度刻度 + 意图 + 状态 + 更新时刻」。
+    - F11 无进度：进度是"5 段 = 生命周期 5 步"的迷你刻度，已过段实心、当前段亮色，
+      段数与步数一一对应，不是装饰点。
+    - F11 无时间信息：每行给出「更新于 …」，观察中的项目额外给出剩余天数。
+    - F11 无检索能力：真实搜索框 + 带真实计数的筛选（全部 7 / 需要我 4 / 观察中 2）。
+    - F12 两处「下一步」互相矛盾：右栏「确认候选内容」是全屏唯一的主按钮，
+      与工作台「现在先做」同源；页头主动作改为「新建内容项目」，同意图 CTA 不重复。
+    - F7 悬浮球遮挡：球被放进右栏下方、页面底边之上的留白带，1280×800 与窄屏都不压控件。
+
+  放弃什么 / Gives up
+    - 窄屏与移动端必须退化为单栏，列表与预览无法同屏。
+    - 一屏只能深看一个项目；真正的规模化管理（排序、保存视图、批量）交给 V5。
+    - 列表行被压到约 62px 高以换取密度，代价是每行不能再塞行内操作按钮。
+    - 首屏的情绪温度弱于 V6「今日聚焦」。
+
+  移动端退化 / Mobile degradation
+    见文件底部 @media (max-width: 1080px) 与 (max-width: 720px) 两段规则与注释。
+
+  数据：DESIGN-BRIEF.md §3 共享数据集（7 条，标题/意图/阶段/进度/下一步/更新时间完全一致）。
+  ============================================================================
+-->
+<style>
+/* ---------------------------------------------------------------------------
+   V3 局部样式。公共令牌与 .field/.orb/.glass/.sidebar/.ball/.btn/.chip/.num/
+   .proto-badge 一律复用 lumen-prototype.css，此处只写本版特有布局。
+
+   色彩纪律：无绿、无紫渐变、无霓虹按钮光、无纯黑影；阴影只用冷调
+   rgba(70,95,130,…)。"已完成"用光色变实（--v3-light → --v3-blue）表达，
+   不引入新色相。除侧栏「AI 在线」一处语义状态灯外，全文无装饰性圆点。
+--------------------------------------------------------------------------- */
+
+/* ===== 骨架与主区 ===== */
+/* 必须用 height（而非 min-height）：min-height 下 grid 行高会跟着内容长高，
+   整页被撑出纵向滚动，右栏球体留白带也被挤到视口之外而压到面板上。
+   固定高度后 board 严格等于视口，左栏列表与右栏面板各自内部滚动。 */
+.main {
+  height: calc(100vh - 40px);
+  padding: 26px 40px 26px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.page-head { margin-bottom: 16px; align-items: center; }
+.head-sub .num { color: var(--v3-text-sec); }
+
+/* ===== 双栏网格 ===== */
+/* 左栏：密集总览列表。右栏：常驻预览面板 + 球体留白带。 */
+.board {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 364px minmax(0, 1fr);
+  gap: 22px;
+}
+.list-col { display: flex; flex-direction: column; min-height: 0; }
+.list-panel { display: flex; flex-direction: column; min-height: 0; flex: 1; min-width: 0; padding: 14px 12px 12px; }
+
+/* ===== 左栏工具条：搜索 + 计数筛选 ===== */
+.tools { padding: 0 4px 12px; border-bottom: 1px solid var(--v3-border-strong); }
+
+/* 真实 search input（可聚焦可输入，不是伪装成可输入的静止框）。
+   刻意不挂共享的 .field：.field 是"全视口固定背景层"，挂到输入框上会把
+   它拔出常规流并铺满整屏。 */
+.search {
+  display: flex; align-items: center; gap: 9px;
+  background: var(--v3-surface-solid);
+  border: 1px solid var(--v3-border);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  border-radius: var(--v3-radius-pill);
+  padding: 9px 14px;
+}
+.search .mi { flex: 0 0 auto; color: var(--v3-text-faint); }
+.search input {
+  border: 0; outline: 0; background: transparent; width: 100%;
+  font-family: inherit; font-size: var(--fs-body); color: var(--v3-text);
+}
+.search input::placeholder { color: var(--v3-text-faint); }
+.search:focus-within { box-shadow: 0 0 0 3px var(--v3-light-wash); }
+
+.filters { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+.fchip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px; border-radius: var(--v3-radius-pill);
+  border: 1px solid var(--v3-border); background: rgba(255, 255, 255, 0.5);
+  color: var(--v3-text-sec); font-size: var(--fs-meta); cursor: pointer;
+  font-family: inherit;
+}
+.fchip .c { color: var(--v3-text-ter); font-variant-numeric: tabular-nums; }
+.fchip.on { background: var(--v3-surface-solid); color: var(--v3-text); box-shadow: 0 6px 16px rgba(70, 95, 130, 0.12); }
+.fchip.on .c { color: var(--v3-text-sec); }
+
+/* ===== 左栏列表 ===== */
+.plist { list-style: none; margin: 10px 0 0; padding: 0 4px 4px; overflow: auto; flex: 1; min-height: 0; }
+.row {
+  display: block;
+  padding: 9px 11px 10px; margin-bottom: 3px;
+  border-radius: var(--v3-radius);
+  border: 1px solid transparent;
+  color: inherit; text-decoration: none;
+}
+.row:hover { background: var(--v3-surface-hover); border-color: var(--v3-border-light); }
+.row.sel {
+  background: var(--v3-surface-solid);
+  border-color: var(--v3-border);
+  outline: 1px solid var(--v3-glass-outline);
+  box-shadow: 0 10px 26px rgba(70, 95, 130, 0.14);
+}
+.row.sel .rtitle { font-weight: 700; }
+
+/* min-width:0 + overflow:hidden 是省略号生效的前提：
+   否则长标题会直接压到右侧状态列上（对应 F18 硬截断）。 */
+.rmain { min-width: 0; overflow: hidden; }
+.rtitle {
+  display: block;
+  font-size: var(--fs-body); line-height: 1.3; font-weight: 500; color: var(--v3-text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.rmeta { display: flex; align-items: center; gap: 7px; margin-top: 6px; min-width: 0; overflow: hidden; }
+
+/* 阶段标记：一枚胶囊，内含「阶段名 + 5 段迷你刻度 + n/5」。
+   5 段 = 生命周期 5 步：已过段实心，当前段亮色发光，未到段为空。
+   这不是装饰点——段数直接编码进度，n/5 是色觉之外的第二编码。 */
+.stage {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 3px 9px 3px 10px; border-radius: var(--v3-radius-pill);
+  background: rgba(25, 30, 38, 0.035);
+  border: 1px solid var(--v3-border-light);
+  flex: 0 0 auto;
+}
+.stage .sl { font-size: var(--fs-meta); line-height: 1; color: var(--v3-text-ter); white-space: nowrap; }
+.stage .segbar { display: flex; gap: 2px; width: 34px; flex: 0 0 34px; }
+.stage .seg { flex: 1; height: 4px; border-radius: var(--v3-radius-pill); background: rgba(25, 30, 38, 0.1); }
+.stage .seg.done { background: var(--v3-blue); }
+.stage .seg.cur { background: var(--v3-light); box-shadow: 0 0 6px var(--v3-light-glow); }
+.stage .n { font-size: var(--fs-meta); line-height: 1; color: var(--v3-text-ter); font-variant-numeric: tabular-nums; }
+.stage.s-done .sl { color: var(--v3-blue); }
+
+/* 意图：纯文字，不与阶段胶囊争抢"胶囊语义"。
+   时间靠右推，状态钉在最右。 */
+.tint { font-size: var(--fs-meta); color: var(--v3-text-ter); white-space: nowrap; flex: 0 0 auto; }
+.rtime { font-size: var(--fs-meta); color: var(--v3-text-faint); white-space: nowrap; margin-left: auto; flex: 0 0 auto; }
+.row.sel .rtime { color: var(--v3-text-ter); }
+
+/* 谁在等谁：靠右，是这一行唯一的"行动归属"信号 */
+.rstate { display: inline-flex; align-items: center; flex: 0 0 auto; }
+.rstate .st { font-size: var(--fs-meta); white-space: nowrap; color: var(--v3-text-ter); }
+.rstate .st.need { color: var(--v3-text-sec); font-weight: 600; }
+.rstate .st.watch { color: var(--v3-text-ter); }
+.rstate .st.done { color: var(--v3-text-faint); }
+
+/* ===== 右栏：常驻预览面板 + 球体留白带 ===== */
+/* .detail-col 与 .pane 都必须写 min-height:0：默认的 min-height:auto 会让右栏
+   按内容高度撑开，把整块 board 顶出视口，左栏的搜索与筛选会被挤到屏幕外。
+   min-height:0 之后右栏严格等于可用高度，只在 .pane-scroll 内部滚动。 */
+.detail-col { display: flex; flex-direction: column; min-height: 0; }
+.pane { display: flex; flex-direction: column; min-height: 0; max-height: 100%; overflow: hidden; }
+.pane-scroll { padding: 18px 22px; overflow: auto; min-height: 0; }
+
+.phead { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.phead h2 {
+  margin: 0; font-size: 17px; font-weight: 700; line-height: 1.38; letter-spacing: -0.01em;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.pchips { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex: 0 0 auto; }
+.pchips .chip.strong { background: var(--v3-surface-solid); color: var(--v3-text); font-weight: 600; }
+.pgoal { margin: 10px 0 0; color: var(--v3-text-sec); line-height: 1.65; }
+
+/* 5 步阶段刻度：已完成 / 当前 / 未开始 三态 */
+.stepper { display: flex; margin: 16px 0 0; }
+.step { flex: 1; position: relative; padding-top: 26px; min-width: 0; text-align: center; }
+.step .dot {
+  position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+  width: 20px; height: 20px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: rgba(25, 30, 38, 0.05);
+  border: 1px solid var(--v3-border-strong);
+  color: var(--v3-text-faint);
+  font-size: var(--fs-meta); font-weight: 600;
+}
+.step .dot .num { font-size: var(--fs-meta); }
+.step::before {
+  content: ""; position: absolute; top: 10px; height: 1px;
+  left: -50%; right: 50%; background: var(--v3-border-strong);
+}
+.step:first-child::before { display: none; }
+.step .sl {
+  font-size: var(--fs-meta); line-height: 1.3; color: var(--v3-text-faint);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.step.done .dot { background: var(--v3-light-wash); border-color: rgba(143, 190, 232, 0.75); color: var(--v3-text-sec); }
+.step.done::before { background: rgba(143, 190, 232, 0.75); }
+.step.done .sl { color: var(--v3-text-ter); }
+.step.cur .dot {
+  background: var(--v3-surface-solid); border-color: var(--v3-border-hover); color: var(--v3-text);
+  box-shadow: 0 0 0 4px var(--v3-light-wash), 0 6px 16px rgba(70, 95, 130, 0.16);
+}
+.step.cur::before { background: rgba(143, 190, 232, 0.75); }
+.step.cur .sl { color: var(--v3-text); font-weight: 600; }
+
+/* 下一步：全屏唯一主按钮 + 一行理由（与工作台「现在先做」同源） */
+.act {
+  margin-top: 16px; padding: 13px 16px;
+  border-radius: var(--v3-radius);
+  background: rgba(25, 30, 38, 0.04);
+  border: 1px solid var(--v3-border);
+}
+.act-top { display: flex; align-items: center; gap: 14px; }
+.act-top .btn { flex: 1; justify-content: center; }
+.act .why { margin: 7px 0 0; color: var(--v3-text-sec); font-size: var(--fs-meta); line-height: 1.5; }
+
+/* 关键事实 + 最近动态。整块按 1280×800 的高度预算收紧，
+   使「下一步 + 事实 + 最近动态」在无滚动的情况下全部可见。 */
+.sect { margin-top: 13px; }
+.sect-h { font-size: var(--fs-meta); color: var(--v3-text-ter); margin-bottom: 4px; }
+.fact { display: flex; align-items: baseline; gap: 10px; padding: 2px 0; border-top: 1px solid var(--v3-border-strong); }
+.fact:first-of-type { border-top: 0; padding-top: 0; }
+.fact .k { flex: 0 0 62px; color: var(--v3-text-ter); font-size: var(--fs-meta); }
+.fact .v { flex: 1; min-width: 0; font-size: var(--fs-meta); color: var(--v3-text-sec); line-height: 1.5; }
+.acts { list-style: none; margin: 0; padding: 0; }
+/* 动态压成单行：时间与事件同一行，省下 4×21px 的换行高度 */
+.acts li {
+  display: flex; align-items: baseline; gap: 10px;
+  padding: 4px 0; border-top: 1px solid var(--v3-border-strong);
+  font-size: var(--fs-meta); line-height: 1.5; color: var(--v3-text-sec);
+}
+.acts li:first-child { border-top: 0; padding-top: 0; }
+.acts .at { flex: 0 0 62px; color: var(--v3-text-faint); }
+.pfoot {
+  margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--v3-border-strong);
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+.pfoot .note { font-size: var(--fs-meta); color: var(--v3-text-faint); }
+
+/* 悬浮球留白带：球占位在右栏面板之下、页面底边之上的空档里（margin-top:auto
+   把它推到该列最底），因此球永远不会压到预览面板或列表控件。
+   这是对 F7（球遮挡右栏控件 8–9%）的直接修正。 */
+.ball-slot { flex: 0 0 auto; margin-top: auto; height: 80px; position: relative; }
+.ball-slot .ball { right: 0; bottom: 0; }
+
+/* ===========================================================================
+   移动端退化 / Mobile degradation —— 单栏
+   ---------------------------------------------------------------------------
+   断点纪律：两栏只在 ≥1081px 成立。M3 允许双栏自 840dp 起，本地按
+   EVALUATION-RUBRIC A6 更保守地收到 1080px——本页两栏密度高，中段宽度下
+   左右两侧都会过窄。
+
+   ≤1080px：双栏网格塌成单列，右栏从"常驻预览"退化为"选中就近展开的详情块"
+   （仍在列表之后、同一 DOM 顺序，读起来等于一个展开行）；面板不再内部滚动，
+   整页纵向滚动；球改为固定贴屏幕右下角，彻底离开内容流。
+
+   ≤720px：按 A9「移动端只保留 标题 + 状态」收窄——意图、步数计数、更新时间
+   全部隐藏，只留标题与阶段刻度（谁在等谁）；行高升到约 78px，优先可点可读，
+   不再优先密度。步骤条只保留当前步标签，其余 4 步退化为刻度点，语义仍由
+   aria-label 完整承载。
+
+   加载 / 空 / 错误三态不在本原型取样范围内（本页固定展示"有 7 条数据"的一屏）。
+   =========================================================================== */
+@media (max-width: 1080px) {
+  .board { grid-template-columns: minmax(0, 1fr); flex: none; }
+  .main { height: auto; min-height: 0; overflow: visible; }
+  .list-panel, .pane { position: static; max-height: none; }
+  .plist, .pane-scroll { overflow: visible; }
+  .ball-slot { height: 0; }
+  .ball-slot .ball { position: fixed; right: 18px; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); }
+}
+@media (max-width: 720px) {
+  .main { padding: 20px 16px 104px; }
+  .page-head { flex-direction: column; align-items: flex-start; }
+  .row { padding: 13px 13px 14px; }
+  /* A9：移动端每行只保留「标题 + 状态」两个字段，其余全部进详情 */
+  .stage .n, .tint, .rtime { display: none; }
+  .rmeta { margin-top: 8px; justify-content: flex-start; }
+  .stage .segbar { width: 52px; flex: 0 0 52px; }
+  .step .sl { visibility: hidden; }
+  .step.cur .sl { visibility: visible; }
+  .act-top { flex-direction: column; align-items: stretch; }
+  .pchips { flex-direction: row; flex-wrap: wrap; justify-content: flex-start; }
+}
+</style>
+</head>
+<body>
+
+<!-- 背景三层（DESIGN.md §4）：渐变场 + 漂移光晕 + 极淡点阵 -->
+<div class="field" aria-hidden="true">
+  <div class="orb a"></div>
+  <div class="orb b"></div>
+  <div class="orb c"></div>
+</div>
+
+<div class="shell">
+
+  <!-- 左侧栏：复用 .sidebar 结构，当前页「内容」为 active -->
+  <aside class="sidebar glass">
+    <div class="brand"><span class="mark">T</span><span>TopicAI</span></div>
+    <a class="navlink" href="#"><span class="nicon">报</span>晨报</a>
+    <a class="navlink" href="#"><span class="nicon">架</span>产出架</a>
+    <a class="navlink" href="#"><span class="nicon">件</span>收件箱</a>
+    <a class="navlink" href="#"><span class="nicon">急</span>急稿</a>
+    <div class="nav-group">经营</div>
+    <a class="navlink" href="#"><span class="nicon">周</span>周复盘</a>
+    <a class="navlink" href="#"><span class="nicon">长</span>成长</a>
+    <div class="nav-group">管理</div>
+    <a class="navlink active" href="#"><span class="nicon">内</span>内容</a>
+    <a class="navlink" href="#"><span class="nicon">机</span>机会</a>
+    <a class="navlink" href="#"><span class="nicon">材</span>素材</a>
+    <a class="navlink" href="#"><span class="nicon">我</span>我的</a>
+    <div class="sb-foot">
+      <div class="ai"><b></b>AI 在线 · 已完成 2 次校验</div>
+      <div class="rowline"><span>本周产出</span><span class="num">3</span></div>
+      <div class="rowline"><span>观察中</span><span class="num">2</span></div>
+    </div>
+  </aside>
+
+  <main class="main">
+
+    <!-- 页面标题区：标题 + 一句副标题 + 单一主动作。
+         主动作是「新建」，不重复右栏「确认候选内容」的同意图 CTA。 -->
+    <header class="page-head">
+      <div class="head-sub">
+        <h1 class="page-title">内容</h1>
+        <p class="page-sub">
+          <span class="num">7</span> 个项目在跑 · <span class="num">4</span> 个等你决定 · <span class="num">2</span> 个在等数据
+        </p>
+      </div>
+      <button class="btn btn-primary">＋ 新建内容项目</button>
+    </header>
+
+    <div class="board">
+
+      <!-- ================= 左栏：密集总览列表 ================= -->
+      <section class="list-col" aria-label="内容项目总览">
+        <div class="list-panel glass">
+
+          <div class="tools">
+            <label class="search">
+              <svg class="mi" width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <circle cx="6.8" cy="6.8" r="4.6" stroke="currentColor" stroke-width="1.5"></circle>
+                <path d="M10.4 10.4 14 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>
+              </svg>
+              <input type="search" placeholder="搜索标题或意图" aria-label="搜索项目标题或意图">
+            </label>
+            <div class="filters" role="group" aria-label="按状态筛选">
+              <button class="fchip on" aria-pressed="true">全部 <span class="c num">7</span></button>
+              <button class="fchip" aria-pressed="false">需要我 <span class="c num">4</span></button>
+              <button class="fchip" aria-pressed="false">观察中 <span class="c num">2</span></button>
+            </div>
+          </div>
+
+          <ul class="plist">
+
+            <!-- 1 · 意图确认 · 1/5 -->
+            <li>
+              <a class="row" href="#">
+                <span class="rtitle">新手养多肉为什么总烂根</span>
+                  <span class="rmeta"><span class="stage"><span class="sl">意图确认</span><span class="segbar" role="img" aria-label="5 步生命周期刻度"><i class="seg cur"></i><i class="seg"></i><i class="seg"></i><i class="seg"></i><i class="seg"></i></span><span class="n">1/5</span></span>
+                    <span class="tint">教方法</span>
+                    <time class="rtime">今天 10:12</time>
+                  <span class="rstate"><span class="st need">需要我</span></span>
+                  </span>
+              </a>
+            </li>
+
+            <!-- 2 · 候选内容 · 2/5 · 当前选中 -->
+            <li>
+              <a class="row sel" href="#" aria-current="true">
+                <span class="rtitle">番茄钟别在下班后补，改到第二天早上</span>
+                  <span class="rmeta"><span class="stage"><span class="sl">候选内容</span><span class="segbar" role="img" aria-label="5 步生命周期刻度"><i class="seg done"></i><i class="seg cur"></i><i class="seg"></i><i class="seg"></i><i class="seg"></i></span><span class="n">2/5</span></span>
+                    <span class="tint">踩坑复盘</span>
+                    <time class="rtime">今天 09:58</time>
+                  <span class="rstate"><span class="st need">需要我</span></span>
+                  </span>
+              </a>
+            </li>
+
+            <!-- 3 · 证据采访 · 1/5 -->
+            <li>
+              <a class="row" href="#">
+                <span class="rtitle">阳台辣椒终于结果了</span>
+                  <span class="rmeta"><span class="stage"><span class="sl">证据采访</span><span class="segbar" role="img" aria-label="5 步生命周期刻度"><i class="seg cur"></i><i class="seg"></i><i class="seg"></i><i class="seg"></i><i class="seg"></i></span><span class="n">1/5</span></span>
+                    <span class="tint">记录</span>
+                    <time class="rtime">今天 09:41</time>
+                  <span class="rstate"><span class="st need">需要我</span></span>
+                  </span>
+              </a>
+            </li>
+
+            <!-- 4 · 发布前检查 · 4/5 -->
+            <li>
+              <a class="row" href="#">
+                <span class="rtitle">我用了三个月把通勤时间变成读书时间</span>
+                  <span class="rmeta"><span class="stage"><span class="sl">发布前检查</span><span class="segbar" role="img" aria-label="5 步生命周期刻度"><i class="seg done"></i><i class="seg done"></i><i class="seg done"></i><i class="seg cur"></i><i class="seg"></i></span><span class="n">4/5</span></span>
+                    <span class="tint">分享</span>
+                    <time class="rtime">昨天 21:30</time>
+                  <span class="rstate"><span class="st need">需要我</span></span>
+                  </span>
+              </a>
+            </li>
+
+            <!-- 5 · 观察窗口 · 5/5 -->
+            <li>
+              <a class="row" href="#">
+                <span class="rtitle">第一次做手冲咖啡翻车记录</span>
+                  <span class="rmeta"><span class="stage"><span class="sl">观察窗口</span><span class="segbar" role="img" aria-label="5 步生命周期刻度"><i class="seg done"></i><i class="seg done"></i><i class="seg done"></i><i class="seg done"></i><i class="seg cur"></i></span><span class="n">5/5</span></span>
+                    <span class="tint">记录</span>
+                    <time class="rtime">3 天前</time>
+                  <span class="rstate"><span class="st watch">观察中 <span class="num">4</span> 天</span></span>
+                  </span>
+              </a>
+            </li>
+
+            <!-- 6 · 待复盘 · 5/5 -->
+            <li>
+              <a class="row" href="#">
+                <span class="rtitle">租房改造：800 元把阳台变成工作角</span>
+                  <span class="rmeta"><span class="stage"><span class="sl">待复盘</span><span class="segbar" role="img" aria-label="5 步生命周期刻度"><i class="seg done"></i><i class="seg done"></i><i class="seg done"></i><i class="seg done"></i><i class="seg cur"></i></span><span class="n">5/5</span></span>
+                    <span class="tint">分享</span>
+                    <time class="rtime">5 天前</time>
+                  <span class="rstate"><span class="st watch">待回填</span></span>
+                  </span>
+              </a>
+            </li>
+
+            <!-- 7 · 已完成 · 5/5 -->
+            <li>
+              <a class="row" href="#">
+                <span class="rtitle">如何判断自己适合做知识博主</span>
+                  <span class="rmeta"><span class="stage s-done">
+                    <span class="sl">已完成</span><span class="segbar" role="img" aria-label="5 步生命周期刻度"><i class="seg done"></i><i class="seg done"></i><i class="seg done"></i><i class="seg done"></i><i class="seg done"></i></span><span class="n">5/5</span>
+                  </span>
+                    <span class="tint">分享</span>
+                    <time class="rtime">12 天前</time>
+                  <span class="rstate"><span class="st done">已沉淀 <span class="num">1</span> 条</span></span>
+                  </span>
+              </a>
+            </li>
+
+          </ul>
+        </div>
+      </section>
+
+      <!-- ================= 右栏：常驻详情预览 ================= -->
+      <section class="detail-col" aria-live="polite">
+
+        <div class="pane glass">
+          <div class="pane-scroll">
+
+            <div class="phead">
+              <h2>番茄钟别在下班后补，改到第二天早上</h2>
+              <div class="pchips">
+                <span class="chip strong">候选内容 · 2/5</span>
+                <span class="chip">需要你确认</span>
+              </div>
+            </div>
+
+            <p class="pgoal">
+              目标：把「下班后补番茄钟」这个反复失败的习惯，改成一条可验证的调整记录。
+            </p>
+
+            <!-- 5 步阶段刻度：已完成 / 当前 / 未开始 -->
+            <div class="stepper" role="img"
+                 aria-label="生命周期 5 步：意图确认已完成，证据采访已完成，候选内容进行中，发布前检查未开始，观察与复盘未开始">
+              <div class="step done">
+                <span class="dot"><span class="num">1</span></span>
+                <span class="sl">意图确认</span>
+              </div>
+              <div class="step done">
+                <span class="dot"><span class="num">2</span></span>
+                <span class="sl">证据采访</span>
+              </div>
+              <div class="step cur">
+                <span class="dot"><span class="num">3</span></span>
+                <span class="sl">候选内容</span>
+              </div>
+              <div class="step">
+                <span class="dot"><span class="num">4</span></span>
+                <span class="sl">发布前检查</span>
+              </div>
+              <div class="step">
+                <span class="dot"><span class="num">5</span></span>
+                <span class="sl">观察与复盘</span>
+              </div>
+            </div>
+
+            <!-- 下一步：全屏唯一主按钮 + 一行解释 -->
+            <div class="act">
+              <div class="act-top">
+                <button class="btn btn-primary">确认候选内容</button>
+              </div>
+              <p class="why">
+                3 条候选已按你的原话改写完毕，先确认哪条准确表达了你。
+              </p>
+            </div>
+
+            <!-- 关键事实 -->
+            <div class="sect">
+              <div class="sect-h">关键事实</div>
+              <div class="fact">
+                <span class="k">事实</span>
+                <span class="v"><span class="num">1</span> 条 · 「连续 3 天下班后没补上番茄钟」出自 9 月 12 日你的原话</span>
+              </div>
+              <div class="fact">
+                <span class="k">观察窗</span>
+                <span class="v"><span class="num">7</span> 天 · 发布后开始计时，含 1 次回填提醒</span>
+              </div>
+            </div>
+
+            <!-- 最近动态 -->
+            <div class="sect">
+              <div class="sect-h">最近动态</div>
+              <ul class="acts">
+                <li><span class="at num">今天 09:58</span><span>AI 生成了 3 条候选，等你确认</span></li>
+                <li><span class="at num">今天 09:52</span><span>你回答了追问：修改发生在第二天早上 8 点</span></li>
+                <li><span class="at num">今天 09:41</span><span>从你的意图「下班后补番茄钟总失败」建立项目</span></li>
+              </ul>
+            </div>
+
+            <div class="pfoot">
+              <span class="note">列表里的下一步与工作台「现在先做」同源</span>
+              <a class="btn btn-ghost btn-sm" href="#">打开完整工作台 →</a>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- 球体留白带：位于面板之下、页面底边之上，不压任何控件（F7 修正） -->
+        <div class="ball-slot">
+          <div class="ball" aria-hidden="true">✦</div>
+        </div>
+
+      </section>
+
+    </div>
+  </main>
+</div>
+
+<div class="proto-badge">V3 · 双栏总览</div>
+
+</body>
+</html>

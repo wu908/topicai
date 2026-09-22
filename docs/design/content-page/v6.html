@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>V6 · 今日聚焦 — 内容页原型</title>
+<link rel="stylesheet" href="lumen-prototype.css" />
+<!--
+  ===========================================================================
+  V6 · 今日聚焦 (Focus Hero)  ——  内容页 /content 设计原型
+  ---------------------------------------------------------------------------
+  版本名：V6 · 今日聚焦
+  核心主张：这一屏先回答「今天该做哪一件」，再回答「还有什么」。
+            顶部一张聚焦主卡承载唯一推荐项目，下方是被刻意压小的清单。
+            与产品既有的晨报哲学同源——今天只有一件事值得做。
+  优化什么：决策疲劳（7 个项目平铺时不知道先点哪个）；
+            F11 阶段不可扫读、无进度、无时间（主卡给 5 步阶段器 + n/5 + 更新时间，
+            行内给阶段文字 + n/5 + 更新时间）；
+            F12 两处「下一步」互相矛盾（主卡的主动作即工作台同源的下一步，
+            全页只此一处声明「现在先做」）；
+            F18 长标题硬截断（行标题 overflow ellipsis）；
+            F7 悬浮球遮挡（球独占右侧留白带，永不压住任何控件）。
+  主动放弃：并行推进多个项目的效率（一次只推一件，切项目要多一步）；
+            横向规模化管理（无排序控件、无保存视图、无批量操作、无搜索）。
+  移动端退化：见下方 <style> 中「移动端退化」注释块，含 ≤1100 / ≤900 / ≤680 三档。
+  ===========================================================================
+-->
+<style>
+  /* ======================================================================
+     V6 私有层。公共视觉（背景场 / 玻璃 / 按钮 / 胶囊 / 数字 / 徽标）全部复用
+     lumen-prototype.css，此处只写本版特有版式。
+     遵守：圆角锁（胶囊 9999 / 卡片 22 / 内嵌 15–16）、冷调阴影、无绿无紫、
+           无 emoji 图标、无装饰性圆点、中点每行 ≤1、大写 kicker 全页 1 处。
+     ====================================================================== */
+
+  /* -- F7 修正：为悬浮球预留右侧留白带 ------------------------------------
+     内容列封顶 840px，视口右侧因此空出一条专属留白带，
+     悬浮球（80px，right:40px）与版本徽标都停在这条带子里，
+     永不覆盖任何按钮、行内动作或时间。这是对实测问题 F7（遮挡右栏控件 8–9%）的正面回答。
+     ---------------------------------------------------------------------- */
+  .wrap { max-width: 840px; }
+  .main { padding-bottom: 40px; }
+
+  /* -- 页面标题区 -------------------------------------------------------- */
+  .page-head { margin-bottom: 12px; }
+
+  /* -- 顶部聚焦主卡 ------------------------------------------------------ */
+  .hero { padding: 18px 30px; }
+
+  .hero-top { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+  /* 全页唯一一处大写 kicker */
+  .kicker {
+    font-family: var(--font-grotesk); font-size: var(--fs-meta); font-weight: 600;
+    letter-spacing: 0.2em; text-transform: uppercase; color: var(--v3-text-ter);
+  }
+  .kicker .zh { font-family: var(--font-sans); letter-spacing: 0.06em; }
+
+  .hero-tools { display: flex; align-items: center; gap: 4px; }
+  .hero-tools .rule { font-size: var(--fs-meta); color: var(--v3-text-ter); padding-right: 2px; }
+  .hero-tools .btn-text { color: var(--v3-text-sec); }
+
+  /* 推荐理由：内嵌玻璃，不用渐变、不用强调色块，靠留白与层级说话 */
+  .why { display: flex; align-items: baseline; gap: 14px; margin-top: 8px; padding: 9px 16px; }
+  .why-lbl { font-size: var(--fs-meta); color: var(--v3-text-ter); white-space: nowrap; }
+  .why p { margin: 0; font-size: var(--fs-body); line-height: 1.65; color: var(--v3-text); }
+
+  .hero-title {
+    margin: 8px 0 0; font-size: var(--fs-display); font-weight: 800;
+    letter-spacing: -0.01em; line-height: 1.35;
+  }
+  .hero-meta { display: flex; align-items: center; gap: 12px; margin-top: 8px; }
+  .hero-meta .upd { font-size: var(--fs-meta); color: var(--v3-text-ter); }
+
+  /* -- 5 步阶段器 -------------------------------------------------------- */
+  .steps-head { display: flex; align-items: baseline; justify-content: space-between; margin-top: 10px; }
+  .steps-head .lbl { font-size: var(--fs-meta); color: var(--v3-text-ter); }
+  .steps-head .pos { font-size: var(--fs-meta); color: var(--v3-text-sec); }
+
+  .steps { list-style: none; display: flex; align-items: center; margin: 8px 0 0; padding: 0; }
+  .step { display: flex; align-items: center; gap: 7px; flex: 1 1 auto; min-width: 0; }
+  .step::after {
+    content: ""; flex: 1 1 auto; min-width: 8px; height: 1px;
+    margin: 0 10px; background: rgba(23, 28, 38, 0.1);
+  }
+  .step:last-child::after { display: none; }
+  .step.done::after { background: rgba(23, 28, 38, 0.22); }
+  .step .node {
+    flex: 0 0 auto; width: 22px; height: 22px; border-radius: 50%;
+    display: grid; place-items: center; font-size: var(--fs-meta); font-weight: 600;
+    background: rgba(255, 255, 255, 0.72);
+    border: 1px solid rgba(23, 28, 38, 0.12); color: var(--v3-text-ter);
+  }
+  .step .s-label { font-size: var(--fs-meta); color: var(--v3-text-faint); white-space: nowrap; }
+  .step.done .node { background: #fff; border-color: rgba(23, 28, 38, 0.22); color: var(--v3-text-sec); }
+  .step.done .s-label { color: var(--v3-text-ter); }
+  /* 当前步：实心墨节点 + 冰蓝焦点环（光色只作光效，DESIGN.md §2） */
+  .step.now .node {
+    background: var(--v3-accent); border-color: var(--v3-accent); color: #fff;
+    box-shadow: 0 0 0 4px var(--v3-light-soft);
+  }
+  .step.now .s-label { color: var(--v3-text); font-weight: 700; }
+
+  /* -- 主卡动作区 -------------------------------------------------------- */
+  .hero-act { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-top: 12px; }
+  .act-main { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+  .btn-lg { padding: 15px 26px; font-size: var(--fs-subtitle); }
+  .act-note { margin: 0; font-size: var(--fs-meta); color: var(--v3-text-ter); }
+  .hero-act .alt { color: var(--v3-text-sec); }
+
+  /* -- 下方紧凑清单 ------------------------------------------------------ */
+  .blk { margin-top: 13px; }
+  .blk-head {
+    display: flex; align-items: center; gap: 10px;
+    padding: 0 4px 8px; border-bottom: 1px solid rgba(23, 28, 38, 0.08);
+  }
+  .blk-title { margin: 0; font-size: var(--fs-subtitle); font-weight: 700; }
+  .blk-count { font-size: var(--fs-meta); color: var(--v3-text-ter); }
+  .blk-note { margin-left: auto; font-size: var(--fs-meta); color: var(--v3-text-ter); }
+
+  .rows { list-style: none; margin: 0; padding: 0; }
+  .row {
+    display: flex; align-items: center; gap: 16px;
+    padding: 6px 4px; border-bottom: 1px solid rgba(23, 28, 38, 0.06);
+  }
+  .row:last-child { border-bottom: none; }
+  .r-title {
+    flex: 1 1 auto; min-width: 0; font-size: var(--fs-body); font-weight: 600;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .r-chip { flex: 0 0 92px; }
+  .r-stage { flex: 0 0 150px; display: flex; align-items: center; gap: 7px; font-size: var(--fs-meta); color: var(--v3-text-ter); }
+  .r-stage b { font-weight: 600; color: var(--v3-text-sec); }
+  .r-due {
+    font-style: normal; padding: 2px 8px; border-radius: var(--v3-radius-pill);
+    background: var(--v3-amber-bg); color: var(--v3-amber); white-space: nowrap;
+  }
+  .r-time { flex: 0 0 84px; text-align: right; font-size: var(--fs-meta); color: var(--v3-text-faint); }
+  .r-act { flex: 0 0 126px; text-align: right; }
+  /* 行内动作刻意压到最小：它的存在感必须低于主卡的主动作 */
+  .r-act .btn { padding: 6px 9px; font-size: var(--fs-meta); }
+
+  /* 已完成组：仍给出「标题 / 意图 / 阶段 / 时间 / 动作」五件事，
+     但整组收进内嵌玻璃、字号与墨色下调，读起来就是一条折叠摘要。 */
+  .blk-done { margin-top: 10px; padding: 4px 18px 2px; }
+  .blk-done .blk-head { border-bottom-color: rgba(23, 28, 38, 0.06); }
+  .blk-done .blk-title { font-weight: 600; color: var(--v3-text-sec); }
+  .blk-done .r-title { font-weight: 500; color: var(--v3-text-sec); }
+  .blk-done .r-stage { color: var(--v3-text-faint); }
+  .blk-done .row { padding: 5px 4px; border-bottom: none; }
+
+  /* 版本徽标：同样停进右侧留白带（悬浮球正上方），不压内容 */
+  .proto-badge { left: auto; right: 20px; bottom: 132px; padding: 8px 14px; }
+
+  /* 图标位一律留空：本原型不引第三方图标库，也不拿 emoji 冒充图标（DESIGN.md §5）。
+     侧栏与行内只用文字标签 + 语义状态（数字、阶段名、时间）。 */
+  .navlink { text-decoration: none; }
+
+  /* ======================================================================
+     移动端退化
+     ----------------------------------------------------------------------
+     ≤1100px：右侧留白带由「内容列封顶」换成显式右内边距（132px），悬浮球继续
+              独占该带、继续不压任何控件；行内隐藏「意图」列、阶段列收窄；
+              版本徽标退到左下角（脚手架层，允许压住侧栏底部）。
+     ≤900px ：侧边栏收起（display:none），主区单列；顶部聚焦卡改为纵向——
+              推荐理由在标题之上，主动作按钮整行宽，「先看别的」落到按钮下方；
+              5 步阶段器放弃连接线，退化为可换行的「序号 + 阶段名」清单。
+     ≤680px ：行改成两行——第一行标题（允许换行，不再省略号截断），第二行
+              阶段 + 时间 + 动作（动作靠右，阶段列可内部换行，保证「还剩 n 天」
+              不把行挤出屏幕）；页面底部留 140px 安全区，悬浮球与版本徽标吸底。
+              诚实说明：移动端悬浮球是 FAB 形态，页面未滚到底时它仍会浮在清单
+              之上，只有滚到底部时最后一行才完全落在安全区上方——这一档不宣称
+              「零遮挡」，零遮挡只在 ≥901px 的右侧留白带里成立。
+     ====================================================================== */
+  @media (max-width: 1100px) {
+    .wrap { max-width: none; }
+    .main { padding-right: 132px; }
+    .r-chip { display: none; }
+    .r-stage { flex: 0 0 126px; }
+    .proto-badge { left: 16px; right: auto; bottom: 16px; }
+  }
+  @media (max-width: 900px) {
+    .sidebar { display: none; }
+    .main { padding: 24px 132px 40px 24px; }
+    .hero { padding: 20px 22px; }
+    .hero-title { font-size: var(--fs-title); }
+    /* 阶段器在窄屏放弃连接线，退化为可换行的「序号 + 阶段名」清单 */
+    .steps { flex-wrap: wrap; gap: 8px 20px; }
+    .step { flex: 0 0 auto; }
+    .step::after { display: none; }
+    .hero-act { flex-direction: column; align-items: stretch; gap: 12px; }
+    .act-main { align-items: stretch; }
+    .btn-lg { width: 100%; justify-content: center; }
+    .hero-act .alt { align-self: flex-start; }
+  }
+  @media (max-width: 680px) {
+    .main { padding: 18px 24px 140px; }
+    .row { flex-wrap: wrap; gap: 6px 12px; }
+    .r-title { flex: 1 1 100%; white-space: normal; }
+    /* 阶段列允许收缩并内部换行，避免「还剩 n 天」把行挤出屏幕 */
+    .r-stage { flex: 1 1 auto; min-width: 0; flex-wrap: wrap; }
+    .r-time { flex: 0 0 auto; text-align: left; }
+    .r-act { flex: 0 0 auto; margin-left: auto; }
+    .ball { right: 16px; bottom: 24px; }
+    .proto-badge { bottom: 16px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- 背景三层：渐变场 + 漂移光晕 + 点阵（DESIGN.md §4）
+     只放 a / c 两个冷调（冰蓝）光晕；共享样式里的 .orb.b 偏紫，本版主动不用。 -->
+<div class="field" aria-hidden="true">
+  <span class="orb a"></span>
+  <span class="orb c"></span>
+</div>
+
+<div class="shell">
+
+  <!-- 侧边栏：复用 .sidebar 结构，当前页「内容」active -->
+  <aside class="sidebar glass">
+    <div class="brand"><span class="mark">T</span><span>TopicAI</span></div>
+
+    <a class="navlink" href="#">晨报</a>
+    <a class="navlink" href="#">产出架</a>
+    <a class="navlink" href="#">收件箱</a>
+    <a class="navlink" href="#">急稿</a>
+    <a class="navlink" href="#">周复盘</a>
+    <a class="navlink" href="#">成长</a>
+
+    <div class="nav-group">管理</div>
+    <a class="navlink active" href="#" aria-current="page">内容</a>
+    <a class="navlink" href="#">机会</a>
+    <a class="navlink" href="#">素材</a>
+    <a class="navlink" href="#">我的</a>
+
+    <div class="sb-foot">
+      <div class="ai"><b></b>AI 正常 · 本地编排</div>
+      <div class="rowline"><span>本周承诺</span><span class="num">3</span></div>
+      <div class="rowline"><span>已发</span><span class="num">1</span></div>
+    </div>
+  </aside>
+
+  <div class="main">
+    <div class="wrap">
+
+      <!-- 页面标题区：内容 + 一句副标题 + 唯一主动作（新建项目）。
+           副标题讲状态，主动作讲创建，同意图 CTA 全页只出现一次。 -->
+      <header class="page-head">
+        <div>
+          <h1 class="page-title">内容</h1>
+          <p class="page-sub">
+            <span class="num">6</span> 个项目在走，今天只有 <span class="num">1</span> 件在等你点头。
+          </p>
+        </div>
+        <button class="btn btn-primary" type="button">新建内容项目</button>
+      </header>
+
+      <!-- ================= 顶部聚焦主卡 ================= -->
+      <section class="hero glass" aria-labelledby="hero-title">
+        <div class="hero-top">
+          <span class="kicker">Focus<span class="zh"> · 今天只有一件事值得做</span></span>
+          <span class="hero-tools">
+            <span class="rule">AI 只提议，人确认</span>
+            <button class="btn btn-text btn-sm" type="button">换一条</button>
+          </span>
+        </div>
+
+        <div class="why glass-inner">
+          <span class="why-lbl">为什么是它</span>
+          <p>AI 已经写完候选，只等你点头；其余几条要么还没到这一步，要么只是等一次检查或等时间。</p>
+        </div>
+
+        <h2 class="hero-title" id="hero-title">番茄钟别在下班后补，改到第二天早上</h2>
+
+        <div class="hero-meta">
+          <span class="chip">踩坑复盘</span>
+          <span class="upd">更新于 <time class="num">今天 09:58</time></span>
+        </div>
+
+        <div class="steps-head">
+          <span class="lbl">生命周期阶段</span>
+          <span class="pos">第 <span class="num">3</span> / <span class="num">5</span> 步</span>
+        </div>
+        <ol class="steps">
+          <li class="step done"><span class="node num">1</span><span class="s-label">意图确认</span></li>
+          <li class="step done"><span class="node num">2</span><span class="s-label">证据采访</span></li>
+          <li class="step now" aria-current="step"><span class="node num">3</span><span class="s-label">候选内容</span></li>
+          <li class="step"><span class="node num">4</span><span class="s-label">发布前检查</span></li>
+          <li class="step"><span class="node num">5</span><span class="s-label">观察与复盘</span></li>
+        </ol>
+
+        <div class="hero-act">
+          <div class="act-main">
+            <button class="btn btn-primary btn-lg" type="button">确认候选内容是否准确表达了你</button>
+            <p class="act-note">逐条确认候选是否是你想说的，约 <span class="num">2</span> 分钟。</p>
+          </div>
+          <button class="btn btn-text alt" type="button">先看别的</button>
+        </div>
+      </section>
+
+      <!-- ================= 其它进行中 ================= -->
+      <section class="blk" aria-labelledby="blk-doing">
+        <header class="blk-head">
+          <h3 class="blk-title" id="blk-doing">其它进行中</h3>
+          <span class="blk-count num">5</span>
+          <span class="blk-note">最近更新在前</span>
+        </header>
+        <ul class="rows">
+          <li class="row">
+            <span class="r-title">新手养多肉为什么总烂根</span>
+            <span class="r-chip"><span class="chip">教方法</span></span>
+            <span class="r-stage">意图确认 <b class="num">1/5</b></span>
+            <time class="r-time num">今天 10:12</time>
+            <span class="r-act"><button class="btn btn-text btn-sm" type="button">确认内容目的</button></span>
+          </li>
+          <li class="row">
+            <span class="r-title">阳台辣椒终于结果了</span>
+            <span class="r-chip"><span class="chip">记录</span></span>
+            <span class="r-stage">证据采访 <b class="num">1/5</b></span>
+            <time class="r-time num">今天 09:41</time>
+            <span class="r-act"><button class="btn btn-text btn-sm" type="button">补充一段真实经历</button></span>
+          </li>
+          <li class="row">
+            <span class="r-title">我用了三个月把通勤时间变成读书时间</span>
+            <span class="r-chip"><span class="chip">分享</span></span>
+            <span class="r-stage">发布前检查 <b class="num">4/5</b></span>
+            <time class="r-time num">昨天 21:30</time>
+            <span class="r-act"><button class="btn btn-text btn-sm" type="button">运行发布前检查</button></span>
+          </li>
+          <li class="row">
+            <span class="r-title">第一次做手冲咖啡翻车记录</span>
+            <span class="r-chip"><span class="chip">记录</span></span>
+            <span class="r-stage">观察窗口 <b class="num">5/5</b><em class="r-due">还剩 <span class="num">4</span> 天</em></span>
+            <time class="r-time num">3 天前</time>
+            <span class="r-act"><button class="btn btn-text btn-sm" type="button">回填实际表现</button></span>
+          </li>
+          <li class="row">
+            <span class="r-title">租房改造：800 元把阳台变成工作角</span>
+            <span class="r-chip"><span class="chip">分享</span></span>
+            <span class="r-stage">待复盘 <b class="num">5/5</b></span>
+            <time class="r-time num">5 天前</time>
+            <span class="r-act"><button class="btn btn-text btn-sm" type="button">对照发布结果</button></span>
+          </li>
+        </ul>
+      </section>
+
+      <!-- ================= 已完成（折叠摘要） ================= -->
+      <section class="blk blk-done glass-inner" aria-labelledby="blk-done">
+        <header class="blk-head">
+          <h3 class="blk-title" id="blk-done">已完成</h3>
+          <span class="blk-count num">1</span>
+          <button class="btn btn-text btn-sm blk-note" type="button">展开</button>
+        </header>
+        <ul class="rows">
+          <li class="row">
+            <span class="r-title">如何判断自己适合做知识博主</span>
+            <span class="r-chip"><span class="chip">分享</span></span>
+            <span class="r-stage">已完成 <b class="num">5/5</b></span>
+            <time class="r-time num">12 天前</time>
+            <span class="r-act"><button class="btn btn-text btn-sm" type="button">看沉淀的经验</button></span>
+          </li>
+        </ul>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<!-- 悬浮球：停进右侧专属留白带（内容列 840px 封顶之外），不覆盖任何控件 -->
+<div class="ball" role="button" tabindex="0" aria-label="打开创作助手">✦</div>
+
+<div class="proto-badge num">V6 · 今日聚焦</div>
+
+<!--
+  四态说明（DESIGN.md §9.9；评审卡 A4 / A5 —— 本文件只演示「有数据」态，其余三态在此写清）
+  · 加载中：聚焦卡位置先出内容形状骨架（理由行 + 标题行 + 5 个阶段节点 + 按钮位），
+            下方清单出 5 行等高骨架；请求进行中绝不渲染「还没有内容」。
+  · 空态（0 个项目）：聚焦卡位换成空态卡，说清「为什么空」（还没有内容项目）与
+            「下一步」（新建内容项目），页头主动作保持唯一，不留半屏死白。
+  · 错误态：聚焦卡位换成错误卡，写明失败原因 + 「重试」；清单不残留上一次的旧数据。
+  · 全部完成（无进行中项目）：聚焦卡位换成「今天没有需要你点头的事」+ 最近一条
+            已完成项目的沉淀入口，清单只剩「已完成」组。
+-->
+
+</body>
+</html>

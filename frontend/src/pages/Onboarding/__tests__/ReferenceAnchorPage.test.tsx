@@ -211,4 +211,53 @@ describe('ReferenceAnchorPage', () => {
     resolveImport({ success_count: 2, failure_count: 0, item_results: [] });
     await waitFor(() => expect(api.getReferenceAnchor).toHaveBeenCalled());
   });
+
+  // F25 回归（用户验收测试 2026-09-19）：导入成功后、重读取数失败时，
+  // 输入框已经被清空（参考确实已存进服务端）。此时如果只给一句泛泛的失败提示，
+  // 用户看到空输入框会以为自己白贴了一次。必须明确告诉他：参考已存下，只需重读。
+  it('参考已存下但读数失败时，说清不用重新粘贴', async () => {
+    renderPage();
+    await screen.findByRole('heading', { name: '贴 2–3 个你想做成的样子' });
+
+    api.importReferences.mockResolvedValue({
+      success_count: 2,
+      failure_count: 0,
+      item_results: [],
+    });
+    // 导入成功；紧接着的重读取数失败——这正是 F25 在现场的表现。
+    api.getReferenceAnchor.mockRejectedValueOnce(new Error('这次没读出来'));
+
+    fireEvent.change(screen.getByLabelText('参考内容'), { target: { value: twoReferences } });
+    fireEvent.click(screen.getByRole('button', { name: '读这些参考' }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(/已经存下/);
+    expect(alert).toHaveTextContent(/不用重新粘贴/);
+  });
+
+  it('读数失败后的「重试」重新发起读数，而不是只关掉错误', async () => {
+    renderPage();
+    await screen.findByRole('heading', { name: '贴 2–3 个你想做成的样子' });
+
+    api.importReferences.mockResolvedValue({
+      success_count: 2,
+      failure_count: 0,
+      item_results: [],
+    });
+    api.getReferenceAnchor
+      .mockRejectedValueOnce(new Error('这次没读出来'))
+      .mockResolvedValue(reading);
+
+    fireEvent.change(screen.getByLabelText('参考内容'), { target: { value: twoReferences } });
+    fireEvent.click(screen.getByRole('button', { name: '读这些参考' }));
+    await screen.findByRole('alert');
+
+    const callsBefore = api.getReferenceAnchor.mock.calls.length;
+    fireEvent.click(screen.getByRole('button', { name: '重试' }));
+
+    await waitFor(() =>
+      expect(api.getReferenceAnchor.mock.calls.length).toBeGreaterThan(callsBefore),
+    );
+    expect(await screen.findByRole('heading', { name: '选题范围' })).toBeTruthy();
+  });
 });

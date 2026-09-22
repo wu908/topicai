@@ -12,6 +12,14 @@ vi.mock('react-router-dom', async () => {
   return { ...actual, useNavigate: () => navigateMock };
 });
 vi.mock('@/services/api/v2/projects', () => api);
+const loopApi = vi.hoisted(() => ({
+  listInbox: vi.fn(),
+  listDeliverables: vi.fn(),
+  listLoopMetrics: vi.fn(),
+  listWeekly: vi.fn(),
+  addInboxItem: vi.fn(),
+}));
+vi.mock('@/services/api/v2/asyncLoop', () => loopApi);
 const fetchCurrentUserMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 vi.mock('@/store/authStore', () => ({
   useAuthStore: (selector: (state: unknown) => unknown) => selector({
@@ -58,6 +66,13 @@ describe('HomePage', () => {
         autopilot_eligible: false,
       },
     });
+    // 首页会并行拉收件箱/产出架/度量做安静数据；mock 后必须给默认值，
+    // 否则 load() 拿到 undefined 会整个失败、页面连行动卡都渲染不出来。
+    loopApi.listInbox.mockResolvedValue({ items: [], total: 0 });
+    loopApi.listDeliverables.mockResolvedValue({ items: [], total: 0 });
+    loopApi.listLoopMetrics.mockResolvedValue({ items: [] });
+    loopApi.listWeekly.mockResolvedValue({ rows: [] });
+    loopApi.addInboxItem.mockReset();
   });
 
   it('shows one real next action with reason and evidence', async () => {
@@ -201,5 +216,37 @@ describe('HomePage', () => {
       response_payload: { reason: '这不是我本周想处理的内容。' },
     })));
     expect(screen.getByText('AI 不再推进这条建议')).toBeInTheDocument();
+  });
+
+  // F3（用户验收测试 2026-09-19）：卡片里的 `{primaryLabel} →` 与正下方的主按钮
+  // 是同一个动作、同一个文案，同屏出现两次，违反 DESIGN.md §9「同意图 CTA 唯一」。
+  it('同一屏不出现两个同意图 CTA', async () => {
+    render(<MemoryRouter><HomePage /></MemoryRouter>);
+    await screen.findByText(action.title);
+
+    // 重复的那行整个消失（它是 .go 段落）。
+    expect(document.querySelector('.go')).toBeNull();
+    // 主动作仍然由按钮承担，且只有一颗。
+    expect(screen.getAllByRole('button', { name: '确认内容想产生的影响' })).toHaveLength(1);
+  });
+
+  // F4：底部那个长得像输入框的控件原本是 `readOnly`，打不了字、点了只跳转。
+  it('首页快速采集框真的可以输入并提交到收件箱', async () => {
+    loopApi.addInboxItem.mockResolvedValue({ id: 'i1' });
+
+    render(<MemoryRouter><HomePage /></MemoryRouter>);
+    await screen.findByText(action.title);
+
+    const box = screen.getByLabelText('快速丢进收件箱') as HTMLInputElement;
+    expect(box.readOnly).toBe(false);
+
+    fireEvent.change(box, { target: { value: '早上试了番茄钟的新排法' } });
+    fireEvent.keyDown(box, { key: 'Enter' });
+
+    await waitFor(() =>
+      expect(loopApi.addInboxItem).toHaveBeenCalledWith(
+        expect.objectContaining({ kind: 'text', content: '早上试了番茄钟的新排法' }),
+      ),
+    );
   });
 });

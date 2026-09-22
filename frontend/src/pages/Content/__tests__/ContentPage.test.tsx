@@ -195,6 +195,20 @@ describe('ContentPage', () => {
     api.classifyRetrospectiveIntent.mockResolvedValue({ project: legacyPublishedProject });
   });
 
+  // F5（用户验收测试 2026-09-19）：列表加载期原先整页只剩一个 spinner，
+  // 而 DESIGN.md §9 要的是骨架。骨架必须是**内容形状**的占位行。
+  it('shows a content-shaped skeleton while the project list loads', async () => {
+    api.listProjects.mockReturnValue(new Promise(() => {})); // 永不 resolve
+    renderPage();
+
+    const skeleton = await screen.findByTestId('content-skeleton');
+    expect(skeleton).toHaveAttribute('aria-busy', 'true');
+    // 页头在加载期就位，避免加载完成时整页跳动。
+    expect(screen.getByRole('heading', { name: '内容' })).toBeInTheDocument();
+    // 内容形状：占位行而不是一个孤零零的转圈。
+    expect(skeleton.querySelectorAll('.content-project-row-skeleton').length).toBeGreaterThan(1);
+  });
+
   it('offers the conversational start entry when the project list is empty', async () => {
     renderPage();
 

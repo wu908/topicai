@@ -168,6 +168,58 @@ async def test_without_a_model_it_only_says_what_it_can_count(test_db):
     assert any("没有理解语义" in line for item in anchor.structure_habits for line in item.limitations)
 
 
+# 回归：F25（用户验收测试 2026-09-19）。
+# 真实前端 parseReferences 给每一条参考都写 tags: []（它不猜标签），
+# 而 _REFERENCES 这个夹具三条都带标签——于是「模型不可用 + 参考没有标签」
+# 这条真实路径从来没有被测过。实测它会在降级里构造出 topics=[] 的
+# _AnchorDraft，触发 pydantic min_length 校验，异常一路冒到 HTTP 层，
+# 用户看到一段英文 pydantic 原文。降级路径本身必须是合法的。
+_UNTAGGED_REFERENCES = [
+    {
+        "title": "12 平的出租屋，我按动线重排了三次",
+        "body_excerpt": "1. 先量尺寸 2. 拆掉一件家具 3. 按动线重排。结论先放前面。",
+        "tags": [],
+        "source_handle": "@甲",
+    },
+    {
+        "title": "租房第一年，我把预算降了两成",
+        "body_excerpt": "1、记录每一笔 2、区分固定与浮动 3、每月复盘一次。",
+        "tags": [],
+        "source_handle": "@乙",
+    },
+]
+
+
+@pytest.mark.asyncio
+async def test_without_a_model_and_without_tags_the_fallback_still_returns_a_valid_anchor(
+    test_db,
+):
+    """F25：参考没有标签时，降级也必须产出合法读数，而不是抛校验异常。"""
+    await _insert_user(test_db)
+    await _add_references(test_db, items=_UNTAGGED_REFERENCES, key="refs-untagged")
+    service, _ = _service(test_db, error=RuntimeError("model is down"))
+
+    anchor = await service.get("u1")
+
+    assert anchor.capability == "deterministic_fallback"
+    # 没有标签时，仍然能从「参考本身」读出可数的东西：条数。
+    assert len(anchor.topics) >= 1
+    assert all(item.evidence_refs for item in anchor.topics)
+    assert anchor.audience is None
+
+
+@pytest.mark.asyncio
+async def test_the_fallback_never_leaks_a_validation_error_to_the_caller(test_db):
+    """F25：降级路径不得把 pydantic 原文当成用户可见错误抛出去。"""
+    await _insert_user(test_db)
+    await _add_references(test_db, items=_UNTAGGED_REFERENCES, key="refs-untagged-2")
+    service, _ = _service(test_db, error=RuntimeError("model is down"))
+
+    # 只要不抛异常即为通过；上面的用例断言了内容合法性。
+    anchor = await service.get("u1")
+    assert anchor.reference_count == 2
+
+
 @pytest.mark.asyncio
 async def test_the_anchor_is_not_recomputed_until_the_references_change(test_db):
     """参考集没变就不重推：不重复调用模型，读数是稳定的。"""

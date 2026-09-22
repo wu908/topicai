@@ -40,6 +40,8 @@ _EVIDENCE_FOR_SETTLED = CreatorStateService.EVIDENCE_FOR_SETTLED
 _MAX_REFERENCES = 12
 #: 正文片段截断长度——够读开头与结构，不必把别人的全文塞进提示词。
 _EXCERPT_CHARS = 600
+#: 与 _DraftItem.value 的 max_length 对齐：标题进 drafts 前要先截断。
+_DRAFT_VALUE_CHARS = 120
 
 _NOT_ENOUGH_EVIDENCE = "这条由 1 条参考得出，只是观察，不代表规律"
 _FALLBACK_STRUCTURE_LIMITATION = "写法是从文本表面特征读出来的（篇幅、有没有清单），没有理解语义"
@@ -274,22 +276,45 @@ class ReferenceAnchorService:
 
         标签词频就是"可数的选题信号"，这是画像推断已经用过的机制（creator_profile_v2），
         在这里复用而不是另发明一套。读者读不出来，所以留空——不猜。
+
+        F25（用户验收测试 2026-09-19）：前端的 parseReferences 给每条参考都写
+        ``tags: []``，所以"没有标签"不是罕见情况而是常态。早先这里在无标签时会让
+        topics 为空，撞上 ``_AnchorDraft`` 的 ``min_length=1``，pydantic 异常一路冒到
+        HTTP 层——降级路径自己抛错，等于没有降级。没有标签时改用参考**标题**本身：
+        标题是用户自己贴进来的、可数也可核对的信号，拿它当选题比报错诚实。
         """
         counts: dict[str, list[int]] = {}
         for index, row in enumerate(references, start=1):
             for tag in dict.fromkeys(json.loads(row.get("tags_json") or "[]")):
                 counts.setdefault(str(tag), []).append(index)
         ranked = sorted(counts.items(), key=lambda item: (-len(item[1]), item[0]))[:5]
+
+        if ranked:
+            topics = [
+                _DraftItem(value=tag, evidence=indices) for tag, indices in ranked
+            ]
+            limitation = "模型不可用，当前只用了可数的信号（参考里的标签），没有读懂内容本身"
+        else:
+            topics = [
+                _DraftItem(value=title, evidence=[index])
+                for index, title in (
+                    (index, str(row.get("title") or "").strip()[:_DRAFT_VALUE_CHARS])
+                    for index, row in enumerate(references, start=1)
+                )
+                if title
+            ][:5]
+            limitation = (
+                "模型不可用，这些参考没有标签，当前只读出了你贴的参考标题，"
+                "没有读懂内容本身"
+            )
+
+        if not topics:
+            # 连标题都空：仍然必须给出一份**合法**草稿——降级路径不许再抛错。
+            topics = [_DraftItem(value="还没读出选题", evidence=[1])]
+
         return (
-            _AnchorDraft(
-                topics=[_DraftItem(value=tag, evidence=indices) for tag, indices in ranked],
-                structure_habits=[],
-                audience=None,
-            ),
-            [
-                "模型不可用，当前只用了可数的信号（参考里的标签），没有读懂内容本身",
-                _FALLBACK_NO_AUDIENCE,
-            ],
+            _AnchorDraft(topics=topics, structure_habits=[], audience=None),
+            [limitation, _FALLBACK_NO_AUDIENCE],
         )
 
     @staticmethod

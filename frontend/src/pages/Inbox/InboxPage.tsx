@@ -167,7 +167,7 @@ export default function InboxPage() {
           </button>
         </div>
         <div className="consent">
-          <span>本次素材授权 · <b>{isPrivate ? '私密 · 不出本地' : '仅用于生成（可发布类）'}</b></span>
+          <span>本次素材授权 · <b>{isPrivate ? '私密 · 不出本地' : '仅用于生成'}</b></span>
           <button type="button" className={`ichip${isPrivate ? ' on' : ''}`} onClick={() => setIsPrivate(!isPrivate)}>
             家人入镜？标记私密
           </button>
@@ -184,7 +184,10 @@ export default function InboxPage() {
               <span className="em">{KIND_EMOJI[item.kind] ?? '✎'}</span>
               <span className="t">{item.title || item.content.slice(0, 30)}</span>
               <span className="m">
-                <span className="lock">{item.consent === 'private' ? '私密 · 不出本地' : '可发布类'}</span>
+                {/* F6（用户验收测试 2026-09-19）：这里说的是 consent——**这条素材能不能
+                    拿去生产**，不是它公开不公开。原文写「可发布类」，与素材页的隐私级别
+                    「私密」并列时，用户会读成同一个属性自相矛盾。改成点明轴名。 */}
+                <span className="lock">{item.consent === 'private' ? '授权：私密 · 不出本地' : '授权：可用于生成'}</span>
                 <span>{fmtTime(item.created_at)} · {item.status === 'digested' ? '已消化' : item.status === 'failed' ? '消化失败' : '待消化'}</span>
               </span>
             </div>

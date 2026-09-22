@@ -97,8 +97,40 @@ body {
     gap: 4px;
     padding: 10px 8px 12px;
     background: var(--v3-sidebar-bg);
+    /* F26（用户验收测试 2026-09-19）：只有 55% 白底、没有模糊，面板下方的
+       正文会直接透上来与菜单文字叠印，几乎不可读。全站其它玻璃层都带
+       --v3-glass-blur，这里漏了。 */
+    backdrop-filter: blur(var(--v3-glass-blur)) saturate(var(--v3-glass-saturate));
+    -webkit-backdrop-filter: blur(var(--v3-glass-blur)) saturate(var(--v3-glass-saturate));
     border-top: 1px solid var(--v3-border);
     box-shadow: 0 -12px 30px rgba(70, 95, 130, 0.12);
+  }
+
+  /* F27（用户验收测试 2026-09-19）：「退出登录」此前**没有任何 CSS**，
+     直接落到浏览器 UA 默认外观（`2px outset` + `#f0f0f0` 灰底），
+     在玻璃面板里是一个 1990 年代风格的凸起盒子。这里给它与导航项一致的样式。 */
+  .v3-more-logout {
+    appearance: none;
+    -webkit-appearance: none;
+    border: 0;
+    background: transparent;
+    color: var(--v3-text-sec);
+    font: inherit;
+    font-size: var(--fs-meta);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    width: 100%;
+    min-height: 44px;
+    border-radius: var(--v3-radius-sm);
+  }
+
+  .v3-more-logout:hover,
+  .v3-more-logout:focus-visible {
+    background: var(--v3-surface-hover);
+    color: var(--v3-text);
   }
 
   .v3-sidebar {

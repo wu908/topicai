@@ -88,7 +88,10 @@ describe('MaterialsPage', () => {
   it('lists reusable materials with privacy and project usages', async () => {
     render(<MemoryRouter><MaterialsPage /></MemoryRouter>);
     expect(await screen.findByText('失败现场')).toBeInTheDocument();
-    expect(screen.getByText('私密')).toBeInTheDocument();
+    // F6（用户验收测试 2026-09-19）：这个 chip 是**隐私级别**，必须点明轴名，
+    // 否则会被读成收件箱里那条**生成授权**，两处看着互相矛盾。
+    expect(screen.getByText('隐私：私密')).toBeInTheDocument();
+    expect(screen.queryByText('私密')).toBeNull();
     expect(screen.getByText(/一次真实调整/)).toBeInTheDocument();
   });
 

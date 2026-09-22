@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>V4 · 创作日志 — 内容页原型</title>
+<link rel="stylesheet" href="lumen-prototype.css">
+<!--
+  ============================================================================
+  V4 · 创作日志 (Timeline Journal)  ·  内容页 /content 重设计原型
+  ----------------------------------------------------------------------------
+  核心主张 / Core thesis
+    内容页不是「项目表格」，而是「这周到底发生了什么」的编年史。按周分组的
+    纵向时间线把每个项目还原成事件（发布、AI 产出、复盘沉淀、创建），让记录型
+    意图（record）与复盘语境成为一等公民；需要人的地方就地给一个动作，不必回
+    到列表里再猜。
+
+  优化什么 / Optimises
+    · F11 信息量不足：每条事件 = 事件标签 + 项目标题 + 意图 chip + 相对时间 +
+      就地动作，一行可扫读，不再是「标题 + 右对齐灰字」。
+    · F11 无时间信息 / 无分组：按 本周 / 上周 / 更早 分组，组头给出周区间与
+      一行小结（tabular 数字），时间列常驻。
+    · F11 空间失衡：时间线天然按内容长度生长，2 个项目时也不会出现 450px 死白；
+      更早的事自然沉到下方，靠滚动而不是靠空白。
+    · F7 悬浮球遮挡：球固定贴视口右下角，主区滚动容器预留 148px 右侧安全区并
+      自身滚动，任何滚动位置下球都不压内容（见下方 .journal-scroll 注释）。
+    · F12 两处「下一步」矛盾：页头主动作是唯一的「新建内容项目」，组头与行内
+      动作各有不同意图，全页无第二个新建入口。
+
+  放弃什么 / Gives up
+    「快速定位某一个项目」。时间线按时间排序，找两周前某个项目需要滚动；也没有
+    表格排序 / 批量操作 / 保存视图（那是 V5）。检索能力弱于 V5，温度感高于 V5。
+
+  移动端退化 / Mobile degradation  (详见文件末尾 @media 块)
+    1025–1180px：左侧栏收窄到 168px，主区安全区收窄到 128px —— 脊柱、时间列
+    与行内动作三样都活到 1025px，不牺牲信息。
+    < 1024px：左侧栏收起为顶部横向导航；主区取消右侧安全区、改为底部预留
+    112px，悬浮球从「浮起」退化为「右下角停靠」，永不再压住时间线正文。
+    < 720px：时间列由左侧栏移位折叠进头部（时间 + 节点并到标题上方一行），脊柱
+    缩到最左 5px；摘要条 2×2 网格；事件动作按钮由右对齐改为占满一行。
+    < 480px：单一文档流，周分组之间加 28px 间隔；隐藏组头小结与动作提示，避免
+    折行，只保留相对时间。
+  ============================================================================
+-->
+<style>
+  /* ---- V4 local tokens (all colour from lumen-prototype.css tokens) ---- */
+  :root {
+    --v4-col: 832px;          /* single centred column, within 780–860 */
+    --v4-time-w: 90px;        /* left marginalia column: relative time */
+    --v4-gutter: 28px;        /* spine gutter, node sits at its centre */
+    --v4-safe-right: 148px;   /* reserved so .ball never overlaps content */
+  }
+
+  /* ---- Shell: sidebar + journal scroll region ---- */
+  .shell { align-items: flex-start; }
+  /* The page carries no uppercase kicker at all (0 per 3 blocks, so the budget
+     is unused rather than spent); the wordmark stays as written. */
+  .sidebar .brand { letter-spacing: 0; text-transform: none; font-size: var(--fs-subtitle); }
+  /* .proto-badge is fixed at the viewport's bottom-left, so the sidebar must stop
+     above it — otherwise the last footer line is printed under the badge. */
+  @media (min-width: 1025px) {
+    .sidebar { height: calc(100vh - 130px); }
+  }
+
+  /* The journal owns the scroll, not the window. That is what makes the F7 fix
+     real: .ball is position:fixed at the viewport's bottom-right (40/34), and
+     this container is inset 148px from the right edge, so the ball lands in a
+     reserved margin at every scroll position — never on a row, never on a
+     control. Scrolling this region instead of the document also keeps the
+     companion ball from sliding over text as the page moves. */
+  .journal-scroll {
+    flex: 1; min-width: 0;
+    height: 100vh;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 30px var(--v4-safe-right) 84px 40px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(70, 95, 130, 0.22) transparent;
+  }
+  .journal-scroll::-webkit-scrollbar { width: 10px; }
+  .journal-scroll::-webkit-scrollbar-thumb {
+    background: rgba(70, 95, 130, 0.2);
+    border-radius: 9999px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  .journal-col { max-width: var(--v4-col); margin: 0 auto; }
+
+  /* ---- Page head: title + one subtitle + ONE primary action (no CTA twin) ---- */
+  .v4-head { align-items: flex-end; margin-bottom: 18px; }
+  .v4-head .page-title { font-size: 32px; letter-spacing: -0.02em; }
+  .v4-head .page-sub { max-width: 46ch; }
+  .v4-head .btn-primary { flex: 0 0 auto; }
+
+  /* ---- Summary strip: four read-only metrics, never a second CTA ---- */
+  .v4-summary { padding: 4px 6px; border-radius: var(--v3-radius-lg); margin-bottom: 26px; }
+  .v4-summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); }
+  .v4-stat { padding: 14px 16px; }
+  .v4-stat + .v4-stat { border-left: 1px solid var(--v3-border-strong); }
+  .v4-stat .k {
+    display: block; font-size: var(--fs-meta); color: var(--v3-text-ter);
+    letter-spacing: 0.01em; margin-bottom: 5px;
+  }
+  .v4-stat .v {
+    font-family: var(--font-grotesk); font-size: 22px; font-weight: 700;
+    line-height: 1; color: var(--v3-text); font-variant-numeric: tabular-nums;
+  }
+  .v4-stat .v .unit { font-size: var(--fs-meta); font-weight: 400; color: var(--v3-text-ter); margin-left: 4px; }
+  .v4-stat.is-attention .v { color: var(--v3-amber); }
+
+  /* ---- Week groups ---- */
+  .v4-week { margin: 0 0 30px; }
+  /* Group head is a log heading, not a sticky toolbar: the page's calm comes from
+     headings that scroll away with their own entries, and the reading position is
+     already carried by the summary strip at the top. */
+  .v4-week-head {
+    display: flex; align-items: baseline; gap: 12px;
+    padding: 6px 2px 11px;
+    border-bottom: 1px solid var(--v3-border-strong);
+    margin-bottom: 8px;
+  }
+  .v4-week-name { font-size: var(--fs-subtitle); font-weight: 700; letter-spacing: -0.01em; }
+  .v4-week-range { font-size: var(--fs-meta); color: var(--v3-text-ter); font-variant-numeric: tabular-nums; }
+  .v4-week-sum {
+    margin-left: auto; font-size: var(--fs-meta); color: var(--v3-text-sec);
+    font-variant-numeric: tabular-nums; white-space: nowrap;
+  }
+
+  /* ---- Timeline spine: one continuous hairline through every entry.
+         The nodes mark real events (there is exactly one node per event),
+         never decoration. ---- */
+  .v4-list { position: relative; }
+  .v4-list::before {
+    content: ""; position: absolute;
+    left: calc(var(--v4-time-w) + var(--v4-gutter) / 2);
+    top: 4px; bottom: 0; width: 1px;
+    background: rgba(23, 28, 38, 0.14);
+    /* fade the hairline at both ends with a mask, so the spine never ends in a
+       hard cut and never has to be re-tuned when the group changes height */
+    -webkit-mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0) 0, #000 14px, #000 calc(100% - 18px), rgba(0, 0, 0, 0) 100%);
+    mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0) 0, #000 14px, #000 calc(100% - 18px), rgba(0, 0, 0, 0) 100%);
+  }
+
+  .v4-row { position: relative; display: grid; grid-template-columns: var(--v4-time-w) 1fr; }
+  .v4-time {
+    grid-column: 1; padding: 14px 0 0; text-align: right;
+    font-size: var(--fs-meta); color: var(--v3-text-ter); line-height: 1.5;
+    font-variant-numeric: tabular-nums;
+  }
+  .v4-time .day { display: block; color: var(--v3-text-sec); }
+  .v4-time .rest { display: block; }
+
+  .v4-node {
+    position: absolute; left: calc(var(--v4-time-w) + var(--v4-gutter) / 2);
+    top: 19px; width: 9px; height: 9px; margin-left: -4.5px;
+    border-radius: 50%; background: var(--v3-surface-solid);
+    border: 1px solid rgba(23, 28, 38, 0.22);
+    box-shadow: 0 2px 6px rgba(70, 95, 130, 0.16);
+  }
+  .v4-node.is-publish { border-color: var(--v3-blue); box-shadow: 0 0 0 3px rgba(74, 111, 165, 0.12); }
+  .v4-node.is-ai { border-color: var(--v3-light); box-shadow: 0 0 0 3px var(--v3-light-soft); }
+  .v4-node.is-done { border-color: rgba(23, 28, 38, 0.3); background: rgba(25, 30, 38, 0.72); }
+  .v4-node.is-action { border-color: var(--v3-amber); background: var(--v3-amber); }
+
+  .v4-card {
+    grid-column: 2; margin: 0 0 2px calc(var(--v4-gutter));
+    padding: 12px 14px 13px;
+    border-radius: var(--v3-radius);              /* 15px inset radius */
+    border: 1px solid transparent;
+    transition: background 180ms ease, border-color 180ms ease;
+  }
+  .v4-card:hover { background: rgba(255, 255, 255, 0.62); border-color: var(--v3-border-light); }
+  .v4-card.is-action {
+    background: linear-gradient(90deg, var(--v3-amber-bg) 0%, rgba(138, 106, 59, 0.02) 78%);
+    border-color: rgba(138, 106, 59, 0.22);
+  }
+
+  /* Two type steps only (12 / 14) — episode line reads first, project second. */
+  .v4-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .v4-episode {
+    font-size: var(--fs-body); font-weight: 700; color: var(--v3-text);
+    letter-spacing: -0.005em;
+  }
+  .v4-proj { font-size: var(--fs-meta); color: var(--v3-text-sec); }
+  /* Intent chip stays neutral; amber is reserved for "this one is on you",
+     so the two never read as the same signal. */
+  .v4-chip { background: rgba(25, 30, 38, 0.04); border-color: transparent; color: var(--v3-text-sec); }
+  .v4-flag {
+    display: inline-flex; align-items: center;
+    padding: 3px 9px; border-radius: 9999px;
+    font-size: var(--fs-meta); color: var(--v3-amber);
+    background: var(--v3-amber-bg); border: 1px solid rgba(138, 106, 59, 0.2);
+    white-space: nowrap;
+  }
+  .v4-state { font-size: var(--fs-meta); color: var(--v3-text-ter); font-variant-numeric: tabular-nums; }
+  .v4-act { display: flex; align-items: center; gap: 10px; margin-top: 9px; }
+  .v4-act .btn { box-shadow: none; }
+  .v4-act .btn-primary { padding: 9px 16px; font-size: var(--fs-meta); }
+  .v4-act .hint { font-size: var(--fs-meta); color: var(--v3-text-ter); }
+
+  .v4-foot { margin: 0 0 18px; padding: 14px 2px 0; border-top: 1px solid var(--v3-border-strong); }
+  .v4-foot p { margin: 0; }
+
+  /* ---- Mobile degradation (see the HTML top comment for the prose version) ---- */
+  /* 1025–1180px: the sidebar narrows instead of eating the journal column, so the
+     spine, the time marginalia and the row actions all survive down to 1025px. */
+  @media (max-width: 1180px) {
+    :root { --v3-sidebar-width: 168px; --v4-safe-right: 128px; }
+    .journal-scroll { padding-left: 24px; padding-right: var(--v4-safe-right); }
+  }
+  @media (max-width: 1024px) {
+    .shell { flex-direction: column; }
+    .sidebar {
+      position: static; width: auto; flex: none; height: auto;
+      margin: 14px 14px 0; padding: 12px 10px;
+      flex-direction: row; flex-wrap: wrap; gap: 4px 6px;
+      border-radius: var(--v3-radius-lg);
+    }
+    .sidebar .brand { padding: 4px 6px; width: 100%; }
+    .sidebar .nav-group, .sidebar .sb-foot { display: none; }
+    .journal-scroll { height: auto; padding: 20px 20px 112px; }
+    /* Under 1024 the ball stops floating. Centring it parked it straight over the
+       spine and the episode lines, so it docks to the bottom-right corner, inside
+       the 112px bottom reserve, offset left only far enough to clear the
+       version badge that sits at the bottom-left. */
+    .ball { left: auto; right: 16px; bottom: 16px; margin-left: 0; }
+  }
+  @media (max-width: 720px) {
+    :root { --v4-time-w: 0px; --v4-gutter: 22px; }
+    .journal-col { max-width: 100%; }
+    .v4-head { align-items: flex-start; flex-direction: column; }
+    .v4-head .btn-primary { width: 100%; justify-content: center; }
+    .v4-summary-grid { grid-template-columns: repeat(2, 1fr); }
+    .v4-stat:nth-child(odd) { border-left: none; }
+    .v4-stat:nth-child(n + 3) { border-top: 1px solid var(--v3-border-strong); }
+    .v4-row { grid-template-columns: 1fr; }
+    .v4-time { grid-column: 1; grid-row: 1; text-align: left; padding: 10px 0 0 var(--v4-gutter); }
+    .v4-time .day, .v4-time .rest { display: inline; }
+    .v4-time .rest::before { content: " · "; }
+    .v4-card { grid-column: 1; grid-row: 2; margin-left: var(--v4-gutter); }
+    .v4-list::before { left: 5px; }
+    .v4-node { left: 5px; top: 14px; }
+    .v4-foot { margin-left: var(--v4-gutter); }
+    .v4-act { flex-direction: column; align-items: stretch; }
+    .v4-act .btn-primary { width: 100%; justify-content: center; }
+  }
+  @media (max-width: 480px) {
+    .v4-week { margin-bottom: 28px; }
+    .v4-week-sum { display: none; }   /* keeps the header on one line */
+    .v4-act .hint { display: none; }  /* avoids a fourth wrapped line */
+  }
+</style>
+</head>
+<body>
+
+<div class="field">
+  <span class="orb a"></span>
+  <span class="orb b"></span>
+  <span class="orb c"></span>
+</div>
+
+<div class="shell">
+
+  <!-- Sidebar: same structure as the app; 内容 is the active page -->
+  <aside class="sidebar glass">
+    <div class="brand"><span class="mark">T</span>TopicAI</div>
+
+    <a class="navlink" href="#"><span class="nicon">◆</span>晨报</a>
+    <a class="navlink" href="#"><span class="nicon">▤</span>产出架</a>
+    <a class="navlink" href="#"><span class="nicon">▥</span>收件箱</a>
+    <a class="navlink" href="#"><span class="nicon">▷</span>急稿</a>
+    <a class="navlink" href="#"><span class="nicon">◷</span>周复盘</a>
+    <a class="navlink" href="#"><span class="nicon">↗</span>成长</a>
+
+    <div class="nav-group">管理</div>
+    <a class="navlink active" href="#"><span class="nicon">▣</span>内容</a>
+    <a class="navlink" href="#"><span class="nicon">✦</span>机会</a>
+    <a class="navlink" href="#"><span class="nicon">▦</span>素材</a>
+    <a class="navlink" href="#"><span class="nicon">◍</span>我的</a>
+
+    <div class="sb-foot">
+      <div class="ai"><b aria-hidden="true"></b>AI 在跟进 5 个项目</div>
+    </div>
+  </aside>
+
+  <!-- The journal owns the scroll; 148px right safety margin is reserved for .ball -->
+  <main class="journal-scroll">
+    <div class="journal-col">
+
+      <!-- Page head: one subtitle, one primary action. The subtitle promises what
+           the strip reports; it never restates the CTA ("新建内容项目"). -->
+      <header class="page-head v4-head">
+        <div>
+          <h1 class="page-title">内容</h1>
+          <p class="page-sub">按周记录的创作日志 —— 每条都是真实发生过的事，需要你的地方就地给一个动作。</p>
+        </div>
+        <button class="btn btn-primary" type="button">新建内容项目</button>
+      </header>
+
+      <!-- Summary strip: four read-only facts. Deliberately not interactive, so
+           the page keeps exactly one same-intent entry point (fixes F3/F12). -->
+      <section class="v4-summary glass" aria-label="内容概览">
+        <div class="v4-summary-grid">
+          <div class="v4-stat">
+            <span class="k">进行中</span>
+            <span class="v num">5</span>
+          </div>
+          <div class="v4-stat is-attention">
+            <span class="k">待你处理</span>
+            <span class="v num">3</span>
+          </div>
+          <div class="v4-stat">
+            <span class="k">本周已发</span>
+            <span class="v num">1</span>
+          </div>
+          <div class="v4-stat">
+            <span class="k">已沉淀经验</span>
+            <span class="v num">1<span class="unit">条</span></span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ 本周 ============ -->
+      <section class="v4-week">
+        <div class="v4-week-head">
+          <span class="v4-week-name">本周</span>
+          <span class="v4-week-range num">09-14 → 09-20</span>
+          <span class="v4-week-sum">2 条在写、1 条已发布、1 条待复盘</span>
+        </div>
+        <div class="v4-list">
+
+          <!-- 1 · 创建项目 -->
+          <article class="v4-row">
+            <div class="v4-time"><span class="day">今天</span><span class="rest">10:12</span></div>
+            <span class="v4-node is-action" aria-hidden="true"></span>
+            <div class="v4-card is-action">
+              <div class="v4-line">
+                <span class="v4-episode">创建了项目</span>
+                <span class="v4-proj">《新手养多肉为什么总烂根》</span>
+                <span class="chip v4-chip">教方法</span>
+                <span class="v4-flag">待你</span>
+              </div>
+              <div class="v4-state">意图确认 · 1/5 步</div>
+              <div class="v4-act">
+                <button class="btn btn-primary btn-sm" type="button">确认内容目的</button>
+                <span class="hint">AI 已推断为「教方法」，等你点头或否决</span>
+              </div>
+            </div>
+          </article>
+
+          <!-- 2 · AI 产出候选 -->
+          <article class="v4-row">
+            <div class="v4-time"><span class="day">今天</span><span class="rest">09:58</span></div>
+            <span class="v4-node is-ai" aria-hidden="true"></span>
+            <div class="v4-card is-action">
+              <div class="v4-line">
+                <span class="v4-episode">AI 产出了候选内容</span>
+                <span class="v4-proj">《番茄钟别在下班后补，改到第二天早上》</span>
+                <span class="chip v4-chip">踩坑复盘</span>
+                <span class="v4-flag">待你</span>
+              </div>
+              <div class="v4-state">候选确认 · 2/5 步</div>
+              <div class="v4-act">
+                <button class="btn btn-primary btn-sm" type="button">确认候选内容</button>
+                <span class="hint">AI 只提议，人确认后才进入发布前检查</span>
+              </div>
+            </div>
+          </article>
+
+          <!-- 3 · 结构补齐 -->
+          <article class="v4-row">
+            <div class="v4-time"><span class="day">今天</span><span class="rest">09:41</span></div>
+            <span class="v4-node" aria-hidden="true"></span>
+            <div class="v4-card">
+              <div class="v4-line">
+                <span class="v4-episode">补齐了 2 处事实缺口</span>
+                <span class="v4-proj">《阳台辣椒终于结果了》</span>
+                <span class="chip v4-chip">记录</span>
+              </div>
+              <div class="v4-state">证据采访 · 1/5 步 · AI 已提问，等你回答</div>
+            </div>
+          </article>
+
+          <!-- 4 · 证据采访 -->
+          <article class="v4-row">
+            <div class="v4-time"><span class="day">今天</span><span class="rest">09:41</span></div>
+            <span class="v4-node is-action" aria-hidden="true"></span>
+            <div class="v4-card is-action">
+              <div class="v4-line">
+                <span class="v4-episode">AI 追问了一段缺失的经历</span>
+                <span class="v4-proj">《阳台辣椒终于结果了》</span>
+                <span class="chip v4-chip">记录</span>
+                <span class="v4-flag">待你</span>
+              </div>
+              <div class="v4-state">证据采访 · 1/5 步</div>
+              <div class="v4-act">
+                <button class="btn btn-primary btn-sm" type="button">补充一段真实经历</button>
+                <span class="hint">缺具体时间与用量，AI 不会替你编</span>
+              </div>
+            </div>
+          </article>
+
+          <!-- 5 · 发布（本周已发 1） -->
+          <article class="v4-row">
+            <div class="v4-time"><span class="day">昨天</span><span class="rest">21:30</span></div>
+            <span class="v4-node is-publish" aria-hidden="true"></span>
+            <div class="v4-card">
+              <div class="v4-line">
+                <span class="v4-episode">发布了</span>
+                <span class="v4-proj">《我用了三个月把通勤时间变成读书时间》</span>
+                <span class="chip v4-chip">分享</span>
+              </div>
+              <div class="v4-state">发布前检查通过 · 4/5 步 · 观察窗 09-21 开启</div>
+            </div>
+          </article>
+
+        </div>
+      </section>
+
+      <!-- ============ 上周 ============ -->
+      <section class="v4-week">
+        <div class="v4-week-head">
+          <span class="v4-week-name">上周</span>
+          <span class="v4-week-range num">09-07 → 09-13</span>
+          <span class="v4-week-sum">3 个项目推进、1 条进入观察窗</span>
+        </div>
+        <div class="v4-list">
+
+          <!-- 6 · 观察窗 -->
+          <article class="v4-row">
+            <div class="v4-time"><span class="day">周五</span><span class="rest">还剩 4 天</span></div>
+            <span class="v4-node is-action" aria-hidden="true"></span>
+            <div class="v4-card is-action">
+              <div class="v4-line">
+                <span class="v4-episode">进入观察窗</span>
+                <span class="v4-proj">《第一次做手冲咖啡翻车记录》</span>
+                <span class="chip v4-chip">记录</span>
+                <span class="v4-flag">待你</span>
+              </div>
+              <div class="v4-state">观察与复盘 · 5/5 步 · 发布 09-09，09-24 截止</div>
+              <div class="v4-act">
+                <button class="btn btn-primary btn-sm" type="button">回填实际表现</button>
+                <span class="hint">数据只影响复盘，不改动已发布内容</span>
+              </div>
+            </div>
+          </article>
+
+          <!-- 7 · 复盘 -->
+          <article class="v4-row">
+            <div class="v4-time"><span class="day">周三</span><span class="rest">20:05</span></div>
+            <span class="v4-node is-done" aria-hidden="true"></span>
+            <div class="v4-card">
+              <div class="v4-line">
+                <span class="v4-episode">完成了复盘</span>
+                <span class="v4-proj">《租房改造：800 元把阳台变成工作角》</span>
+                <span class="chip v4-chip">分享</span>
+              </div>
+              <div class="v4-state">待复盘 · 5/5 步 · 发布数据差异整理完</div>
+            </div>
+          </article>
+
+          <!-- 8 · 发布前检查 -->
+          <article class="v4-row">
+            <div class="v4-time"><span class="day">周二</span><span class="rest">09:12</span></div>
+            <span class="v4-node is-done" aria-hidden="true"></span>
+            <div class="v4-card">
+              <div class="v4-line">
+                <span class="v4-episode">运行了发布前检查</span>
+                <span class="v4-proj">《我用了三个月把通勤时间变成读书时间》</span>
+                <span class="chip v4-chip">分享</span>
+              </div>
+              <div class="v4-state">发布前检查 · 4/5 步 · 3 处措辞建议已处理</div>
+            </div>
+          </article>
+
+        </div>
+      </section>
+
+      <!-- ============ 更早 ============ -->
+      <section class="v4-week">
+        <div class="v4-week-head">
+          <span class="v4-week-name">更早</span>
+          <span class="v4-week-range num">08-31 → 09-06</span>
+          <span class="v4-week-sum">2 个项目创建、1 条经验沉淀</span>
+        </div>
+        <div class="v4-list">
+
+          <!-- 9 · 沉淀经验（已沉淀经验 1） -->
+          <article class="v4-row">
+            <div class="v4-time"><span class="day">09-05</span><span class="rest">21:40</span></div>
+            <span class="v4-node is-done" aria-hidden="true"></span>
+            <div class="v4-card">
+              <div class="v4-line">
+                <span class="v4-episode">沉淀了 1 条经验</span>
+                <span class="v4-proj">《如何判断自己适合做知识博主》</span>
+                <span class="chip v4-chip">分享</span>
+              </div>
+              <div class="v4-state">已完成 · 5/5 步 · 已进入「成长」长期经验</div>
+            </div>
+          </article>
+
+          <!-- 10 · 创建项目 -->
+          <article class="v4-row">
+            <div class="v4-time"><span class="day">09-01</span><span class="rest">11:20</span></div>
+            <span class="v4-node" aria-hidden="true"></span>
+            <div class="v4-card">
+              <div class="v4-line">
+                <span class="v4-episode">创建了项目</span>
+                <span class="v4-proj">《第一次做手冲咖啡翻车记录》</span>
+                <span class="chip v4-chip">记录</span>
+              </div>
+              <div class="v4-state">当时建于 意图确认 · 现已在 观察与复盘</div>
+            </div>
+          </article>
+
+        </div>
+
+        <div class="v4-foot">
+          <p class="empty-note">再往前这个月没有记录了。创建新项目后，日志会从第一天接上。</p>
+        </div>      </section>
+
+    </div>
+  </main>
+</div>
+
+<!-- Companion ball. Load state (not empty), parked in the reserved right margin,
+     so it never covers a row, a chip, or a button — the F7 fix, demonstrated. -->
+<div class="ball" role="img" aria-label="打开 AI 对话">✦</div>
+
+<div class="proto-badge">V4 · 创作日志</div>
+
+</body>
+</html>

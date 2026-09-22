@@ -1490,3 +1490,54 @@
   font-size: var(--fs-meta);
   color: var(--color-text-secondary);
 }
+
+/* ============================================================
+   F5（用户验收测试 2026-09-19）：列表加载骨架
+   原先这里是整页一个 spinner。骨架要长得像**将要出现的内容**，
+   否则它和 spinner 一样教不会用户任何东西（NN/g 骨架屏）。
+   ============================================================ */
+.content-project-row-skeleton {
+  cursor: default;
+  pointer-events: none;
+}
+
+.sk-line {
+  display: block;
+  border-radius: 9999px;
+  background: linear-gradient(
+    90deg,
+    rgba(23, 28, 38, 0.06) 0%,
+    rgba(23, 28, 38, 0.1) 50%,
+    rgba(23, 28, 38, 0.06) 100%
+  );
+  background-size: 200% 100%;
+  animation: sk-shimmer 1.4s ease-in-out infinite;
+}
+
+.sk-line-title {
+  width: 62%;
+  height: 15px;
+  margin-bottom: 9px;
+}
+
+.sk-line-meta {
+  width: 30%;
+  height: 12px;
+}
+
+.sk-line-status {
+  width: 76px;
+  height: 12px;
+}
+
+@keyframes sk-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* 骨架是「已经知道在等什么」的动效，不是装饰——跟着全站一起降级。 */
+@media (prefers-reduced-motion: reduce) {
+  .sk-line {
+    animation: none;
+  }
+}

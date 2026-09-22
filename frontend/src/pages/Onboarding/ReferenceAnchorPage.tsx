@@ -108,9 +108,20 @@ export default function ReferenceAnchorPage() {
       setText('');
       setComposing(false);
       // 这一跳会读内容本身：模型可用时通常十几秒。
-      const next = await getReferenceAnchor();
-      if (requestTokenRef.current !== token) return;
-      setAnchor(next);
+      try {
+        const next = await getReferenceAnchor();
+        if (requestTokenRef.current !== token) return;
+        setAnchor(next);
+      } catch (err) {
+        if (requestTokenRef.current !== token) return;
+        // F25（用户验收测试 2026-09-19）：走到这里时参考**已经存进服务端了**，
+        // 输入框也已清空。只报一句"没读出来"的话，用户看到空输入框会以为白贴了。
+        // 必须说清两件事：参考已存下、重试只重读。
+        setError(
+          `${extractErrorMessage(err, '这次没读出来')}——你贴的参考已经存下了，` +
+            '点「重试」只重新读一次，不用重新粘贴。',
+        );
+      }
     } catch (err) {
       if (requestTokenRef.current !== token) return;
       setError(extractErrorMessage(err, '这次没读出来，稍后再试一次'));
@@ -182,7 +193,20 @@ export default function ReferenceAnchorPage() {
         返回我的
       </Button>
       {error ? (
-        <Alert severity="error" role="alert" action={<Button onClick={() => void load()}>重试</Button>}>
+        <Alert
+          severity="error"
+          role="alert"
+          action={
+            // 窄宽度下 MUI 的 action 槽会把按钮压到换行，「重试」竖排成「重/试」。
+            // 固定不换行、不参与收缩（用户验收测试 2026-09-19 F25d）。
+            <Button
+              onClick={() => void load()}
+              sx={{ whiteSpace: 'nowrap', flexShrink: 0, alignSelf: 'flex-start' }}
+            >
+              重试
+            </Button>
+          }
+        >
           {error}
         </Alert>
       ) : null}
@@ -212,7 +236,7 @@ export default function ReferenceAnchorPage() {
             multiline
             minRows={8}
             placeholder={PLACEHOLDER}
-            helperText="一条一段：第一行是 @账号名，接着是标题，再下面是正文（只贴开头也行）"
+            helperText="一条一段，多条之间空一行：第一行是 @账号名，接着是标题，再下面是正文（只贴开头也行）"
           />
           {parsed.items.length ? (
             <div className="anchor-preview">

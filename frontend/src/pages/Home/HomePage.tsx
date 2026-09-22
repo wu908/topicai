@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getTodayWorkspace, respondToAction } from '@/services/api/v2/projects';
 import { openCompanion } from '@/features/companion';
-import { listInbox, listDeliverables, listLoopMetrics, listWeekly } from '@/services/api/v2/asyncLoop';
+import { listInbox, listDeliverables, listLoopMetrics, listWeekly, addInboxItem } from '@/services/api/v2/asyncLoop';
 import type { IntentAction, TodayWorkspace } from '@/types/contracts/v2/content';
 import { extractErrorMessage } from '@/utils/error';
 import { readableRef } from '@/utils/labels';
@@ -72,6 +72,10 @@ export default function HomePage() {
   const [rejected, setRejected] = useState(false);
   const [showReject, setShowReject] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
+  // F4：首页底部的快速采集（原先是个只读假输入框）。
+  const [quickCapture, setQuickCapture] = useState('');
+  const [quickBusy, setQuickBusy] = useState(false);
+  const [quickNotice, setQuickNotice] = useState<string | null>(null);
   const [quiet, setQuiet] = useState<{ ready: number; pending: number; minutes: number; weekly: number }>({
     ready: 0, pending: 0, minutes: 0, weekly: 0,
   });
@@ -128,6 +132,29 @@ export default function HomePage() {
     const timer = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(timer);
   }, [load]);
+
+  // F4：真的把这句话存进收件箱，而不是假装能输入。
+  // 成功后清空输入并给一句回执，让用户确认东西进去了。
+  const captureToInbox = useCallback(async () => {
+    const content = quickCapture.trim();
+    if (!content || quickBusy) return;
+    setQuickBusy(true);
+    setQuickNotice(null);
+    try {
+      await addInboxItem({
+        kind: 'text',
+        content,
+        consent: 'publishable',
+        idempotency_key: `home-capture-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      });
+      setQuickCapture('');
+      setQuickNotice('已丢进收件箱。去「收件箱」点消化生产。');
+    } catch (err) {
+      setQuickNotice(extractErrorMessage(err, '没能丢进去，稍后再试一次'));
+    } finally {
+      setQuickBusy(false);
+    }
+  }, [quickBusy, quickCapture]);
 
   // 审计 e54a2643 batch C：主按钮与「手动继续」必须解析到同一目的地；
   // 此前两套逻辑对 create_project 行动会跳到不同页面。
@@ -236,7 +263,9 @@ export default function HomePage() {
             <p className="kicker">今天唯一要做的事 · 约 {action?.estimated_effort_minutes ?? 3} 分钟</p>
             <h3>{isCancelled ? 'AI 不再推进这条建议' : isDeferred ? '这件事已暂缓' : action?.title ?? '开始一条内容'}</h3>
             <p>{action ? outcomeLabels[action.action_type] : '去内容页创建一个项目，AI 会逐篇安排下一步。'}</p>
-            <p className="go">{primaryLabel} →</p>
+            {/* F3（用户验收测试 2026-09-19）：这里原有一行 `{primaryLabel} →`，
+                与正下方那颗主按钮是**同一个动作、同一个文案**，同屏出现两次，
+                违反 DESIGN.md §9「同意图 CTA 唯一」。删掉这行，主动作只由按钮承担。 */}
             <div className="cta" onClick={(e) => e.stopPropagation()}>
               <button type="button" className="btn btn-primary btn-sm" disabled={busy} onClick={startAction}>{primaryLabel}</button>
               {!isDeferred && !isCancelled ? <button type="button" className="btn btn-text" disabled={busy} onClick={() => void deferAction()}>暂不做</button> : null}
@@ -277,14 +306,32 @@ export default function HomePage() {
           </div>
         </div>
         <div className="cta" style={{ marginTop: 26 }}>
+          {/* F4（用户验收测试 2026-09-19）：这里原是一个 `readOnly` 的 input，
+              长得像输入框却打不了字，点击只是跳转——用户会先试着打字，失败后
+              才发现它是个假输入框。改成一个**真的**快速采集：回车即入收件箱。 */}
           <input
             className="lm-input"
             style={{ flex: 1, marginBottom: 0, maxWidth: 520, borderRadius: 9999, height: 44 }}
-            placeholder="有灵感？先丢进收件箱，其他交给它…"
-            aria-label="有灵感？先丢进收件箱，其他交给它…"
-            readOnly
-            onClick={() => navigate('/loop/inbox')}
+            placeholder="有灵感？打一句话，回车丢进收件箱…"
+            aria-label="快速丢进收件箱"
+            value={quickCapture}
+            disabled={quickBusy}
+            onChange={(event) => setQuickCapture(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                void captureToInbox();
+              }
+            }}
           />
+          <button
+            type="button"
+            className="askbtn"
+            disabled={quickBusy || !quickCapture.trim()}
+            onClick={() => void captureToInbox()}
+          >
+            {quickBusy ? '丢进去…' : '丢进收件箱'}
+          </button>
           <button type="button" className="askbtn" onClick={() => navigate('/loop/inbox')}>去收件箱 ↗</button>
           {/* 快捷回应接真实 defer 动作；「为什么先推这条」在悬浮球接入真实
               模型前不展示——按钮承诺的回答当前给不出来（宁可少不能假）。 */}
@@ -299,6 +346,10 @@ export default function HomePage() {
             </>
           ) : null}
         </div>
+        {/* F4：采集回执。没有它，用户按了回车不知道东西进没进去。 */}
+        {quickNotice ? (
+          <p className="pg-sub" role="status" style={{ marginTop: 8 }}>{quickNotice}</p>
+        ) : null}
       </div>
       <div className="weekfoot">
         <span>AI 只会准备到发布前；发布、公开范围和长期经验都需要你确认。</span>

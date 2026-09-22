@@ -242,7 +242,11 @@ export default function MaterialsPage() {
             <article className="operations-row" key={material.id}>
               <div className="operations-row-header">
                 <div><h2>{material.title}</h2><p className="operations-meta">{kindLabels[material.kind]} · {Math.max(1, Math.ceil((material.size ?? 0) / 1024))} KB</p></div>
-                <Chip size="small" label={privacyLabels[material.privacy_level]} color={material.privacy_level === 'sensitive' ? 'warning' : 'default'} />
+                {/* F6（用户验收测试 2026-09-19）：这个 chip 说的是素材的**隐私级别**，
+                    而收件箱里说的是**生成授权**（consent）。两处都用两三个字、都不点明
+                    是哪个轴，用户就会读成同一个属性、进而以为系统自相矛盾
+                    （「可发布类」vs「私密」）。这里显式写出轴名。 */}
+                <Chip size="small" label={`隐私：${privacyLabels[material.privacy_level]}`} color={material.privacy_level === 'sensitive' ? 'warning' : 'default'} />
               </div>
               {material.content ? <p className="operations-row-copy">{material.content}</p> : null}
               {/* 音视频素材的文字是模型读出来的——必须在界面上说明，不能当成作者写的。 */}
