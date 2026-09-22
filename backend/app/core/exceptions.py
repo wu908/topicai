@@ -262,7 +262,28 @@ def setup_exception_handlers(app: "FastAPI") -> None:
 
     @app.exception_handler(ValueError)
     async def value_error_handler(request: Request, exc: ValueError):
+        from pydantic import ValidationError
+
         from config.settings import get_settings
+
+        # F25a: ValidationError subclasses ValueError and str(exc) is an
+        # English field dump (paths, input values, pydantic URLs). Handle it
+        # before the keyword classifier so that dump never becomes the
+        # client message — in any environment.
+        if isinstance(exc, ValidationError):
+            logger.warning("Pydantic ValidationError surfaced to client", exc_info=exc)
+            meta: dict = {"error_code": "VALIDATION_ERROR", "timestamp": utc_now()}
+            if not get_settings().is_production:
+                meta["errors"] = str(exc)
+            return JSONResponse(
+                status_code=422,
+                content={
+                    "code": 422,
+                    "data": None,
+                    "message": "提交的内容没有通过校验，请检查后重试",
+                    "meta": meta,
+                },
+            )
 
         message = str(exc)
         lowered = message.lower()
@@ -275,9 +296,12 @@ def setup_exception_handlers(app: "FastAPI") -> None:
         # Keyword-classified messages are deliberate domain signals and part
         # of the API contract; anything else may originate deep inside a
         # third-party library (paths, SQL fragments, field values) and must
-        # not be echoed to clients in production.
-        if status == 400 and get_settings().is_production:
+        # not be echoed to clients — in any environment (F25a defense-in-depth).
+        meta = {"timestamp": utc_now()}
+        if status == 400:
             logger.warning("Unhandled ValueError surfaced to client", exc_info=exc)
+            if not get_settings().is_production:
+                meta["errors"] = message
             message = "请求参数无效"
         return JSONResponse(
             status_code=status,
@@ -285,7 +309,7 @@ def setup_exception_handlers(app: "FastAPI") -> None:
                 "code": status,
                 "data": None,
                 "message": message,
-                "meta": {"timestamp": utc_now()},
+                "meta": meta,
             },
         )
 

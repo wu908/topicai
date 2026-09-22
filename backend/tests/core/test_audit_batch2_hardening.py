@@ -112,10 +112,72 @@ async def test_production_value_error_keeps_domain_messages(
 
 
 @pytest.mark.asyncio
-async def test_non_production_value_error_echoes_raw_message(envelope_client):
+async def test_non_production_value_error_still_masks_unclassified(envelope_client):
+    """F25a defense-in-depth: an unclassified ValueError may carry paths,
+    SQL fragments or field values. Mask the client message in every
+    environment — raw text stays in the server log and, outside production,
+    in meta.errors for debugging."""
     _reset_settings()  # rebuild under the autouse ENVIRONMENT=test
 
     response = await envelope_client.get("/boom-internal")
 
     assert response.status_code == 400
-    assert "disk image" in response.json()["message"]
+    assert "disk image" not in response.json()["message"]
+    assert "/app/data/topicai.db" not in response.json()["message"]
+    # Dev-only debug detail lives in meta, not in the user-facing message.
+    assert "disk image" in response.text
+
+
+@pytest.mark.asyncio
+async def test_pydantic_validation_error_never_echoes_raw(envelope_client):
+    """pydantic.ValidationError subclasses ValueError. Before F25a its
+    multi-line English dump was the client message (the reference-anchor
+    incident). Always return a short Chinese message instead."""
+    from fastapi import FastAPI
+    from pydantic import BaseModel, Field
+
+    from app.api.deps import get_current_user, get_db
+    from app.core.exceptions import setup_exception_handlers
+
+    app = FastAPI()
+    setup_exception_handlers(app)
+    app.dependency_overrides[get_db] = lambda: None
+
+    async def _fake_user():
+        return {"id": "u1"}
+
+    app.dependency_overrides[get_current_user] = _fake_user
+
+    class Body(BaseModel):
+        title: str = Field(min_length=5)
+
+    @app.post("/raise-pydantic")
+    async def raise_pydantic(body: Body):  # pragma: no cover - never reached
+        return body
+
+    # Also cover ValidationError raised *inside* a service (not request parse).
+    class Draft(BaseModel):
+        label: str
+
+    @app.get("/raise-service-validation")
+    async def raise_service_validation():
+        Draft.model_validate({"label": 123})
+        return {}  # pragma: no cover
+
+    from httpx import ASGITransport, AsyncClient
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app, raise_app_exceptions=False),
+        base_url="http://test",
+    ) as c:
+        request_bad = await c.post("/raise-pydantic", json={"title": "ab"})
+        service_bad = await c.get("/raise-service-validation")
+
+    for response in (request_bad, service_bad):
+        assert response.status_code in (400, 422)
+        message = response.json()["message"]
+        assert "validation" not in message.lower()
+        assert "pydantic" not in message.lower()
+        assert "title" not in message or "字段" in message
+        assert len(message) < 40
+

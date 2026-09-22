@@ -207,9 +207,10 @@ For further information visit https://errors.pydantic.dev/2.10/v/too_short
 **同时关闭**：F25b（已存下却看不出来）、F25d（按钮折行）、F28（分隔规则未说明）。
 **F25c 撤销**（原判断有误）。
 
-**仍未处理**：F25a 的纵深防御——`exceptions.py:279` 只在生产环境兜底 `str(exc)`，
-开发环境仍会把任意未分类 `ValueError` 原文回给客户端。本次是消除了触发源，
-没有改这条兜底策略。
+**F25a（2026-09-22 已修）**：`exceptions.py` 的 ValueError 兜底原先只在生产环境替换
+`str(exc)`。现在**所有环境**都掩码未分类 `ValueError` 与 `pydantic.ValidationError`
+（后者继承 ValueError，`str()` 就是那次英文字段转储）；客户端只拿短中文文案，原文进服务
+日志，非生产额外放在 `meta.detail` 供调试。回归：`test_audit_batch2_hardening.py`。
 
 ---
 
