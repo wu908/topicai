@@ -40,7 +40,7 @@ services:
       - OMNI_ENABLED=${OMNI_ENABLED:-false}
       - OMNI_BASE_URL=${OMNI_BASE_URL:-https://api.xiaomimimo.com/v1}
       - OMNI_API_KEY=${OMNI_API_KEY:-}
-      - OMNI_MODEL=${OMNI_MODEL:-mimo-v2.5}
+      - OMNI_MODEL=${OMNI_MODEL:-mimo-v2.6-flash}
       # 夜间自动消化的触发时刻（产品时区，默认 03:00）。可在服务器 .env 覆盖，
       # 用于把这条链路指到几分钟后做真实验证。
       - NIGHTLY_DIGEST_HOUR=${NIGHTLY_DIGEST_HOUR:-3}

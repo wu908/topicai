@@ -1,4 +1,4 @@
-﻿"""Global configuration for TopicAI v4.0.
+"""Global configuration for TopicAI v4.0.
 
 Uses Pydantic BaseSettings for environment variable loading with validation.
 All sensitive values read from .env file or environment variables.
@@ -62,7 +62,7 @@ class Settings(BaseSettings):
     omni_enabled: bool = Field(default=False, alias="OMNI_ENABLED")
     omni_base_url: str = Field(default="https://api.xiaomimimo.com/v1", alias="OMNI_BASE_URL")
     omni_api_key: str = Field(default="", alias="OMNI_API_KEY")
-    omni_model: str = Field(default="mimo-v2.5", alias="OMNI_MODEL")
+    omni_model: str = Field(default="mimo-v2.6-flash", alias="OMNI_MODEL")
     omni_timeout_seconds: float = Field(default=120.0, alias="OMNI_TIMEOUT_SECONDS", gt=0)
     # 官方限制：base64 字符串 ≤50MB（视频 URL ≤300MB）。留出余量后按原始字节判定。
     omni_max_media_bytes: int = Field(default=45_000_000, alias="OMNI_MAX_MEDIA_BYTES")
