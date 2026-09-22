@@ -84,7 +84,15 @@
   letter-spacing: 0;
 }
 
-.operations-row-copy,
+/* 识别/摘录正文自带段落换行；default white-space 会把它们压成一堵字墙。 */
+.operations-row-copy {
+  margin: 8px 0 0;
+  color: var(--v3-text-sec);
+  font-size: var(--fs-meta);
+  line-height: 1.65;
+  white-space: pre-wrap;
+}
+
 .operations-empty p,
 .operations-helper {
   margin: 8px 0 0;
