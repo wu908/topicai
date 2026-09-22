@@ -9,7 +9,7 @@ import { render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockAuthState } = vi.hoisted(() => ({
+const { mockAuthState, homeSuspends } = vi.hoisted(() => ({
   mockAuthState: {
     user: null as unknown,
     isAuthenticated: false,
@@ -22,6 +22,8 @@ const { mockAuthState } = vi.hoisted(() => ({
     fetchCurrentUser: vi.fn(),
     clearError: vi.fn(),
   },
+  // 让 HomePage 在渲染时 suspend，用来观察 Suspense 边界落在哪一层。
+  homeSuspends: { value: false },
 }));
 
 vi.mock('@/store/authStore', () => ({
@@ -32,7 +34,12 @@ vi.mock('@/store/authStore', () => ({
 // Stub every lazy page so routing decisions are observable without loading
 // real page modules (and their API calls).
 vi.mock('@/pages/Login/LoginPage', () => ({ default: () => <div data-testid="login-page" /> }));
-vi.mock('@/pages/Home/HomePage', () => ({ default: () => <div data-testid="home-page" /> }));
+vi.mock('@/pages/Home/HomePage', () => ({
+  default: () => {
+    if (homeSuspends.value) throw new Promise(() => undefined);
+    return <div data-testid="home-page" />;
+  },
+}));
 vi.mock('@/pages/Content/ContentPage', () => ({ default: () => <div data-testid="content-page" /> }));
 vi.mock('@/pages/Opportunities/OpportunitiesPage', () => ({ default: () => <div data-testid="opportunities-page" /> }));
 vi.mock('@/pages/Materials/MaterialsPage', () => ({ default: () => <div data-testid="materials-page" /> }));
@@ -55,6 +62,7 @@ describe('App routing guards', () => {
     mockAuthState.isLoading = false;
     mockAuthState.error = null;
     mockAuthState.fetchCurrentUser = vi.fn().mockResolvedValue(undefined);
+    homeSuspends.value = false;
     window.history.pushState({}, '', '/');
   });
 
@@ -82,7 +90,8 @@ describe('App routing guards', () => {
   it('keeps the layout mounted when an established session refreshes', async () => {
     // E2E regression: pages like HomePage re-run fetchCurrentUser on mount,
     // which flips isLoading. Blank the whole layout on that flag and the
-    // page unmounts, re-mounts and re-fetches forever.
+    // page unmounts, re-mounts and re-fetches forever. A brief in-content
+    // spinner while the lazy chunk settles is fine — the shell must stay.
     mockAuthState.isAuthenticated = true;
     mockAuthState.user = { id: 'u-1', username: 'tester' };
     mockAuthState.isLoading = true;
@@ -90,6 +99,20 @@ describe('App routing guards', () => {
     render(<App />);
 
     expect(await screen.findByTestId('app-layout')).toBeInTheDocument();
-    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+    expect(await screen.findByTestId('home-page')).toBeInTheDocument();
+  });
+
+  it('keeps the shell mounted while a lazy page chunk is loading (F5)', async () => {
+    // Suspense must sit INSIDE AppLayout: if it wraps ProtectedRoute, a slow
+    // chunk load replaces the sidebar with a bare full-page spinner.
+    mockAuthState.isAuthenticated = true;
+    mockAuthState.user = { id: 'u-1', username: 'tester' };
+    homeSuspends.value = true;
+
+    render(<App />);
+
+    expect(await screen.findByTestId('app-layout')).toBeInTheDocument();
+    expect(await screen.findByRole('progressbar')).toBeInTheDocument();
+    expect(screen.queryByTestId('home-page')).not.toBeInTheDocument();
   });
 });

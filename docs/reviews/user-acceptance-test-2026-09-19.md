@@ -36,14 +36,16 @@
 | ③ | **F6** 素材隐私语义矛盾 | ✅ 已修 | 两个轴显式命名：收件箱标 **授权：可用于生成**，素材页标 **隐私：私密** |
 | ④ | **F2** 「替换」不可达 | ✅ 已修 | 待确认状态就并列 **保留 / 替换 / 拒绝** 三个选项；「重新修改这一段」正名为 **撤销确认** |
 | ⑤ | **F3 / F4** 首页重复 CTA + 只读假输入框 | ✅ 已修 | 删掉与主按钮重复的 `{同文案} →` 行；底部假输入框改为**真的**快速采集（回车入收件箱 + 回执） |
-| ⑥ | **F5** spinner 代替骨架 + 外壳闪断 | ⚠️ 部分已修 | 列表加载改为**内容形状骨架**（含页头，避免跳动）。**Suspense 边界下沉未做**——见下 |
+| ⑥ | **F5** spinner 代替骨架 + 外壳闪断 | ✅ 已修 | 列表加载改为**内容形状骨架**（含页头，避免跳动）；Suspense 下沉到 `AppLayout` 之内，chunk 加载期侧栏不再被整页 spinner 顶掉 |
 | ⑦ | **F26 / F27** 移动端「更多」面板 | ✅ 已修 | 面板补 `backdrop-filter`；「退出登录」补样式，不再回退到 UA 默认 `2px outset` |
 
 **门禁**：后端 `530 passed` / 覆盖率 **90.43%**（门禁 80%）；前端 **299 passed / 45 files**；`lint` 与 `build` 均通过。
 
-**F5 的遗留项（未做）**：`App.tsx` 的 `LazyRoute`(Suspense) 包在 `ProtectedRoute` **外面**，所以页面 chunk 加载期间
-整个侧栏与布局会被替换成一个全屏 spinner。修它要把 Suspense 边界下沉到 `AppLayout` 之内——
-那是路由结构改动，风险高于本次其它修复，**留待你确认后单独做**。
+**F5 遗留项（2026-09-22 已做）**：`App.tsx` 的 `LazyRoute`(Suspense) 原先包在 `ProtectedRoute`
+外面，chunk 加载期侧栏与布局会被全屏 spinner 顶掉。已把 Suspense 下沉到 `AppLayout` 之内
+（`protectedPage` 改为 `ProtectedRoute > LazyRoute > page`），并加回归测试：页面 suspend 时
+`app-layout` 仍在 DOM、progressbar 只出现在主区。会话水合期（`isLoading && !user`）仍是全页
+fallback——那时本来就不该先露出侧栏。
 
 **F11–F16 内容页信息架构**：不在本轮修复范围（属重设计），仍未处理。
 

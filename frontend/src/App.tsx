@@ -50,8 +50,12 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   return <AppLayout>{children}</AppLayout>;
 };
 
+// Suspense 必须在 AppLayout 之内：包在外面的话，懒加载 chunk 的几秒里
+// 侧栏与布局会被整页 spinner 顶掉（用户验收 F5「外壳闪断」）。
 const protectedPage = (page: React.ReactNode) => (
-  <LazyRoute><ProtectedRoute>{page}</ProtectedRoute></LazyRoute>
+  <ProtectedRoute>
+    <LazyRoute>{page}</LazyRoute>
+  </ProtectedRoute>
 );
 
 export default function App() {
