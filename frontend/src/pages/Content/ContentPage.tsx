@@ -94,7 +94,8 @@ import {
 import ProjectStartPanel from '@/features/content/ProjectStartPanel';
 import ProjectWorkspace from '@/features/content/ProjectWorkspace';
 import ProjectListRow from '@/features/content/ProjectListRow';
-import { nextActionLabels } from '@/features/content/projectListModel';
+import ProjectDetailPane from '@/features/content/ProjectDetailPane';
+import { nextActionLabels, searchProjects, viewProjects, type ProjectView } from '@/features/content/projectListModel';
 import './ContentPage.css';
 
 // G4: next-action copy is owned by projectListModel; list and workspace share it.
@@ -143,6 +144,11 @@ export default function ContentPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  // 双栏：选中行 → 右栏预览；点右栏主按钮才进工作台。
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [view, setView] = useState<ProjectView>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const visibleProjects = searchProjects(viewProjects(projects, view), searchQuery);
 
   // 幂等键稳定化（与 Materials/Starter/Opportunities 页面同一模式）：
   // 同一签名在一次尝试内复用同一个键，瞬时失败重试时服务端可去重；
@@ -351,15 +357,51 @@ export default function ContentPage() {
             }}
           />
         ) : (
+          <div className="content-project-split">
             <div className="content-project-list" data-testid="project-list">
-            {projects.map((project) => (
-              <ProjectListRow
-                key={project.id}
-                project={project}
-                selected={false}
-                onSelect={(id) => navigate(`/content/${id}`)}
+              <div className="content-project-toolbar">
+                <TextField
+                  size="small"
+                  fullWidth
+                  placeholder="搜标题或形态"
+                  aria-label="搜标题或形态"
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                />
+                <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ mt: 1 }}>
+                  {(['all', 'needs_me', 'observing', 'done'] as const).map((v) => (
+                    <Chip
+                      key={v}
+                      size="small"
+                      label={{ all: '全部', needs_me: '需要我', observing: '观察中', done: '已完成' }[v]}
+                      onClick={() => setView(v)}
+                      color={view === v ? 'primary' : 'default'}
+                      variant={view === v ? 'filled' : 'outlined'}
+                      data-testid={`view-${v}`}
+                    />
+                  ))}
+                </Stack>
+              </div>
+              {visibleProjects.map((project) => (
+                <ProjectListRow
+                  key={project.id}
+                  project={project}
+                  selected={selectedId === project.id}
+                  onSelect={(id) => setSelectedId(id)}
+                />
+              ))}
+              {visibleProjects.length === 0 ? (
+                <Typography color="text.secondary" sx={{ p: 2 }}>
+                  这个视图下还没有项目。
+                </Typography>
+              ) : null}
+            </div>
+            <aside className="content-project-aside">
+              <ProjectDetailPane
+                project={projects.find((p) => p.id === selectedId) ?? null}
+                onOpen={(id) => navigate(`/content/${id}`)}
               />
-            ))}
+            </aside>
           </div>
         )}
       </div>

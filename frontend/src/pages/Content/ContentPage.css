@@ -1591,3 +1591,9 @@
   font-size: var(--fs-meta);
   color: var(--v3-text-sec);
 }
+
+/* Dual-column list + preview (>=840). Single column below. */
+.content-project-split{display:grid;gap:16px;grid-template-columns:1fr}
+.content-project-aside{min-width:0}
+.content-project-toolbar{margin-bottom:12px}
+@media (min-width:840px){.content-project-split{grid-template-columns:minmax(280px,360px) 1fr}.content-project-aside{position:sticky;top:16px;align-self:start;border:1px solid var(--color-border-light,rgba(0,0,0,.08));border-radius:16px;padding:8px}}
