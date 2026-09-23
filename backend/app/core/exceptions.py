@@ -293,12 +293,30 @@ def setup_exception_handlers(app: "FastAPI") -> None:
             status = 422
         else:
             status = 400
-        # Keyword-classified messages are deliberate domain signals and part
-        # of the API contract; anything else may originate deep inside a
-        # third-party library (paths, SQL fragments, field values) and must
-        # not be echoed to clients — in any environment (F25a defense-in-depth).
+        # Domain ValueError messages are deliberate API-contract signals and
+        # stay visible. Library/pydantic dumps (paths, SQL, field stacks) must
+        # never reach the client — in any environment (F25a).
+        import re
+
+        looks_internal = (
+            "\n" in message
+            or bool(re.search(r"[/\\][\w.-]+[/\\]", message))
+            or ".db" in lowered
+            or any(
+                token in lowered
+                for token in (
+                    "traceback",
+                    "pydantic",
+                    "validation error",
+                    "site-packages",
+                    "sqlalchemy",
+                    'file "',
+                    ".py\"",
+                )
+            )
+        )
         meta = {"timestamp": utc_now()}
-        if status == 400:
+        if looks_internal:
             logger.warning("Unhandled ValueError surfaced to client", exc_info=exc)
             if not get_settings().is_production:
                 meta["errors"] = message
