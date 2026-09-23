@@ -377,6 +377,8 @@ export default function ContentPage() {
                       onClick={() => setView(v)}
                       color={view === v ? 'primary' : 'default'}
                       variant={view === v ? 'filled' : 'outlined'}
+                      // 主题 primary 填充色过浅时文字会糊掉——选中态强制深底白字。
+                      sx={view === v ? { bgcolor: '#191E26', color: '#fff', borderColor: '#191E26' } : undefined}
                       data-testid={`view-${v}`}
                     />
                   ))}
