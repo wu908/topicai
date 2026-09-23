@@ -71,6 +71,8 @@ export default function HomePage() {
   const [deferred, setDeferred] = useState(false);
   const [rejected, setRejected] = useState(false);
   const [showReject, setShowReject] = useState(false);
+  // F15: 精简到一个「稍后」入口，三种节奏收进同一面板，避免五个近义按钮并列。
+  const [showSnooze, setShowSnooze] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   // F4：首页底部的快速采集（原先是个只读假输入框）。
   const [quickCapture, setQuickCapture] = useState('');
@@ -268,11 +270,26 @@ export default function HomePage() {
                 违反 DESIGN.md §9「同意图 CTA 唯一」。删掉这行，主动作只由按钮承担。 */}
             <div className="cta" onClick={(e) => e.stopPropagation()}>
               <button type="button" className="btn btn-primary btn-sm" disabled={busy} onClick={startAction}>{primaryLabel}</button>
-              {!isDeferred && !isCancelled ? <button type="button" className="btn btn-text" disabled={busy} onClick={() => void deferAction()}>暂不做</button> : null}
-              {!isDeferred && !isCancelled ? <button type="button" className="btn btn-text" disabled={busy} onClick={() => setShowReject(true)}>不适合我</button> : null}
-              {!isCancelled ? <button type="button" className="btn btn-text" onClick={() => navigate(continuePath)}>手动继续</button> : null}
+              {!isDeferred && !isCancelled ? (
+                <>
+                  <button type="button" className="btn btn-text" disabled={busy} onClick={() => setShowSnooze((open) => !open)} aria-expanded={showSnooze}>稍后</button>
+                  <button type="button" className="btn btn-text" disabled={busy} onClick={() => setShowReject(true)}>不适合我</button>
+                </>
+              ) : null}
+              {!isCancelled ? <button type="button" className="btn btn-text" onClick={() => navigate(continuePath)}>打开项目</button> : null}
               <button type="button" className="askbtn" onClick={() => openCompanion('晨报 · 当前行动')}>问它</button>
             </div>
+            {showSnooze && !isDeferred && !isCancelled ? (
+              <div className="judge" style={{ marginTop: 14 }} onClick={(e) => e.stopPropagation()}>
+                <p className="pg-sub" style={{ margin: '0 0 8px' }}>这条建议先放一放——选一个你想要的节奏：</p>
+                <div className="cta">
+                  <button type="button" className="btn btn-text" disabled={busy} onClick={() => { setShowSnooze(false); void deferAction(); }}>今天先不做（保留这条）</button>
+                  <button type="button" className="btn btn-text" disabled={busy} onClick={() => { setShowSnooze(false); void deferAction('another_deferred_no_rush'); }}>这几天别催我</button>
+                  <button type="button" className="btn btn-text" disabled={busy} onClick={() => { setShowSnooze(false); void deferAction('scheduled_pickup_friday'); }}>周五晚再拾取</button>
+                  <button type="button" className="btn btn-text" disabled={busy} onClick={() => setShowSnooze(false)}>取消</button>
+                </div>
+              </div>
+            ) : null}
             {action ? (
               <div className="judge" style={{ marginTop: 14 }}>
                 <span><b>AI 依据</b> {action.evidence_refs.length ? action.evidence_refs.map(readableRef).join('；') : '当前项目状态'}</span>
@@ -333,18 +350,6 @@ export default function HomePage() {
             {quickBusy ? '丢进去…' : '丢进收件箱'}
           </button>
           <button type="button" className="askbtn" onClick={() => navigate('/loop/inbox')}>去收件箱 ↗</button>
-          {/* 快捷回应接真实 defer 动作；「为什么先推这条」在悬浮球接入真实
-              模型前不展示——按钮承诺的回答当前给不出来（宁可少不能假）。 */}
-          {action && !isDeferred && !isCancelled ? (
-            <>
-              <button type="button" className="askbtn" disabled={busy} onClick={() => void deferAction('another_deferred_no_rush')}>
-                另一条先放着，别催我
-              </button>
-              <button type="button" className="askbtn" disabled={busy} onClick={() => void deferAction('scheduled_pickup_friday')}>
-                周五晚再拾取
-              </button>
-            </>
-          ) : null}
         </div>
         {/* F4：采集回执。没有它，用户按了回车不知道东西进没进去。 */}
         {quickNotice ? (

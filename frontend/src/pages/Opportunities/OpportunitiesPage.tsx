@@ -313,7 +313,7 @@ export default function OpportunitiesPage() {
       ]);
       setNotice(generated.length
         ? `生成了 ${generated.length} 条新机会，请在下方逐条确认。`
-        : '暂时没有生成新的机会。可能是 AI 服务未配置完整，或你的历史内容与画像还不够；也可以手动添加来源。');
+        : '暂时没有生成新的机会。你的真实历史内容与画像还不够，可以先导入历史笔记、确认画像，或点「手动添加来源」自己提一条。');
     } catch (err) {
       setError(extractErrorMessage(err, '内容机会生成失败'));
     } finally {
@@ -367,6 +367,7 @@ export default function OpportunitiesPage() {
             <div className="opportunity-controls">
             {/* 第五轮 C3：移动端 9 控件挤成三行且浮动标签与状态 chip 重叠，
                 两个筛选下拉在窄屏折叠到「筛选」开关之后。 */}
+            {items.length > 0 ? (
             <Button
               size="small"
               variant="text"
@@ -376,13 +377,14 @@ export default function OpportunitiesPage() {
             >
               {filtersOpen ? '收起筛选' : '筛选'}
             </Button>
+          ) : null}
             <TextField
               select
               size="small"
               label="来源类型筛选"
               value={sourceFilter}
               onChange={(event) => setSourceFilter(event.target.value as SourceFilter)}
-              sx={{ display: { xs: filtersOpen ? 'inline-flex' : 'none', sm: 'inline-flex' } }}
+              sx={{ display: items.length ? { xs: filtersOpen ? 'inline-flex' : 'none', sm: 'inline-flex' } : 'none' }}
             >
               <MenuItem value="all">全部来源</MenuItem>
               <MenuItem value="history_derivative">历史内容</MenuItem>
@@ -399,7 +401,7 @@ export default function OpportunitiesPage() {
               label="时效筛选"
               value={timelinessFilter}
               onChange={(event) => setTimelinessFilter(event.target.value as TimelinessFilter)}
-              sx={{ display: { xs: filtersOpen ? 'inline-flex' : 'none', sm: 'inline-flex' } }}
+              sx={{ display: items.length ? { xs: filtersOpen ? 'inline-flex' : 'none', sm: 'inline-flex' } : 'none' }}
             >
               <MenuItem value="all">全部时效</MenuItem>
               <MenuItem value="evergreen">常青</MenuItem>

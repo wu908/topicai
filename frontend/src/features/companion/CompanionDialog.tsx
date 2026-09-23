@@ -1,7 +1,7 @@
 /**
  * CompanionDialog — 悬浮球对话系统（DESIGN.md v3 §6 定稿）。
  *
- * 结构三体分离：悬浮球（可拖拽、六层构造）→ π 形灯框（消息区，底部开放
+ * 结构三体分离：悬浮球（固定槽位、六层构造）→ π 形灯框（消息区，底部开放
  * 不闭合）→ 独立输入泡（与消息框分离）。首次打开播放四幕全息入场（GSAP
  * timeline：输入泡伸出 → 灯带上升 → 顶帽交会 → 成像），仅播放一次
  * （sessionStorage 持久化）；闲置 12s 渐隐 chrome 只留气泡与输入泡。
@@ -165,7 +165,7 @@ export default function CompanionDialog() {
 
   return createPortal(
     <Box ref={rootRef} aria-label="AI 对话" className="companion-root" sx={{ position: 'fixed', zIndex: 1300, right: 44, bottom: 44, pointerEvents: 'none' }}>
-      {/* 悬浮球（可拖拽） */}
+      {/* 悬浮球（固定槽位，不拖拽） */}
       <Box
         aria-label="对话悬浮球"
         component="button"
@@ -179,12 +179,12 @@ export default function CompanionDialog() {
           height: { xs: 56, sm: 80 },
           border: 'none',
           borderRadius: '50%',
-          cursor: 'grab',
+          cursor: 'pointer',
           pointerEvents: 'auto',
           background: 'radial-gradient(circle at 30% 22%, #FFFFFF 0%, #EDF2F9 46%, #C9D8EA 100%)',
           boxShadow: '0 16px 40px rgba(70,95,130,.30), inset 0 2px 5px rgba(255,255,255,.95), 0 0 30px rgba(143,190,232,.32)',
           '&:hover': { boxShadow: '0 20px 48px rgba(70,95,130,.36), inset 0 2px 5px rgba(255,255,255,.95), 0 0 46px rgba(143,190,232,.42)' },
-          '&:active': { cursor: 'grabbing', transform: 'scale(.98)' },
+          '&:active': { cursor: 'pointer', transform: 'scale(.98)' },
         }}
       >
         <Box aria-hidden sx={{ position: 'absolute', inset: -8, borderRadius: '50%', border: '2px solid transparent', borderTopColor: 'rgba(255,255,255,.98)', borderRightColor: 'rgba(143,190,232,.7)', pointerEvents: 'none', animation: 'orbit-spin 5s linear infinite' }} />

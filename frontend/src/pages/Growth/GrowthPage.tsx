@@ -97,24 +97,26 @@ export default function GrowthPage() {
           <div className="card gcard glass" style={{ marginTop: 18 }}>
             <h3>信任面板 · 每一项都能收回</h3>
             <div className="trust">
-              <div className="t"><b>自主准备 · 到可发布为止</b><span>{state?.autopilotEligible ? '信任额度已达标，可申请' : '连续接受 ≥3 次且无未解决纠正后解锁'}</span></div>
+              <div className="t"><b>自主准备 · 到可发布为止</b><span>{state?.autopilotEligible ? '信任额度已达标，可申请' : '连续接受 ≥3 次且无未解决纠正后解锁'} · 即将开放，当前不可切换</span></div>
+              {/* F16: 未开放能力用 disabled + 常驻说明，不做「能点但不变」。 */}
               <button
                 type="button"
-                className={`switch${state?.autopilotEligible ? '' : ' off'}`}
-                aria-pressed={Boolean(state?.autopilotEligible)}
-                aria-label="自主准备开关（即将开放）"
-                onClick={() => setTrustNote('该能力将随后续版本开放，当前为展示状态。')}
+                className="switch off"
+                disabled
+                aria-pressed={false}
+                aria-disabled="true"
+                aria-label="自主准备开关（即将开放，当前不可用）"
               >
                 <i />
               </button>
             </div>
             <div className="trust">
               <div className="t"><b>探索位 · 每批 1 条</b><span>落选不计入成长分</span></div>
-              <button type="button" className="switch" aria-pressed onClick={() => setTrustNote('该能力将随后续版本开放，当前为展示状态。')} aria-label="探索位开关"><i /></button>
+              <button type="button" className="switch" aria-pressed onClick={() => setTrustNote('探索位已开启：每批只推 1 条试探性方向，落选不计入成长分。')} aria-label="探索位开关"><i /></button>
             </div>
             <div className="trust">
-              <div className="t"><b>私密素材参与生产</b><span>永不——标记私密后不出本地</span></div>
-              <button type="button" className="switch off" aria-pressed={false} aria-label="私密素材参与生产开关（保持关闭）"><i /></button>
+              <div className="t"><b>私密素材参与生产</b><span>永不开启——标记私密后不出本地 · 保持关闭</span></div>
+              <button type="button" className="switch off" disabled aria-pressed={false} aria-disabled="true" aria-label="私密素材参与生产开关（保持关闭，不可用）"><i /></button>
             </div>
             {trustNote ? <p className="hint" style={{ fontSize: 11.5, color: 'var(--faint)', marginTop: 10 }}>{trustNote}</p> : null}
             <p className="hint" style={{ fontSize: 11.5, color: 'var(--faint)', marginTop: 10 }}>

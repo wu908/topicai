@@ -127,7 +127,7 @@ describe('HomePage', () => {
 
       render(<MemoryRouter><HomePage /></MemoryRouter>);
       await screen.findByText(action.title);
-      fireEvent.click(screen.getByRole('button', { name: '手动继续' }));
+      fireEvent.click(screen.getByRole('button', { name: '打开项目' }));
       expect(navigateMock).toHaveBeenCalledWith('/content');
     },
   );
@@ -144,14 +144,15 @@ describe('HomePage', () => {
 
     render(<MemoryRouter><HomePage /></MemoryRouter>);
     await screen.findByText(action.title);
-    fireEvent.click(screen.getByRole('button', { name: '手动继续' }));
+    fireEvent.click(screen.getByRole('button', { name: '打开项目' }));
     expect(navigateMock).toHaveBeenCalledWith('/materials?from=today#next');
   });
 
   it('can defer the action without inventing dashboard metrics', async () => {
     render(<MemoryRouter><HomePage /></MemoryRouter>);
     await screen.findByText('确认这是一条“分享”内容吗？');
-    fireEvent.click(screen.getByRole('button', { name: '暂不做' }));
+    fireEvent.click(screen.getByRole('button', { name: '稍后' }));
+    fireEvent.click(screen.getByRole('button', { name: '今天先不做（保留这条）' }));
     await waitFor(() => expect(api.respondToAction).toHaveBeenCalledWith('a1', expect.objectContaining({ decision: 'defer' })));
     expect(screen.getByText('这件事已暂缓')).toBeInTheDocument();
     expect(screen.queryByText('今日阅读')).not.toBeInTheDocument();
@@ -175,7 +176,8 @@ describe('HomePage', () => {
   it('silently refreshes the workspace after deferring an action', async () => {
     render(<MemoryRouter><HomePage /></MemoryRouter>);
     await screen.findByText(action.title);
-    fireEvent.click(screen.getByRole('button', { name: '暂不做' }));
+    fireEvent.click(screen.getByRole('button', { name: '稍后' }));
+    fireEvent.click(screen.getByRole('button', { name: '今天先不做（保留这条）' }));
     await waitFor(() => expect(api.getTodayWorkspace).toHaveBeenCalledTimes(2));
   });
 
@@ -196,7 +198,7 @@ describe('HomePage', () => {
     await screen.findByText(action.title);
     fireEvent.click(screen.getByRole('button', { name: '开始一条内容' }));
     expect(navigateMock).toHaveBeenLastCalledWith('/content/new?series=s1');
-    fireEvent.click(screen.getByRole('button', { name: '手动继续' }));
+    fireEvent.click(screen.getByRole('button', { name: '打开项目' }));
     expect(navigateMock).toHaveBeenLastCalledWith('/content/new?series=s1');
   });
 
