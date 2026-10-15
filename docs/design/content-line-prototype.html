@@ -1,0 +1,1887 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>TopicAI · 琉璃 Lumen 内容线原型</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --field-a: #f1f4f9;
+    --field-b: #e7ebf3;
+    --glass: rgba(255, 255, 255, 0.55);
+    --glass-strong: rgba(255, 255, 255, 0.72);
+    --glass-soft: rgba(255, 255, 255, 0.38);
+    --ink: #191e26;
+    --body: #454e5c;
+    --muted: #7e8898;
+    --faint: #aeb6c4;
+    --line-out: rgba(255, 255, 255, 0.8);
+    --line-in: rgba(23, 28, 38, 0.055);
+    --light: #8fbee8;
+    --light-soft: rgba(143, 190, 232, 0.35);
+    --explore: #c98a4b;
+    --warn: #b98a2f;
+    --shadow: 0 22px 60px rgba(70, 95, 130, 0.14);
+    --shadow-sm: 0 10px 28px rgba(70, 95, 130, 0.1);
+    --r-card: 22px;
+    --r-in: 16px;
+    --r-pill: 9999px;
+    --font: -apple-system, "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+    --font-latin: "Space Grotesk", var(--font);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    font-family: var(--font);
+    font-size: 15px;
+    line-height: 1.7;
+    color: var(--body);
+    background: linear-gradient(165deg, var(--field-a), var(--field-b));
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ── 背景三层：渐变场 + 漂移光晕 + 点阵 ── */
+  .field {
+    position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 0;
+  }
+  .orb {
+    position: absolute; border-radius: 50%; filter: blur(64px); opacity: 0.55;
+    animation: drift 28s ease-in-out infinite alternate;
+  }
+  .orb-a {
+    width: 42vw; height: 42vw; left: -8vw; top: -12vw;
+    background: radial-gradient(circle, rgba(255,255,255,0.95), rgba(143,190,232,0.25) 55%, transparent 70%);
+  }
+  .orb-b {
+    width: 36vw; height: 36vw; right: -6vw; top: 20vh;
+    background: radial-gradient(circle, rgba(143,190,232,0.35), rgba(255,255,255,0.2) 50%, transparent 70%);
+    animation-duration: 36s; animation-delay: -8s;
+  }
+  .orb-c {
+    width: 28vw; height: 28vw; left: 30vw; bottom: -10vw;
+    background: radial-gradient(circle, rgba(255,255,255,0.7), rgba(143,190,232,0.12) 60%, transparent 75%);
+    animation-duration: 24s; animation-delay: -4s;
+  }
+  @keyframes drift {
+    from { transform: translate3d(0, 0, 0) scale(1); }
+    to   { transform: translate3d(4vw, 3vh, 0) scale(1.08); }
+  }
+  .dots {
+    position: absolute; inset: 0; opacity: 0.35;
+    background-image: radial-gradient(rgba(23,28,38,0.08) 1px, transparent 1px);
+    background-size: 22px 22px;
+    mask-image: radial-gradient(ellipse at 50% 30%, #000 20%, transparent 75%);
+  }
+
+  /* ── Double-Bezel 玻璃壳 ── */
+  .glass {
+    background: var(--glass);
+    backdrop-filter: blur(28px) saturate(160%);
+    -webkit-backdrop-filter: blur(28px) saturate(160%);
+    border: 1px solid var(--line-out);
+    box-shadow: var(--shadow), inset 0 1px 0 rgba(255,255,255,0.85), 0 0 0 1px var(--line-in);
+    border-radius: var(--r-card);
+  }
+  .glass.soft {
+    background: var(--glass-soft);
+    box-shadow: var(--shadow-sm), inset 0 1px 0 rgba(255,255,255,0.7), 0 0 0 1px var(--line-in);
+  }
+
+  .app {
+    position: relative; z-index: 1;
+    display: grid; grid-template-columns: 228px 1fr;
+    height: 100vh; padding: 18px; gap: 14px;
+  }
+
+  /* ── 侧栏玻璃 ── */
+  .side {
+    display: flex; flex-direction: column;
+    padding: 18px 12px 14px;
+  }
+  .brand {
+    display: flex; align-items: center; gap: 10px;
+    padding: 4px 10px 18px;
+    font-weight: 700; font-size: 16px; color: var(--ink);
+    letter-spacing: -0.4px;
+  }
+  .brand .mark {
+    width: 28px; height: 28px; border-radius: 10px;
+    background: var(--ink); color: #fff;
+    display: grid; place-items: center;
+    font-family: var(--font-latin); font-size: 13px; font-weight: 600;
+  }
+  .nav { display: flex; flex-direction: column; gap: 4px; flex: 1; }
+  .nav button {
+    border: 0; background: transparent; text-align: left;
+    padding: 10px 12px; border-radius: 14px; cursor: pointer;
+    color: var(--body); font-weight: 500; font-size: 14px;
+    transition: background 0.25s ease, color 0.25s ease, transform 0.25s ease;
+  }
+  .nav button:hover {
+    background: rgba(255,255,255,0.55);
+    color: var(--ink);
+    transform: translateX(2px);
+  }
+  .nav button.active {
+    background: rgba(255,255,255,0.78);
+    color: var(--ink); font-weight: 650;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.9), 0 8px 20px rgba(70,95,130,0.08);
+    border: 1px solid var(--line-out);
+  }
+  .side-foot {
+    margin-top: 14px; padding: 12px 10px 4px;
+    border-top: 1px solid var(--line-in);
+    color: var(--muted); font-size: 12px; line-height: 1.5;
+  }
+  .status-dot {
+    display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+    background: var(--light);
+    box-shadow: 0 0 10px var(--light-soft);
+    animation: breathe 3.5s ease-in-out infinite;
+    margin-right: 6px; vertical-align: 1px;
+  }
+  @keyframes breathe {
+    0%, 100% { opacity: 0.7; box-shadow: 0 0 8px var(--light-soft); }
+    50% { opacity: 1; box-shadow: 0 0 14px var(--light); }
+  }
+
+  /* ── 主区玻璃台 ── */
+  .main {
+    display: flex; flex-direction: column;
+    overflow: hidden;
+    padding: 0;
+    min-height: 0;
+  }
+  .topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px 24px 14px;
+    border-bottom: 1px solid var(--line-in);
+  }
+  .topbar h1 {
+    margin: 0; font-size: 22px; font-weight: 700;
+    color: var(--ink); letter-spacing: -0.8px; line-height: 1.25;
+  }
+  .topbar .sub {
+    margin-left: 12px; font-size: 13px; color: var(--muted); font-weight: 400;
+  }
+  .topbar .sub b {
+    color: var(--ink); font-family: var(--font-latin); font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .content {
+    flex: 1; overflow: auto; padding: 8px 12px 18px;
+    display: flex; flex-direction: column;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(143,190,232,0.45) transparent;
+  }
+
+  /* ── 按钮 ── */
+  .btn {
+    border: 0; border-radius: var(--r-pill);
+    padding: 10px 18px;
+    background: var(--ink); color: #fff;
+    font-weight: 600; font-size: 13px; cursor: pointer;
+    box-shadow: 0 10px 24px rgba(25,30,38,0.18);
+    transition: transform 0.22s ease, box-shadow 0.22s ease, opacity 0.22s;
+  }
+  .btn:hover { transform: translateY(-1px); box-shadow: 0 14px 28px rgba(25,30,38,0.22); }
+  .btn:active { transform: translateY(0); opacity: 0.92; }
+  .btn.ghost {
+    background: rgba(255,255,255,0.55); color: var(--ink);
+    border: 1px solid var(--line-out);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.85), 0 8px 20px rgba(70,95,130,0.08);
+    font-weight: 550;
+  }
+  .btn.ghost:hover { background: rgba(255,255,255,0.8); }
+  .btn.sm { padding: 6px 12px; font-size: 12px; }
+
+    .sel, .inp {
+    border-radius: 12px; border: 1px solid rgba(255,255,255,0.85);
+    background: rgba(255,255,255,0.55); padding: 7px 12px;
+    font-size: 12.5px; color: var(--ink); font-family: inherit;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.8);
+    min-width: 140px;
+  }
+  
+  .content { overflow-y: auto; overflow-x: hidden; }
+  .main .content { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+  .settings-page {
+    min-height: 0 !important;
+    display: block !important;
+    padding-bottom: 28px;
+  }
+  .settings-page .band.grow {
+    flex: 1 0 auto;
+    display: block;
+  }
+  .settings-page .rows {
+    display: block;
+    overflow: visible;
+  }
+  .settings-page .row { display: flex; }
+  .settings-page .filler {
+    display: flex;
+    min-height: 56px;
+  }
+  .content > .page:not(.settings-page) { min-height: 100%; }
+  
+  .avatar-upload {
+    display:flex; align-items:center; gap:10px;
+  }
+  .avatar-upload img, .avatar-upload .ai-avatar {
+    width:36px; height:36px; border-radius:50%; object-fit:cover;
+  }
+  .avatar-upload .ai-avatar { display:grid; place-items:center; }
+  .file-btn {
+    display:inline-flex; align-items:center; gap:6px;
+    border:1px solid rgba(255,255,255,0.85);
+    background:rgba(255,255,255,0.55); color:var(--ink);
+    border-radius:var(--r-pill); padding:7px 14px; font-size:12.5px;
+    cursor:pointer; font-weight:550;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.85);
+  }
+  .file-btn:hover { background:rgba(255,255,255,0.8); }
+  .file-btn input { display:none; }
+  .avatar-hint { font-size:11px; color:var(--muted); }
+  /* ── 分区：玻璃台内用发丝线分组，少独立卡片 ── */
+  .page { display: flex; flex-direction: column; gap: 12px; min-height: 100%; }
+  .split { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 12px; min-height: 100%; }
+  .split-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; min-height: 100%; }
+  .col {
+    display: flex; flex-direction: column; gap: 12px; min-width: 0;
+    min-height: 100%;
+  }
+
+  .band {
+    display: flex; flex-direction: column;
+    background: rgba(255,255,255,0.42);
+    border: 1px solid var(--line-out);
+    border-radius: var(--r-in);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.75), 0 0 0 1px var(--line-in);
+    overflow: hidden;
+    flex: 0 0 auto;
+  }
+  .band.grow { flex: 1 1 auto; }
+  .band-h {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 16px 8px;
+  }
+  .band-h h2 {
+    margin: 0; font-family: var(--font-latin);
+    font-size: 11px; font-weight: 600;
+    letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--muted);
+  }
+  .band-h .count {
+    font-family: var(--font-latin); font-size: 11px; font-weight: 600;
+    color: var(--body); background: rgba(255,255,255,0.7);
+    border: 1px solid var(--line-out);
+    padding: 2px 9px; border-radius: var(--r-pill);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.9);
+  }
+  .band-h .tools { display: flex; gap: 6px; align-items: center; }
+
+  .rows { display: flex; flex-direction: column; flex: 1; }
+  .row {
+    display: flex; align-items: center; gap: 12px;
+    padding: 11px 16px;
+    border-top: 1px solid var(--line-in);
+    min-height: 52px;
+    transition: background 0.2s ease;
+  }
+  .row:hover { background: rgba(255,255,255,0.45); }
+  .row .body { flex: 1; min-width: 0; }
+  .row .title {
+    font-size: 14px; font-weight: 650; color: var(--ink);
+    letter-spacing: -0.1px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .row .meta {
+    font-size: 12.5px; color: var(--muted); margin-top: 1px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+
+  .tag {
+    font-family: var(--font-latin);
+    font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
+    color: #5a7fa8; width: 52px; flex-shrink: 0;
+  }
+  .tag.warn { color: var(--warn); }
+  .tag.explore { color: var(--explore); }
+
+  .chip {
+    font-size: 11.5px; font-weight: 550; color: var(--body);
+    border: 1px solid var(--line-out);
+    background: rgba(255,255,255,0.55);
+    border-radius: var(--r-pill); padding: 3px 10px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.8);
+    flex-shrink: 0;
+  }
+  .chip.on {
+    background: var(--ink); color: #fff; border-color: transparent;
+    box-shadow: 0 6px 16px rgba(25,30,38,0.16);
+  }
+
+  .filler {
+    flex: 1; min-height: 40px;
+    border-top: 1px dashed rgba(23,28,38,0.08);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--faint); font-size: 12px;
+  }
+
+  /* ── 项目屏：对话 π 灯框 + 产物玻璃 ── */
+  .stage {
+    display: grid; grid-template-columns: 1fr 380px; gap: 12px;
+    min-height: 100%; flex: 1;
+  }
+  .pane {
+    display: flex; flex-direction: column; min-width: 0;
+    background: rgba(255,255,255,0.48);
+    border: 1px solid var(--line-out);
+    border-radius: var(--r-card);
+    box-shadow: var(--shadow-sm), inset 0 1px 0 rgba(255,255,255,0.8), 0 0 0 1px var(--line-in);
+    overflow: hidden;
+    position: relative;
+  }
+  /* π 形灯框：左上右三条灯带，底部开放 */
+  .pane.chat-pane::before,
+  .pane.chat-pane::after {
+    content: ""; position: absolute; width: 2px; top: 12px; bottom: 12px;
+    border-radius: 2px;
+    background: linear-gradient(180deg, transparent, var(--light), transparent);
+    opacity: 0.55;
+    animation: lightflow 3s ease-in-out infinite;
+  }
+  .pane.chat-pane::before { left: 4px; }
+  .pane.chat-pane::after { right: 4px; animation-delay: -1.5s; }
+  .pane.chat-pane .top-light {
+    position: absolute; top: 3px; left: 12px; right: 12px; height: 2px;
+    border-radius: 2px;
+    background: linear-gradient(90deg, transparent, var(--light), transparent);
+    opacity: 0.5;
+    animation: lightflow 3s ease-in-out infinite;
+  }
+  @keyframes lightflow {
+    0%, 100% { opacity: 0.25; filter: blur(0.5px); }
+    50% { opacity: 0.75; filter: blur(0px); }
+  }
+
+  .stages {
+    display: flex; gap: 6px; padding: 12px 18px 10px;
+    border-bottom: 1px solid var(--line-in);
+  }
+  .st {
+    flex: 1; text-align: center;
+    font-family: var(--font-latin);
+    font-size: 11px; font-weight: 600; letter-spacing: 0.06em;
+    padding: 7px 4px; border-radius: var(--r-pill);
+    color: var(--muted);
+    background: rgba(255,255,255,0.4);
+    border: 1px solid transparent;
+  }
+  .st.done {
+    color: #4a6b8a; background: rgba(143,190,232,0.18);
+    border-color: rgba(143,190,232,0.25);
+  }
+  .st.now {
+    color: var(--ink); background: rgba(255,255,255,0.85);
+    border-color: var(--line-out);
+    box-shadow: 0 6px 18px rgba(70,95,130,0.12), inset 0 1px 0 #fff;
+    font-weight: 700;
+  }
+
+  .chat {
+    flex: 1; overflow: auto; padding: 16px 18px;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  .bubble {
+    max-width: 88%;
+    padding: 12px 14px;
+    border-radius: 18px;
+    background: rgba(255,255,255,0.72);
+    border: 1px solid var(--line-out);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.9), 0 8px 22px rgba(70,95,130,0.08);
+    color: var(--ink); font-size: 14px;
+    animation: rise 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  .bubble.me {
+    align-self: flex-end;
+    background: rgba(25,30,38,0.92); color: #fff; border-color: transparent;
+    box-shadow: 0 12px 28px rgba(25,30,38,0.18);
+  }
+  .bubble .src {
+    display: block; margin-top: 6px;
+    font-family: var(--font-latin); font-size: 10.5px;
+    letter-spacing: 0.04em; color: var(--faint);
+  }
+  .bubble.me .src { color: rgba(255,255,255,0.5); }
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(12px) scale(0.97); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  .strip {
+    border-top: 1px solid var(--line-in);
+    background: linear-gradient(180deg, rgba(143,190,232,0.12), rgba(255,255,255,0.55));
+    padding: 12px 18px;
+  }
+  .strip .lab {
+    font-size: 13px; font-weight: 650; color: var(--ink);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .strip .lab i {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--light); box-shadow: 0 0 12px var(--light);
+    animation: breathe 2.8s ease-in-out infinite;
+  }
+  .strip .hint { font-size: 12.5px; color: var(--body); margin: 4px 0 10px; }
+  .strip .acts { display: flex; gap: 8px; }
+
+  .compose {
+    border-top: 1px solid var(--line-in);
+    padding: 12px 14px;
+    display: flex; gap: 10px; align-items: center;
+  }
+  .compose input {
+    flex: 1;
+    border-radius: var(--r-pill);
+    border: 1px solid var(--line-out);
+    background: rgba(255,255,255,0.55);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.85);
+    padding: 11px 18px; font-size: 14px; color: var(--ink);
+    outline: none;
+    transition: box-shadow 0.25s ease, border-color 0.25s;
+  }
+  .compose input::placeholder { color: var(--faint); }
+  .compose input:focus {
+    border-color: rgba(143,190,232,0.55);
+    box-shadow: 0 0 0 3px rgba(143,190,232,0.2), inset 0 1px 0 #fff;
+  }
+  .send {
+    width: 42px; height: 42px; border-radius: 50%;
+    border: 0; background: var(--ink); color: #fff;
+    font-size: 16px; cursor: pointer;
+    box-shadow: 0 10px 22px rgba(25,30,38,0.2);
+    transition: transform 0.22s ease;
+  }
+  .send:hover { transform: scale(1.05); }
+
+  .art-tabs {
+    display: flex; gap: 4px; padding: 10px 14px 0;
+  }
+  .art-tabs button {
+    border: 0; background: transparent;
+    padding: 8px 12px 10px;
+    font-size: 13px; font-weight: 500; color: var(--muted);
+    cursor: pointer; border-radius: 12px 12px 0 0;
+    border-bottom: 2px solid transparent;
+    transition: color 0.2s;
+  }
+  .art-tabs button.on {
+    color: var(--ink); font-weight: 650;
+    border-bottom-color: var(--light);
+    background: rgba(255,255,255,0.35);
+  }
+  .art-body {
+    flex: 1; padding: 6px 18px 18px;
+    display: flex; flex-direction: column; gap: 12px;
+    overflow: auto;
+  }
+  .art-title {
+    font-size: 20px; font-weight: 700; color: var(--ink);
+    letter-spacing: -0.5px; line-height: 1.35;
+  }
+  .art-p { margin: 0; font-size: 15px; line-height: 1.75; color: var(--body); }
+  .art-note { margin: 0; font-size: 12px; color: var(--faint); }
+  .kv {
+    display: flex; justify-content: space-between; gap: 10px;
+    font-size: 13px; padding: 9px 0;
+    border-bottom: 1px solid var(--line-in);
+  }
+  .kv span:first-child { color: var(--muted); }
+  .kv span:last-child {
+    color: var(--ink); font-weight: 600; text-align: right;
+    font-family: var(--font-latin);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .field-row { display: flex; gap: 8px; align-items: center; }
+  .field-row input {
+    width: 78px;
+    border-radius: var(--r-pill);
+    border: 1px solid var(--line-out);
+    background: rgba(255,255,255,0.55);
+    padding: 7px 12px; font-size: 13px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.8);
+    outline: none;
+  }
+
+  /* ── 悬浮球（固定右下，不压内容） ── */
+  .ball {
+    position: fixed; right: 28px; bottom: 28px; z-index: 20;
+    width: 56px; height: 56px; border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.85);
+    background:
+      radial-gradient(circle at 32% 28%, rgba(255,255,255,0.95), transparent 42%),
+      radial-gradient(circle at 50% 55%, rgba(143,190,232,0.35), rgba(255,255,255,0.55));
+    box-shadow:
+      0 18px 40px rgba(70,95,130,0.22),
+      inset 0 1px 0 rgba(255,255,255,0.9),
+      0 0 0 1px rgba(23,28,38,0.05);
+    cursor: pointer;
+    animation: ballbreathe 5s ease-in-out infinite;
+    transition: transform 0.35s cubic-bezier(0.34, 1.4, 0.64, 1);
+  }
+  .ball:hover { transform: scale(1.06); }
+  .ball::before {
+    content: ""; position: absolute; inset: -6px; border-radius: 50%;
+    border: 1px solid rgba(143,190,232,0.35);
+    animation: spin 5s linear infinite;
+    border-top-color: rgba(143,190,232,0.85);
+    border-left-color: transparent;
+  }
+  .ball::after {
+    content: ""; position: absolute; inset: 14px; border-radius: 50%;
+    background: conic-gradient(from 180deg, transparent, rgba(143,190,232,0.45), transparent 60%);
+    animation: spin 7s linear infinite reverse;
+    opacity: 0.7;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes ballbreathe {
+    0%, 100% { box-shadow: 0 18px 40px rgba(70,95,130,0.18), inset 0 1px 0 rgba(255,255,255,0.9), 0 0 20px rgba(143,190,232,0.12); }
+    50% { box-shadow: 0 18px 40px rgba(70,95,130,0.26), inset 0 1px 0 rgba(255,255,255,0.95), 0 0 32px rgba(143,190,232,0.28); }
+  }
+
+  .hidden { display: none !important; }
+
+  /* 滚动条 */
+  .content::-webkit-scrollbar, .chat::-webkit-scrollbar, .art-body::-webkit-scrollbar {
+    width: 8px;
+  }
+  .content::-webkit-scrollbar-thumb, .chat::-webkit-scrollbar-thumb, .art-body::-webkit-scrollbar-thumb {
+    background: rgba(143,190,232,0.4); border-radius: 8px;
+  }
+
+
+  /* 项目屏对话信息流 */
+  .msg-row { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 12px; }
+  .msg-row.me { flex-direction: row-reverse; }
+  .msg-av {
+    width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0;
+    display: grid; place-items: center; font-size: 12px; font-weight: 700;
+    border: 1px solid rgba(255,255,255,0.9);
+  }
+  .msg-av.ai {
+    background: radial-gradient(circle at 32% 28%, #fff, rgba(143,190,232,0.55) 60%, rgba(143,190,232,0.2));
+    color: var(--ink);
+  }
+  .msg-av.me { background: var(--ink); color: #fff; }
+  .msg-col { max-width: 78%; min-width: 0; }
+  .msg-name { font-size: 11px; color: var(--muted); margin: 0 0 2px 2px; }
+  .msg-body {
+    padding: 10px 12px; border-radius: 14px; font-size: 13.5px; line-height: 1.65;
+    background: rgba(255,255,255,0.78); border: 1px solid var(--line-out);
+    color: var(--ink);
+  }
+  .msg-row.me .msg-body {
+    background: var(--ink); color: #fff; border-color: transparent;
+    box-shadow: 0 12px 28px rgba(25,30,38,0.18);
+  }
+  .msg-src { display: block; margin-top: 5px; font-family: var(--font-latin); font-size: 10.5px; color: var(--faint); }
+  .msg-row.me .msg-src { color: rgba(255,255,255,0.5); }
+  .proc-kv { display: flex; justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line-in); font-size: 12.5px; }
+  .proc-kv span:first-child { color: var(--muted); }
+  .proc-kv span:last-child { font-weight: 600; text-align: right; font-family: var(--font-latin); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .orb, .status-dot, .pane.chat-pane::before, .pane.chat-pane::after,
+    .top-light, .bubble, .ball, .ball::before, .ball::after {
+      animation: none !important;
+    }
+    .nav button, .btn, .row { transition: none; }
+  }
+
+  @media (max-width: 1100px) {
+    .split, .split-2, .stage { grid-template-columns: 1fr; }
+  }
+
+  /* ── 全局 AI 面板（悬浮球打开）── */
+  .ai-panel {
+    position: fixed; right: 28px; bottom: 96px; z-index: 30;
+    width: 380px; max-height: min(72vh, 640px);
+    display: none; flex-direction: column;
+    background: rgba(255,255,255,0.58);
+    backdrop-filter: blur(28px) saturate(160%);
+    -webkit-backdrop-filter: blur(28px) saturate(160%);
+    border: 1px solid rgba(255,255,255,0.85);
+    border-radius: 22px;
+    box-shadow: 0 22px 60px rgba(70,95,130,0.18), inset 0 1px 0 rgba(255,255,255,0.9), 0 0 0 1px rgba(23,28,38,0.055);
+    overflow: hidden;
+    transform-origin: bottom right;
+  }
+  .ai-panel.open { display: flex; animation: panelIn 0.32s cubic-bezier(0.22,1,0.36,1) both; }
+  @keyframes panelIn { from { opacity:0; transform: translateY(12px) scale(0.97); } to { opacity:1; transform:none; } }
+  .ai-panel-h {
+    display:flex; align-items:center; gap:10px;
+    padding:14px 16px 12px; border-bottom:1px solid rgba(23,28,38,0.06);
+  }
+  .ai-avatar {
+    width:36px; height:36px; border-radius: 50%; flex-shrink:0;
+    background: radial-gradient(circle at 32% 28%, #fff, rgba(143,190,232,0.55) 60%, rgba(143,190,232,0.2));
+    border:1px solid rgba(255,255,255,0.9);
+    box-shadow: 0 6px 16px rgba(70,95,130,0.15);
+    display:grid; place-items:center;
+    font-family: var(--font-latin); font-size:13px; font-weight:700; color:var(--ink);
+  }
+  .ai-avatar.lg { width:44px; height:44px; font-size:15px; }
+  .ai-name-wrap { flex:1; min-width:0; }
+  .ai-name {
+    font-size:14px; font-weight:650; color:var(--ink); letter-spacing:-0.2px;
+    background:transparent; border:0; padding:0; width:100%; outline:none;
+    border-bottom:1px dashed transparent;
+  }
+  .ai-name:hover, .ai-name:focus { border-bottom-color: rgba(143,190,232,0.5); }
+  .ai-sub { font-size:11px; color:var(--muted); margin-top:1px; }
+  .ai-close {
+    border:0; background:rgba(255,255,255,0.5); width:28px; height:28px;
+    border-radius:50%; cursor:pointer; color:var(--muted); font-size:14px; line-height:1;
+  }
+  .ai-body {
+    flex:1; overflow:auto; padding:14px 16px;
+    display:flex; flex-direction:column; gap:10px;
+  }
+  .ai-empty {
+    text-align:center; padding:28px 12px; color:var(--muted); font-size:13px; line-height:1.7;
+  }
+  .ai-empty b { color:var(--ink); font-weight:650; }
+  .ai-foot {
+    padding:10px 12px 12px; display:flex; flex-direction:column; gap:8px;
+  }
+  .ai-input-row {
+    display:flex; gap:8px; align-items:center;
+    background:rgba(255,255,255,0.55);
+    border:1px solid rgba(255,255,255,0.85);
+    border-radius:999px; padding:8px 10px 8px 16px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.85);
+  }
+  .ai-input-row input {
+    flex:1; border:0; background:transparent; outline:none;
+    font-size:13.5px; color:var(--ink);
+  }
+  .ai-input-row input::placeholder { color:var(--faint); }
+  .ai-send {
+    width:36px; height:36px; border-radius:50%; border:0;
+    background:var(--ink); color:#fff; cursor:pointer; font-size:14px;
+    box-shadow:0 8px 18px rgba(25,30,38,0.18);
+  }
+  .ai-tools { display:flex; gap:8px; padding:0 4px; align-items:center; }
+  .ai-tool {
+    border:0; background:transparent; color:var(--muted);
+    font-size:12px; cursor:pointer; padding:4px 8px; border-radius:8px;
+    display:flex; align-items:center; gap:4px;
+  }
+  .ai-tool:hover { background:rgba(255,255,255,0.55); color:var(--ink); }
+  .ai-badge {
+    font-family:var(--font-latin); font-size:10px; letter-spacing:0.08em;
+    text-transform:uppercase; color:#5a7fa8;
+    background:rgba(143,190,232,0.18); border:1px solid rgba(143,190,232,0.3);
+    padding:2px 8px; border-radius:999px; font-weight:600;
+  }
+  .ai-badge.proj {
+    color:#7a6550; background:rgba(201,138,75,0.12); border-color:rgba(201,138,75,0.28);
+  }
+  /* avatar picker */
+  .avatar-pick {
+    display:flex; gap:8px; padding:10px 16px; flex-wrap:wrap;
+    border-top:1px solid rgba(23,28,38,0.05);
+  }
+  .avatar-pick button {
+    width:32px; height:32px; border-radius:50%; cursor:pointer;
+    border:1px solid rgba(255,255,255,0.85);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.8);
+  }
+  .avatar-pick button.sel {
+    outline:2px solid var(--light); outline-offset:2px;
+  }
+  .copy-note {
+    margin:8px 16px 0; padding:8px 10px; border-radius:12px;
+    background:rgba(143,190,232,0.12); border:1px solid rgba(143,190,232,0.22);
+    font-size:11px; color:var(--body); line-height:1.5;
+  }
+
+
+  /* ── 设置 ── */
+  .settings-backdrop {
+    position:fixed; inset:0; z-index:40; background:rgba(25,30,38,0.18);
+    backdrop-filter: blur(6px); display:none;
+  }
+  .settings-backdrop.open { display:block; }
+  .settings {
+    position:fixed; z-index:50; top:50%; left:50%; transform:translate(-50%,-50%);
+    width:min(720px, calc(100vw - 32px)); max-height:min(86vh, 820px);
+    display:none; flex-direction:column;
+    background:rgba(255,255,255,0.72);
+    backdrop-filter: blur(32px) saturate(160%);
+    border:1px solid rgba(255,255,255,0.9);
+    border-radius:22px;
+    box-shadow:0 28px 80px rgba(70,95,130,0.22), inset 0 1px 0 rgba(255,255,255,0.95), 0 0 0 1px rgba(23,28,38,0.055);
+    overflow:hidden;
+  }
+  .settings.open { display:flex; animation: panelIn 0.28s cubic-bezier(0.22,1,0.36,1) both; }
+  .settings-h {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:16px 18px 12px; border-bottom:1px solid rgba(23,28,38,0.06);
+  }
+  .settings-h h2 { margin:0; font-size:16px; font-weight:700; color:var(--ink); letter-spacing:-0.3px; }
+  .settings-body {
+    flex:1; overflow:auto; display:grid; grid-template-columns: 148px 1fr; min-height:0;
+  }
+  .settings-nav {
+    border-right:1px solid rgba(23,28,38,0.06);
+    padding:10px 8px; display:flex; flex-direction:column; gap:2px;
+    background:rgba(255,255,255,0.35);
+  }
+  .settings-nav button {
+    border:0; background:transparent; text-align:left;
+    padding:9px 10px; border-radius:10px; cursor:pointer;
+    font-size:12.5px; color:var(--body); font-weight:500;
+  }
+  .settings-nav button.active {
+    background:rgba(255,255,255,0.75); color:var(--ink); font-weight:650;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.9), 0 6px 16px rgba(70,95,130,0.08);
+  }
+  .settings-panes { overflow:auto; padding:14px 18px 22px; }
+  .set-sec { margin-bottom:18px; }
+  .set-sec h3 {
+    margin:0 0 10px; font-family:var(--font-latin);
+    font-size:10.5px; font-weight:600; letter-spacing:0.16em;
+    text-transform:uppercase; color:var(--muted);
+  }
+  .set-row {
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    padding:10px 0; border-bottom:1px solid rgba(23,28,38,0.05);
+  }
+  .set-row:last-child { border-bottom:0; }
+  .set-row .lab { font-size:13px; font-weight:600; color:var(--ink); }
+  .set-row .hint { font-size:11.5px; color:var(--muted); margin-top:2px; line-height:1.45; max-width:380px; }
+  .set-row input[type=text], .set-row input[type=password], .set-row input[type=url], .set-row textarea, .set-row select {
+    width:220px; border-radius:12px; border:1px solid rgba(255,255,255,0.85);
+    background:rgba(255,255,255,0.55); padding:8px 12px; font-size:12.5px; color:var(--ink);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,0.8); outline:none; font-family:inherit;
+  }
+  .set-row textarea { width:100%; min-height:88px; resize:vertical; line-height:1.55; }
+  .set-block { padding:12px 0; border-bottom:1px solid rgba(23,28,38,0.05); }
+  .set-block:last-child { border-bottom:0; }
+  .toggle {
+    width:42px; height:24px; border-radius:999px; border:0; cursor:pointer;
+    background:rgba(25,30,38,0.15); position:relative; transition:background .2s;
+  }
+  .toggle.on { background:var(--ink); }
+  .toggle::after {
+    content:""; position:absolute; top:3px; left:3px; width:18px; height:18px;
+    border-radius:50%; background:#fff; transition:transform .2s;
+    box-shadow:0 2px 6px rgba(70,95,130,0.25);
+  }
+  .toggle.on::after { transform:translateX(18px); }
+  .set-foot {
+    padding:12px 18px; border-top:1px solid rgba(23,28,38,0.06);
+    display:flex; justify-content:space-between; align-items:center; gap:10px;
+    background:rgba(255,255,255,0.4);
+  }
+  .set-note { font-size:11px; color:var(--muted); line-height:1.5; max-width:420px; }
+
+</style>
+</head>
+<body>
+<div class="field" aria-hidden="true">
+  <div class="orb orb-a"></div>
+  <div class="orb orb-b"></div>
+  <div class="orb orb-c"></div>
+  <div class="dots"></div>
+</div>
+
+<div class="app">
+  <aside class="side glass">
+    <div class="brand"><span class="mark">T</span>TopicAI</div>
+    <nav class="nav" id="nav">
+      <button data-p="today" class="active">今日</button>
+      <button data-p="content">内容</button>
+      <button data-p="review">周复盘</button>
+      <button data-p="growth">成长</button>
+      <button data-p="path">路径</button>
+      <button data-p="materials">素材</button>
+      <button data-p="me">我的</button>
+      <button data-p="settings">设置</button>
+    </nav>
+    <div class="side-foot">
+      <div><span class="status-dot"></span>AI 已连接 · 本地编排</div>
+      <div style="margin-top:4px">你只负责输入和拍板；其余交给 AI 跑腿</div>
+    </div>
+  </aside>
+
+  <div class="main glass">
+    <header class="topbar">
+      <h1 id="pageTitle">今日<span class="sub" id="pageSub">待你定 <b>3</b> · 欠对账 <b>2</b> · 在途 <b>1</b></span></h1>
+      <button class="btn" id="primaryCta" onclick="go('project')">快速开始</button>
+    </header>
+
+    <div class="content" id="content">
+      <!-- 今日 -->
+      <section data-page="today" class="page split">
+        <div class="col">
+          <div class="band grow">
+            <div class="band-h"><h2>等你定</h2><span class="count">4</span></div>
+            <div class="rows">
+              <div class="row" onclick="go('project')" style="cursor:pointer">
+                <div class="tag">候选</div>
+                <div class="body">
+                  <div class="title">番茄钟别在下班后补，改到第二天早上</div>
+                  <div class="meta">请你看 2 版文案，选出更像你的那一版 · 约 2 分钟</div>
+                </div>
+                <button class="btn sm">去处理</button>
+              </div>
+              <div class="row" onclick="go('project')" style="cursor:pointer">
+                <div class="tag">公开</div>
+                <div class="body">
+                  <div class="title">新手养多肉为什么总烂根</div>
+                  <div class="meta">你已把素材标为「可公开」。是否让这条内容对外可见？</div>
+                </div>
+                <button class="btn sm ghost">去处理</button>
+              </div>
+              <div class="row" onclick="go('path')" style="cursor:pointer">
+                <div class="tag warn">路径</div>
+                <div class="body">
+                  <div class="title">本周 3 条都偏「教程」</div>
+                  <div class="meta">本周教程偏多。是这一条例外，还是要调整方向？</div>
+                </div>
+                <button class="btn sm ghost">看路径</button>
+              </div>
+              <div class="row" onclick="go('project')" style="cursor:pointer">
+                <div class="tag">预产</div>
+                <div class="body">
+                  <div class="title">手冲咖啡翻车 · 粗拼草稿</div>
+                  <div class="meta">字幕 12 条、封面 2 张已备好，请你过目</div>
+                </div>
+                <button class="btn sm ghost">去审</button>
+              </div>
+              <div class="filler">说一句想法，可开新条目</div>
+            </div>
+          </div>
+        </div>
+        <div class="col">
+          <div class="band">
+            <div class="band-h"><h2>欠对账</h2><span class="count">2</span></div>
+            <div class="rows">
+              <div class="row" onclick="go('review')" style="cursor:pointer">
+                <div class="tag">T+3</div>
+                <div class="body">
+                  <div class="title">我用了三个月把通勤变成读书时间</div>
+                  <div class="meta">填 1–2 个数据（如收藏、点赞）即可完成复盘</div>
+                </div>
+                <button class="btn sm ghost">对账</button>
+              </div>
+              <div class="row" onclick="go('review')" style="cursor:pointer">
+                <div class="tag">可跳过</div>
+                <div class="body">
+                  <div class="title">阳台辣椒终于结果了</div>
+                  <div class="meta">若暂时没有数据，可跳过，不影响其他内容</div>
+                </div>
+                <button class="btn sm ghost">对账</button>
+              </div>
+            </div>
+          </div>
+          <div class="band grow">
+            <div class="band-h"><h2>本周</h2></div>
+            <div class="rows">
+              <div class="row">
+                <div class="body">
+                  <div class="title">已发 1 · 在途 1 · 公式候选 1</div>
+                  <div class="meta">还有 2 条「当时怎么想的」需要和实际数据对照 · 约 5 分钟</div>
+                </div>
+                <button class="btn sm ghost" onclick="go('review')">打开</button>
+              </div>
+              <div class="row">
+                <div class="body">
+                  <div class="title">探索位：清单体 vs 过程叙事</div>
+                  <div class="meta">2/3 条 · 实验未选用，不会影响能力等级</div>
+                </div>
+                <button class="btn sm ghost" onclick="go('project')">继续</button>
+              </div>
+              <div class="row">
+                <div class="body">
+                  <div class="title">素材未引用 4</div>
+                  <div class="meta">可挂到在途草稿上</div>
+                </div>
+                <button class="btn sm ghost" onclick="go('materials')">去素材</button>
+              </div>
+              <div class="filler">本周节奏正常 · 宁缺毋滥</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 内容 -->
+      <section data-page="content" class="page hidden">
+        <div class="band grow">
+          <div class="band-h">
+            <h2>全部内容</h2>
+            <div class="tools">
+              <span class="chip on">全部 7</span>
+              <span class="chip">需要我 3</span>
+              <span class="chip">观察中 1</span>
+              <span class="chip">已沉淀 1</span>
+            </div>
+          </div>
+          <div class="rows">
+            <div class="row" onclick="go('project')" style="cursor:pointer">
+              <div class="tag">候选 2/5</div>
+              <div class="body">
+                <div class="title">番茄钟别在下班后补，改到第二天早上</div>
+                <div class="meta">请确认：这段内容是否表达了你想说的意思 · 今天 09:58</div>
+              </div>
+              <span class="chip">需要我</span>
+            </div>
+            <div class="row" onclick="go('project')" style="cursor:pointer">
+              <div class="tag">发前门</div>
+              <div class="body">
+                <div class="title">新手养多肉为什么总烂根</div>
+                <div class="meta">跑发布前检查 · 今天 10:12</div>
+              </div>
+              <span class="chip">图文</span>
+            </div>
+            <div class="row" onclick="go('project')" style="cursor:pointer">
+              <div class="tag">视频包</div>
+              <div class="body">
+                <div class="title">第一次做手冲咖啡翻车记录</div>
+                <div class="meta">审粗拼 + 字幕 · 昨天</div>
+              </div>
+              <span class="chip">视频</span>
+            </div>
+            <div class="row" onclick="go('project')" style="cursor:pointer">
+              <div class="tag">证据</div>
+              <div class="body">
+                <div class="title">阳台辣椒终于结果了</div>
+                <div class="meta">补充一段真实经历 · 3 天前</div>
+              </div>
+              <span class="chip">在途</span>
+            </div>
+            <div class="row">
+              <div class="tag">观察</div>
+              <div class="body">
+                <div class="title">租房改造：800 元阳台变工作角</div>
+                <div class="meta">观察窗还剩 4 天 · 5 天前</div>
+              </div>
+              <span class="chip">已发</span>
+            </div>
+            <div class="row">
+              <div class="tag">沉淀</div>
+              <div class="body">
+                <div class="title">如何判断自己适合做知识博主</div>
+                <div class="meta">已沉淀 1 条经验 · 12 天前</div>
+              </div>
+              <span class="chip">完成</span>
+            </div>
+            <div class="filler">共 7 条 · 搜索标题或形态</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 项目屏 -->
+      <section data-page="project" class="page hidden">
+        <div class="stage">
+          <div class="pane chat-pane">
+            <div class="top-light"></div>
+            <div class="stages">
+              <div class="st done">意图</div>
+              <div class="st done">证据</div>
+              <div class="st now">候选</div>
+              <div class="st">检查</div>
+              <div class="st">观察</div>
+            </div>
+            <div class="chat" id="chatStream">
+              <div class="msg-row">
+                <div class="msg-av ai">阿</div>
+                <div class="msg-col">
+                  <div class="msg-name">阿洛 · 项目助手</div>
+                  <div class="msg-body">
+                    按你说的「别在下班后补」，写了 2 版候选。这版更像你上次的语气：<br/>
+                    「番茄钟挪到第二天早上，反而更容易坚持。」
+                    <span class="msg-src">依据 · 9/12 原话 + 素材 2 条 · 提议</span>
+                  </div>
+                </div>
+              </div>
+              <div class="msg-row me">
+                <div class="msg-av me">你</div>
+                <div class="msg-col">
+                  <div class="msg-body">
+                    再短一点，别那么「结论先行」。
+                    <span class="msg-src">你改了 1 处</span>
+                  </div>
+                </div>
+              </div>
+              <div class="msg-row">
+                <div class="msg-av ai">阿</div>
+                <div class="msg-col">
+                  <div class="msg-name">阿洛 · 项目助手</div>
+                  <div class="msg-body">
+                    改好了，右栏已更新。下一步：<strong>确认候选是否准确表达了你</strong>。
+                  </div>
+                </div>
+              </div>
+              <div class="msg-row">
+                <div class="msg-av ai">阿</div>
+                <div class="msg-col">
+                  <div class="msg-name">阿洛 · 项目助手</div>
+                  <div class="msg-body">
+                    路径语境：「效率实验」· 本条未偏离。
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="strip">
+              <div class="lab"><i></i>确认卡 · 公开范围</div>
+              <div class="hint">建议：可公开。依据：素材已标 publishable。</div>
+              <div class="acts">
+                <button class="btn sm">同意</button>
+                <button class="btn sm ghost">改</button>
+                <button class="btn sm ghost">否决</button>
+              </div>
+            </div>
+            <div class="compose">
+              <input placeholder="说一句想法，或「这段再短一点」…" />
+              <button class="send" aria-label="发送">↑</button>
+            </div>
+          </div>
+          <div class="pane">
+            <div class="art-tabs">
+              <button class="on">过程</button>
+              <button>稿</button>
+              <button>发布包</button>
+              <button>视频包</button>
+              <button>bet/对账</button>
+            </div>
+            <div class="art-body">
+              <div class="art-title" style="font-size:15px">过程 · 结果</div>
+              <div class="proc-kv"><span>形态</span><span>图文 · 教方法</span></div>
+              <div class="proc-kv"><span>意图</span><span>solve</span></div>
+              <div class="proc-kv"><span>状态</span><span>候选确认</span></div>
+              <div class="proc-kv"><span>版本</span><span>v2</span></div>
+              <div class="proc-kv"><span>下一步</span><span>确认候选 · 2 min</span></div>
+              <div class="proc-kv"><span>路径</span><span>效率实验 · 未偏离</span></div>
+              <div class="proc-kv"><span>素材</span><span>已匹配 3 · 缺 1 段过程</span></div>
+              <div class="filler" style="border:0;min-height:16px"></div>
+              <div style="display:flex;gap:6px">
+                <button class="btn">去「稿」改字</button>
+                <button class="btn ghost">发布包</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 周复盘 -->
+      <section data-page="review" class="page split-2 hidden">
+        <div class="col">
+          <div class="band grow">
+            <div class="band-h"><h2>本周对照</h2><span class="count">3</span></div>
+            <div class="rows">
+              <div class="row">
+                <div class="body">
+                  <div class="title">番茄钟改到早上</div>
+                  <div class="meta">判断：收藏 &gt; 点赞 ｜ 实际：45 / 32</div>
+                </div>
+                <span class="chip on">证实</span>
+              </div>
+              <div class="row">
+                <div class="body">
+                  <div class="title">多肉烂根教程</div>
+                  <div class="meta">判断：评论问浇水 ｜ 实际：7 / 12 条</div>
+                </div>
+                <span class="chip">方向对</span>
+              </div>
+              <div class="row">
+                <div class="body">
+                  <div class="title">阳台辣椒记录</div>
+                  <div class="meta">拿不到数据 → unknown，仍可选下一步</div>
+                </div>
+                <span class="chip">未知</span>
+              </div>
+              <div class="filler">判断写在发布前 · 可核对</div>
+            </div>
+          </div>
+        </div>
+        <div class="col">
+          <div class="band">
+            <div class="band-h"><h2>欠对账</h2><span class="count">1</span></div>
+            <div class="rows">
+              <div class="row" style="flex-wrap:wrap">
+                <div class="body" style="width:100%">
+                  <div class="title">通勤变成读书时间</div>
+                  <div class="meta">你的判断：收藏会多于点赞</div>
+                </div>
+                <div class="field-row" style="width:100%;margin-top:10px">
+                  <input placeholder="收藏" />
+                  <input placeholder="点赞" />
+                  <button class="btn sm">记下</button>
+                  <button class="btn sm ghost">跳过</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="band grow">
+            <div class="band-h"><h2>公式笔记</h2><span class="count">提案</span></div>
+            <div class="rows">
+              <div class="row" style="flex-wrap:wrap">
+                <div class="body" style="width:100%">
+                  <div class="title">「过程叙事比重 +」</div>
+                  <div class="meta">影响后续选题与检查 · 可回放对比</div>
+                </div>
+                <div style="display:flex;gap:8px;width:100%;margin-top:10px">
+                  <button class="btn sm">收下</button>
+                  <button class="btn sm ghost">不收</button>
+                  <button class="btn sm ghost">回放</button>
+                </div>
+              </div>
+              <div class="filler">「收下」会写入你的路径笔记，之后可以撤销</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 成长 -->
+      <section data-page="growth" class="page split-2 hidden">
+        <div class="col">
+          <div class="band grow">
+            <div class="band-h"><h2>能力台帐</h2><span class="count">3</span></div>
+            <div class="rows">
+              <div class="row">
+                <div class="body">
+                  <div class="title">候选确认</div>
+                  <div class="meta">累计接受 18 次 · 自动准备：可用</div>
+                </div>
+                <span class="chip on">L2</span>
+              </div>
+              <div class="row">
+                <div class="body">
+                  <div class="title">发布前检查</div>
+                  <div class="meta">累计 11 次 · 你纠正 1 次</div>
+                </div>
+                <span class="chip">L1</span>
+              </div>
+              <div class="row">
+                <div class="body">
+                  <div class="title">长期经验写入</div>
+                  <div class="meta">受保护决策 · 永不自动</div>
+                </div>
+                <span class="chip">人工</span>
+              </div>
+              <div class="filler">等级可升可降，改动都有记录</div>
+            </div>
+          </div>
+        </div>
+        <div class="col">
+          <div class="band grow">
+            <div class="band-h"><h2>里程碑与信任</h2></div>
+            <div class="rows">
+              <div class="row">
+                <div class="body">
+                  <div class="title">连续 4 周按时复盘</div>
+                  <div class="meta">升级：预填周计划 ｜ 回报：每周约省 25 分钟</div>
+                </div>
+              </div>
+              <div class="row">
+                <div class="body">
+                  <div class="title">语音转写零纠错 × 10</div>
+                  <div class="meta">升级：语音素材免逐条核对 ｜ 回报：每次少点 3 次</div>
+                </div>
+              </div>
+              <div class="row">
+                <div class="body">
+                  <div class="title">信任说明</div>
+                  <div class="meta">保护你决策的规则，不会因为系统变强而放松</div>
+                </div>
+              </div>
+              <div class="filler">行为 → 能力 → 时间回报</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 路径 -->
+      <section data-page="path" class="page split-2 hidden">
+        <div class="col">
+          <div class="band grow">
+            <div class="band-h"><h2>路径画像</h2><button class="btn sm ghost">AI 建议修订</button></div>
+            <div class="rows">
+              <div class="row"><div class="body"><div class="meta">我想做成</div><div class="title">把生活里的小实验讲清楚的效率博主</div></div></div>
+              <div class="row"><div class="body"><div class="meta">发什么</div><div class="title">可复现的小方法 · 踩坑复盘</div></div></div>
+              <div class="row"><div class="body"><div class="meta">不发什么</div><div class="title">焦虑贩卖 · 假科学</div></div></div>
+              <div class="row"><div class="body"><div class="meta">节奏</div><div class="title">每周 1–2 条，宁缺毋滥</div></div></div>
+              <div class="row"><div class="body"><div class="meta">语气</div><div class="title">短句、可先结论、不端着</div></div></div>
+              <div class="row">
+                <div class="body">
+                  <div class="title">探索位：清单体 vs 过程叙事</div>
+                  <div class="meta">2/3 条 · 实验未选用，不会影响能力等级</div>
+                </div>
+                <span class="chip" style="color:var(--explore);border-color:rgba(201,138,75,0.35)">实验</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="col">
+          <div class="band grow">
+            <div class="band-h">
+              <h2>对标 · 解读须确认</h2>
+              <div class="tools">
+                <button class="btn sm">粘贴</button>
+                <button class="btn sm ghost">链接解析</button>
+              </div>
+            </div>
+            <div class="rows">
+              <div class="row">
+                <div class="body">
+                  <div class="title">选题</div>
+                  <div class="meta">小户型收纳 / 习惯实验 · 3 条里都有</div>
+                </div>
+                <span class="chip on">已确认</span>
+              </div>
+              <div class="row">
+                <div class="body">
+                  <div class="title">结构</div>
+                  <div class="meta">结论前置 + 清单收尾 · 2 条候选</div>
+                </div>
+                <button class="btn sm">确认</button>
+              </div>
+              <div class="row">
+                <div class="body">
+                  <div class="title">读者</div>
+                  <div class="meta">读不出，需你自己定</div>
+                </div>
+                <button class="btn sm ghost">我去写</button>
+              </div>
+              <div class="filler">每条解读都注明来自哪几个样本；不抄写原文</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 素材 -->
+      <section data-page="materials" class="page hidden">
+        <div class="band grow">
+          <div class="band-h"><h2>素材库</h2><button class="btn sm">丢一条</button></div>
+          <div class="rows">
+            <div class="row">
+              <div class="tag">音频</div>
+              <div class="body">
+                <div class="title">语音备忘：番茄钟改早上</div>
+                <div class="meta">可公开 · 已引用 1 个项目</div>
+              </div>
+              <span class="chip">引用 1</span>
+            </div>
+            <div class="row">
+              <div class="tag warn">图片</div>
+              <div class="body">
+                <div class="title">截图：阅读 App 周报</div>
+                <div class="meta">私密 · 仅本地</div>
+              </div>
+              <span class="chip">私密</span>
+            </div>
+            <div class="row">
+              <div class="tag">链接</div>
+              <div class="body">
+                <div class="title">习惯研究笔记</div>
+                <div class="meta">可公开 · 未引用</div>
+              </div>
+              <button class="btn sm ghost">进稿</button>
+            </div>
+            <div class="row">
+              <div class="tag">文字</div>
+              <div class="body">
+                <div class="title">通勤实验过程备忘</div>
+                <div class="meta">可公开 · 已引用 2 个项目</div>
+              </div>
+              <span class="chip">引用 2</span>
+            </div>
+            <div class="filler">隐私标签全站统一；每条素材都能查到来源</div>
+          </div>
+        </div>
+      </section>
+
+
+      <!-- 设置（整页） -->
+      <section data-page="settings" class="page settings-page hidden">
+        <div class="band grow">
+          <div class="band-h">
+            <h2>设置</h2>
+            <div class="tools">
+              <span class="chip on" data-jump="prod">产品</span>
+              <span class="chip" data-jump="gai">全局 AI</span>
+              <span class="chip" data-jump="pai">项目助手</span>
+              <span class="chip" data-jump="mem">记忆</span>
+              <span class="chip" data-jump="priv">隐私</span>
+            </div>
+          </div>
+          <div class="rows" id="settingsPageRows">
+
+            <div class="row" style="align-items:flex-start;flex-wrap:wrap">
+              <div class="body" style="width:100%">
+                <div class="title" id="sec-prod">产品与创作</div>
+                <div class="meta">整站行为：形态、节奏、检查、对账提醒</div>
+              </div>
+            </div>
+            <div class="row"><div class="body"><div class="title">默认内容形态</div><div class="meta">新建条目默认类型，可逐条改</div></div>
+              <select class="sel"><option>图文</option><option>视频 / vlog</option></select></div>
+            <div class="row"><div class="body"><div class="title">每周目标</div><div class="meta">只用于节奏提醒，不是硬指标</div></div>
+              <select class="sel"><option>1–2 条</option><option>3–4 条</option><option>不定</option></select></div>
+            <div class="row"><div class="body"><div class="title">发前检查</div><div class="meta">敏感词、事实来源等；严格更慢更稳</div></div>
+              <select class="sel"><option>标准</option><option>严格</option><option>仅提醒</option></select></div>
+            <div class="row"><div class="body"><div class="title">对账提醒</div><div class="meta">发布后多久提醒你回填数据</div></div>
+              <select class="sel"><option>3 天</option><option>7 天</option><option>不提醒</option></select></div>
+
+            <div class="row" style="align-items:flex-start;flex-wrap:wrap;border-top:1px solid var(--line);margin-top:8px">
+              <div class="body" style="width:100%">
+                <div class="title" id="sec-gai">全局 AI（悬浮球）</div>
+                <div class="meta">灵感速记 + 全站操控；与项目助手设置分开</div>
+              </div>
+            </div>
+            <div class="row"><div class="body"><div class="title">名称</div><div class="meta">全局助手显示名</div></div>
+              <input class="inp" type="text" value="阿洛" maxlength="12" /></div>
+            <div class="row"><div class="body"><div class="title">头像</div><div class="meta">可上传图片（JPG/PNG，建议正方形），也可用光晕色</div></div>
+              <div class="avatar-upload">
+                <div class="ai-avatar" id="gaiAvatarPreview" style="width:32px;height:32px;font-size:12px">A</div>
+                <label class="file-btn">上传图片<input type="file" id="gaiAvatarFile" accept="image/*" /></label>
+                <button class="btn sm ghost" id="gaiAvatarReset">用默认</button>
+              </div>
+            </div>
+            <div class="row"><div class="body"><div class="title">agent.md · 全局指令</div><div class="meta">称呼、语气、如何帮你操作。不覆盖「四决策由你拍板」。</div></div>
+              <button class="btn sm ghost">编辑指令</button></div>
+            <div class="row"><div class="body"><div class="title">模型与接口</div><div class="meta">Base URL / API Key / 模型名 · 只存本机</div></div>
+              <button class="btn sm ghost">配置模型…</button></div>
+            <div class="row"><div class="body"><div class="title">灵感快捷键</div><div class="meta">按住说话或快捷唤起全局 AI</div></div>
+              <select class="sel"><option>Alt + Space</option><option>仅悬浮球</option></select></div>
+            <div class="row"><div class="body"><div class="title">全局操控范围</div><div class="meta">允许全局 AI 代办哪些操作（发布等仍确认）</div></div>
+              <button class="btn sm ghost">管理权限…</button></div>
+
+            <div class="row" style="align-items:flex-start;flex-wrap:wrap;border-top:1px solid var(--line);margin-top:8px">
+              <div class="body" style="width:100%">
+                <div class="title" id="sec-pai">项目助手（内容页）</div>
+                <div class="meta">只服务「当前这一条内容」；与全局 AI 分开配置</div>
+              </div>
+            </div>
+            <div class="row"><div class="body"><div class="title">名称</div><div class="meta">项目对话里的显示名</div></div>
+              <input class="inp" type="text" value="项目助手" maxlength="12" /></div>
+            <div class="row"><div class="body"><div class="title">头像</div><div class="meta">可上传图片；与全局 AI 区分，避免混淆</div></div>
+              <div class="avatar-upload">
+                <div class="ai-avatar" id="paiAvatarPreview" style="width:32px;height:32px;font-size:12px;background:radial-gradient(circle at 32% 28%,#fff,rgba(143,190,232,.35))">项</div>
+                <label class="file-btn">上传图片<input type="file" id="paiAvatarFile" accept="image/*" /></label>
+                <button class="btn sm ghost" id="paiAvatarReset">用默认</button>
+              </div>
+            </div>
+            <div class="row"><div class="body"><div class="title">agent.md · 项目指令</div><div class="meta">只谈这条稿；不发散到其他项目</div></div>
+              <button class="btn sm ghost">编辑指令</button></div>
+            <div class="row"><div class="body"><div class="title">去 AI 味（成稿）</div><div class="meta">改得更像人话；不改事实。仅作用于内容稿</div></div>
+              <button class="toggle on" aria-label="项目去AI味"></button></div>
+            <div class="row"><div class="body"><div class="title">起草语气</div><div class="meta">影响项目助手怎么写稿（全局 AI 不受影响）</div></div>
+              <select class="sel"><option>跟我平时一样</option><option>更短更利落</option><option>更详细</option></select></div>
+
+            <div class="row" style="align-items:flex-start;flex-wrap:wrap;border-top:1px solid var(--line);margin-top:8px">
+              <div class="body" style="width:100%">
+                <div class="title" id="sec-mem">记忆文档</div>
+                <div class="meta">路径画像、判断记忆、用户偏好</div>
+              </div>
+            </div>
+            <div class="row"><div class="body"><div class="title">路径画像</div><div class="meta">我想成为谁、发什么、红线、节奏</div></div>
+              <button class="btn sm ghost">打开编辑</button></div>
+            <div class="row"><div class="body"><div class="title">判断记忆 / 公式</div><div class="meta">复盘沉淀；默认「收下」后才生效</div></div>
+              <button class="btn sm ghost">打开编辑</button></div>
+            <div class="row"><div class="body"><div class="title">写入方式</div><div class="meta">推荐提案制：AI 建议，你确认</div></div>
+              <select class="sel"><option>提案制（推荐）</option><option>自动写入</option><option>仅手动</option></select></div>
+
+            <div class="row" style="align-items:flex-start;flex-wrap:wrap;border-top:1px solid var(--line);margin-top:8px">
+              <div class="body" style="width:100%">
+                <div class="title" id="sec-priv">隐私与数据</div>
+                <div class="meta">素材默认级别、导出、删除</div>
+              </div>
+            </div>
+            <div class="row"><div class="body"><div class="title">素材默认隐私</div><div class="meta">「私密」不进生成、不外发</div></div>
+              <select class="sel"><option>私密</option><option>可公开</option></select></div>
+            <div class="row"><div class="body"><div class="title">导出全部数据</div><div class="meta">项目、素材、记忆、设置</div></div>
+              <button class="btn sm ghost">导出…</button></div>
+            <div class="row"><div class="body"><div class="title">删除账号</div><div class="meta">需你确认，不可撤销</div></div>
+              <button class="btn sm ghost">申请删除…</button></div>
+
+            <div class="filler">设置已按「产品 / 全局 AI / 项目助手」分开 · 保存后生效</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 我的 -->
+      <section data-page="me" class="page hidden">
+        <div class="band grow">
+          <div class="band-h"><h2>账户</h2></div>
+          <div class="rows">
+            <div class="row">
+              <div class="body">
+                <div class="title">AI 能力状态</div>
+                <div class="meta">已连接 · 本地编排 · 文本可用</div>
+              </div>
+              <span class="chip on">可用</span>
+            </div>
+            <div class="row">
+              <div class="body">
+                <div class="title">人机契约</div>
+                <div class="meta">你只负责输入和拍板；其余交给 AI 跑腿；记忆 / 公式写入默认提案</div>
+              </div>
+            </div>
+            <div class="row" onclick="go('settings')" style="cursor:pointer">
+              <div class="body">
+                <div class="title">全部设置</div>
+                <div class="meta">产品 · 全局 AI · 项目助手 · 记忆 · 隐私</div>
+              </div>
+              <button class="btn sm">打开设置</button>
+            </div>
+            <div class="row">
+              <div class="body">
+                <div class="title">导出与删除</div>
+                <div class="meta">数据可导出；账号删除走人工确认</div>
+              </div>
+              <button class="btn sm ghost">导出</button>
+            </div>
+            <div class="filler">AI 只出建议；发布、公开范围、长期经验、删除由你决定</div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+
+
+<!-- 全局 AI：与项目内助手分开 -->
+
+<div class="settings-backdrop" id="settingsBackdrop"></div>
+<div class="settings" id="settings" role="dialog" aria-label="设置">
+  <div class="settings-h">
+    <h2>设置</h2>
+    <button class="ai-close" id="settingsClose" aria-label="关闭设置">×</button>
+  </div>
+  <div class="settings-body">
+    <nav class="settings-nav" id="settingsNav">
+      <button data-s="ai" class="active">AI 外观</button>
+      <button data-s="model">模型与接口</button>
+      <button data-s="agent">Agent 指令</button>
+      <button data-s="memory">记忆文档</button>
+      <button data-s="flow">创作偏好</button>
+      <button data-s="notify">通知与入口</button>
+      <button data-s="privacy">隐私与数据</button>
+      <button data-s="about">关于与诊断</button>
+    </nav>
+    <div class="settings-panes" id="settingsPanes">
+      <section data-pane="ai">
+        <div class="set-sec">
+          <h3>AI 外观</h3>
+          <div class="set-row">
+            <div><div class="lab">AI 名称</div><div class="hint">全局助手的显示名。项目助手可单独命名，避免混用。</div></div>
+            <input type="text" value="阿洛" maxlength="12" />
+          </div>
+          <div class="set-row">
+            <div><div class="lab">AI 头像</div><div class="hint">点击色环更换；也可上传图片（后续版本）。</div></div>
+            <div class="avatar-pick" style="padding:0;border:0">
+              <button data-c="a" style="background:radial-gradient(circle at 30% 28%,#fff,rgba(143,190,232,.6))" class="sel"></button>
+              <button data-c="b" style="background:radial-gradient(circle at 30% 28%,#fff,rgba(201,138,75,.55))"></button>
+              <button data-c="c" style="background:radial-gradient(circle at 30% 28%,#fff,rgba(25,30,38,.25))"></button>
+            </div>
+          </div>
+          <div class="set-row">
+            <div><div class="lab">项目助手名称</div><div class="hint">仅在项目页对话中显示，与全局助手区分。</div></div>
+            <input type="text" value="项目助手" maxlength="12" />
+          </div>
+        </div>
+      </section>
+
+      <section data-pane="model" class="hidden">
+        <div class="set-sec">
+          <h3>模型与接口</h3>
+          <div class="set-row">
+            <div><div class="lab">接口类型</div><div class="hint">OpenAI 兼容端点。密钥只存本机，不进日志。</div></div>
+            <select><option>OpenAI 兼容</option><option>本地编排（无模型）</option></select>
+          </div>
+          <div class="set-row"><div><div class="lab">Base URL</div><div class="hint">例如 https://api.example.com/v1</div></div><input type="url" placeholder="https://…/v1" /></div>
+          <div class="set-row"><div><div class="lab">API Key</div><div class="hint">保存后仅显示尾号；可随时更换。</div></div><input type="password" placeholder="sk-…" /></div>
+          <div class="set-row"><div><div class="lab">模型名称</div><div class="hint">如 gpt-4o-mini / 你自己的模型 ID。</div></div><input type="text" placeholder="model-id" /></div>
+          <div class="set-row"><div><div class="lab">连接自检</div><div class="hint">测一次调用，看延迟与是否可用。</div></div><button class="btn sm">测试连接</button></div>
+          <div class="set-row">
+            <div><div class="lab">失败时降级</div><div class="hint">模型不可用时继续手动创作，不挡流程。</div></div>
+            <button class="toggle on" aria-label="失败时降级"></button>
+          </div>
+        </div>
+      </section>
+
+      <section data-pane="agent" class="hidden">
+        <div class="set-sec">
+          <h3>Agent 指令（agent.md）</h3>
+          <div class="set-block">
+            <div class="lab">全局助手指令</div>
+            <div class="hint" style="margin:4px 0 8px">写清你希望它如何说话、如何帮你操作。会与系统默认规则合并，不能取消「四决策由你拍板」。</div>
+            <textarea placeholder="例：称呼我为小K；建议要短；改稿前先复述我的意思…">称呼我为小K。建议用短句。改稿前先复述我的意思。不要替我决定是否发布。</textarea>
+          </div>
+          <div class="set-block">
+            <div class="lab">项目助手指令</div>
+            <div class="hint" style="margin:4px 0 8px">只作用于项目内对话，便于单独控制文风。</div>
+            <textarea placeholder="例：只谈当前这条内容；不要聊全站杂事…">只处理当前这条内容。不要发散到其他项目。</textarea>
+          </div>
+          <div class="set-row">
+            <div><div class="lab">导入 / 导出 agent.md</div><div class="hint">与本机文件同步，便于备份与迁移。</div></div>
+            <div style="display:flex;gap:8px"><button class="btn sm ghost">导入</button><button class="btn sm ghost">导出</button></div>
+          </div>
+        </div>
+      </section>
+
+      <section data-pane="memory" class="hidden">
+        <div class="set-sec">
+          <h3>记忆文档</h3>
+          <div class="set-row">
+            <div><div class="lab">路径画像（我是谁 / 发什么）</div><div class="hint">长期记忆主文档，影响选题与检查。</div></div>
+            <button class="btn sm ghost">打开编辑</button>
+          </div>
+          <div class="set-row">
+            <div><div class="lab">判断记忆（公式 / 准偏规律）</div><div class="hint">由复盘沉淀，默认需你「收下」才生效。</div></div>
+            <button class="btn sm ghost">打开编辑</button>
+          </div>
+          <div class="set-row">
+            <div><div class="lab">用户偏好（称呼、语气、红线）</div><div class="hint">类似 user.md：怎么称呼你、讨厌什么表达。</div></div>
+            <button class="btn sm ghost">打开编辑</button>
+          </div>
+          <div class="set-row">
+            <div><div class="lab">写入方式</div><div class="hint">推荐：提案制。AI 建议改记忆，你确认后才写。</div></div>
+            <select><option>提案制（推荐）</option><option>自动写入</option><option>仅手动</option></select>
+          </div>
+          <div class="set-row">
+            <div><div class="lab">记忆容量提示</div><div class="hint">接近上限时整理旧条目，避免乱丢。</div></div>
+            <button class="toggle on" aria-label="记忆容量提示"></button>
+          </div>
+          <div class="set-row">
+            <div><div class="lab">清空记忆</div><div class="hint">删除前请先导出。清空后 AI 不再记得你的偏好。</div></div>
+            <button class="btn sm ghost">导出后清空…</button>
+          </div>
+        </div>
+      </section>
+
+      <section data-pane="flow" class="hidden">
+        <div class="set-sec">
+          <h3>创作偏好</h3>
+          <div class="set-row"><div><div class="lab">默认内容形态</div><div class="hint">新建条目时的默认类型，可逐条改。</div></div>
+            <select><option>图文</option><option>视频 / vlog</option></select>
+          </div>
+          <div class="set-row"><div><div class="lab">每周目标</div><div class="hint">用于节奏提醒，不是硬指标。</div></div>
+            <select><option>1–2 条</option><option>3–4 条</option><option>不定</option></select>
+          </div>
+          <div class="set-row"><div><div class="lab">去 AI 味</div><div class="hint">成稿后自动改写得更像人话；可关。不会改掉事实。</div></div>
+            <button class="toggle on" aria-label="去 AI 味"></button>
+          </div>
+          <div class="set-row"><div><div class="lab">发前检查</div><div class="hint">发布前检查敏感词、事实来源等。</div></div>
+            <select><option>标准</option><option>严格</option><option>仅提醒</option></select>
+          </div>
+          <div class="set-row"><div><div class="lab">对账提醒</div><div class="hint">发布后何时提醒你回填数据。</div></div>
+            <select><option>3 天</option><option>7 天</option><option>不提醒</option></select>
+          </div>
+        </div>
+      </section>
+
+      <section data-pane="notify" class="hidden">
+        <div class="set-sec">
+          <h3>通知与入口</h3>
+          <div class="set-row"><div><div class="lab">灵感速记快捷键</div><div class="hint">按住说话或快捷键唤起全局 AI。</div></div>
+            <select><option>Alt + Space</option><option>仅悬浮球</option></select>
+          </div>
+          <div class="set-row"><div><div class="lab">悬浮球</div><div class="hint">显示在右下安全区，不挡按钮。</div></div>
+            <button class="toggle on" aria-label="悬浮球"></button>
+          </div>
+          <div class="set-row"><div><div class="lab">待决提醒</div><div class="hint">有「等你定 / 欠对账」时提醒。不发营销消息。</div></div>
+            <button class="toggle on" aria-label="待决提醒"></button>
+          </div>
+          <div class="set-row"><div><div class="lab">移动端首屏</div><div class="hint">（后置）手机打开先进全局 AI。Web 启用后生效。</div></div>
+            <select><option>全局 AI（规划中）</option><option disabled>今日</option></select>
+          </div>
+        </div>
+      </section>
+
+      <section data-pane="privacy" class="hidden">
+        <div class="set-sec">
+          <h3>隐私与数据</h3>
+          <div class="set-row"><div><div class="lab">素材默认隐私</div><div class="hint">新素材默认级别；「私密」不进生成与外发。</div></div>
+            <select><option>私密</option><option>可公开</option></select>
+          </div>
+          <div class="set-row"><div><div class="lab">敏感素材不出网</div><div class="hint">敏感素材不发送给外部模型。</div></div>
+            <button class="toggle on" aria-label="敏感素材不出网"></button>
+          </div>
+          <div class="set-row"><div><div class="lab">数据导出</div><div class="hint">导出项目、素材、记忆、设置。</div></div>
+            <button class="btn sm ghost">导出全部…</button>
+          </div>
+          <div class="set-row"><div><div class="lab">删除账号</div><div class="hint">需人工确认，不可撤销。</div></div>
+            <button class="btn sm ghost">申请删除…</button>
+          </div>
+        </div>
+      </section>
+
+      <section data-pane="about" class="hidden">
+        <div class="set-sec">
+          <h3>关于与诊断</h3>
+          <div class="set-row"><div><div class="lab">版本</div><div class="hint">TopicAI · 琉璃 Lumen · Web 原型</div></div>
+            <span class="chip">v0.1-proto</span>
+          </div>
+          <div class="set-row"><div><div class="lab">运行状态</div><div class="hint">模型连接、存储、最近错误。</div></div>
+            <button class="btn sm ghost">查看诊断</button>
+          </div>
+          <div class="set-row"><div><div class="lab">使用日志</div><div class="hint">仅本地；用于排查，不含密钥。</div></div>
+            <button class="btn sm ghost">导出日志</button>
+          </div>
+          <div class="set-row"><div><div class="lab">文案与 AI 语言规则</div><div class="hint">全文案无歧义；AI 先复述再动手、不代拍板。</div></div>
+            <span class="chip on">已启用</span>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+  <div class="set-foot">
+    <div class="set-note">密钥与私密素材默认不出本机。「四决策」（发布、公开、长期经验、删除）始终由你确认。</div>
+    <button class="btn" id="settingsSave">保存设置</button>
+  </div>
+</div>
+
+<div class="ai-panel" id="aiPanel" aria-label="全局 AI 助手">
+  <div class="ai-panel-h">
+    <div class="ai-avatar" id="aiAvatar">A</div>
+    <div class="ai-name-wrap">
+      <input class="ai-name" id="aiName" value="阿洛" maxlength="12" aria-label="AI 名称（可修改）" />
+      <div class="ai-sub">全局助手 · 全站可用 · 不替代项目里的助手</div>
+    </div>
+    <button class="ai-close" id="aiSettings" title="设置" aria-label="打开设置" style="margin-right:6px">⚙</button>
+    <button class="ai-close" id="aiClose" aria-label="关闭">×</button>
+  </div>
+  <div class="ai-body" id="aiBody">
+    <div class="ai-empty" id="aiEmpty">
+      <b>我是全局助手</b>，两件事最常用：<br/>
+      ① <strong>灵感速记</strong>：想到什么直接说，我帮你收进「想发的」<br/>
+      ② <strong>全局操控</strong>：让我替你跳转、建条、推进、对账<br/><br/>
+      <span style="opacity:.85">改某一条稿请去项目里找「项目助手」；<br/>发布、公开范围、长期经验、删除仍由你拍板。</span>
+    </div>
+  </div>
+  <div class="copy-note">说清楚要什么就行。我会先确认你的意思，再动手，不替你做决定。</div>
+  <div class="avatar-pick" id="avatarPick" title="换头像">
+    <button data-c="a" style="background:radial-gradient(circle at 30% 28%,#fff,rgba(143,190,232,.6))" class="sel"></button>
+    <button data-c="b" style="background:radial-gradient(circle at 30% 28%,#fff,rgba(201,138,75,.55))"></button>
+    <button data-c="c" style="background:radial-gradient(circle at 30% 28%,#fff,rgba(25,30,38,.25))"></button>
+    <button data-c="d" style="background:radial-gradient(circle at 30% 28%,#fff,rgba(143,190,232,.25))"></button>
+    <label class="file-btn" style="margin-left:4px">上传图片
+      <input type="file" id="aiAvatarFile" accept="image/*" />
+    </label>
+  </div>
+  <div class="avatar-hint" style="padding:0 16px 8px">支持 JPG / PNG，建议正方形；也可只用光晕色。</div>
+  <div class="ai-foot">
+    <div class="ai-input-row">
+      <input id="aiInput" placeholder="记一条灵感，或让我帮你操作（如：把番茄钟标为待对账）…" />
+      <button class="ai-send" id="aiSend" aria-label="发送">↑</button>
+    </div>
+    <div class="ai-tools">
+      <button class="ai-tool">＋ 附件</button>
+      <button class="ai-tool">语音</button>
+      <span style="flex:1"></span>
+      <button class="ai-tool" id="aiEditName">改名字</button>
+    </div>
+  </div>
+</div>
+
+<div class="ball" id="ball" title="打开全局 AI" aria-label="打开全局 AI"></div>
+
+<script>
+  const meta = {
+    today: { t: '今日', s: '待你定 <b>3</b> · 欠对账 <b>2</b> · 在途 <b>1</b>', cta: '快速开始' },
+    content: { t: '内容', s: '想发的 · 在途 · 已发', cta: '快速开始' },
+    project: { t: '番茄钟别在下班后补…', s: '效率实验 · 图文 · 2/5', cta: '完整工作台' },
+    review: { t: '周复盘', s: '判断 vs 实际 · 准/偏 · 公式', cta: '去对账' },
+    growth: { t: '成长', s: '能力 · 里程碑 · 信任', cta: '' },
+    path: { t: '路径', s: '画像 · 对标 · 探索位', cta: '' },
+    materials: { t: '素材', s: '库 · 捕获 · 引用', cta: '丢一条' },
+    me: { t: '我的', s: '账号 · AI · 数据', cta: '打开设置' },
+    settings: { t: '设置', s: '产品 · 全局 AI · 项目助手', cta: '' },
+  };
+  function go(name) {
+    document.querySelectorAll('[data-page]').forEach((el) => {
+      el.classList.toggle('hidden', el.getAttribute('data-page') !== name);
+    });
+    document.querySelectorAll('#nav button').forEach((b) => {
+      b.classList.toggle('active', b.dataset.p === name);
+    });
+    const m = meta[name];
+    document.getElementById('pageTitle').childNodes[0].textContent = m.t;
+    document.getElementById('pageSub').innerHTML = m.s;
+    const cta = document.getElementById('primaryCta');
+    if (m.cta) {
+      cta.textContent = m.cta;
+      cta.style.display = '';
+      cta.onclick = () => { if (m.cta === '打开设置') go('settings'); else if (m.cta === '去对账') go('review'); else go('project'); };
+    } else cta.style.display = 'none';
+  }
+  document.querySelectorAll('#nav button').forEach((b) => b.addEventListener('click', () => go(b.dataset.p)));
+  document.getElementById('primaryCta').addEventListener('click', function () {
+    if (document.querySelector('[data-page="settings"]:not(.hidden)')) return;
+    if (this.textContent === '打开设置') go('settings');
+  });
+  document.querySelectorAll('[data-jump]').forEach((c) => {
+    c.addEventListener('click', () => {
+      document.querySelectorAll('[data-jump]').forEach((x) => x.classList.remove('on'));
+      c.classList.add('on');
+      const el = document.getElementById('sec-' + c.dataset.jump);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  });
+
+  const ball = document.getElementById('ball');
+  const panel = document.getElementById('aiPanel');
+  const aiName = document.getElementById('aiName');
+  const aiAvatar = document.getElementById('aiAvatar');
+  ball.addEventListener('click', () => panel.classList.toggle('open'));
+  document.getElementById('aiClose').addEventListener('click', () => panel.classList.remove('open'));
+  function syncAvatar() {
+    const n = (aiName.value || 'A').trim();
+    aiAvatar.textContent = n.slice(0, 1).toUpperCase();
+  }
+  aiName.addEventListener('input', syncAvatar);
+  document.getElementById('aiEditName').addEventListener('click', () => { aiName.focus(); aiName.select(); });
+  document.querySelectorAll('#avatarPick button').forEach((b) => {
+    b.addEventListener('click', () => {
+      document.querySelectorAll('#avatarPick button').forEach((x) => x.classList.remove('sel'));
+      b.classList.add('sel');
+      const styles = {
+        a: 'radial-gradient(circle at 32% 28%, #fff, rgba(143,190,232,0.55) 60%, rgba(143,190,232,0.2))',
+        b: 'radial-gradient(circle at 32% 28%, #fff, rgba(201,138,75,0.5) 60%, rgba(201,138,75,0.18))',
+        c: 'radial-gradient(circle at 32% 28%, #fff, rgba(25,30,38,0.28) 60%, rgba(25,30,38,0.1))',
+        d: 'radial-gradient(circle at 32% 28%, #fff, rgba(143,190,232,0.28) 60%, rgba(255,255,255,0.4))',
+      };
+      aiAvatar.style.background = styles[b.dataset.c] || styles.a;
+    });
+  });
+  function aiSay(text) {
+    const empty = document.getElementById('aiEmpty');
+    if (empty) empty.remove();
+    const body = document.getElementById('aiBody');
+    const d = document.createElement('div');
+    d.className = 'bubble';
+    d.innerHTML = text + '<span class="src">' + (aiName.value||'助手') + ' · 可追问，我先确认再改</span>';
+    body.appendChild(d);
+    body.scrollTop = body.scrollHeight;
+  }
+  function aiSend() {
+    const input = document.getElementById('aiInput');
+    const v = input.value.trim();
+    if (!v) return;
+    const body = document.getElementById('aiBody');
+    const me = document.createElement('div');
+    me.className = 'bubble me';
+    me.textContent = v;
+    body.appendChild(me);
+    input.value = '';
+    setTimeout(() => {
+      aiSay('我理解成：<strong>' + v.replace(/</g,'&lt;') + '</strong>。需要我先给 1 个方案，还是先问你 1 个问题？（例如「这条要发给谁看」）');
+    }, 280);
+  }
+  const settings = document.getElementById('settings');
+  const settingsBackdrop = document.getElementById('settingsBackdrop');
+  function openSettings() {
+    settings.classList.add('open');
+    settingsBackdrop.classList.add('open');
+  }
+  function closeSettings() {
+    settings.classList.remove('open');
+    settingsBackdrop.classList.remove('open');
+  }
+  document.getElementById('aiSettings').addEventListener('click', openSettings);
+  document.getElementById('settingsClose').addEventListener('click', closeSettings);
+  settingsBackdrop.addEventListener('click', closeSettings);
+  document.getElementById('settingsSave').addEventListener('click', closeSettings);
+  document.querySelectorAll('#settingsNav button').forEach((b) => {
+    b.addEventListener('click', () => {
+      document.querySelectorAll('#settingsNav button').forEach((x) => x.classList.remove('active'));
+      b.classList.add('active');
+      const id = b.dataset.s;
+      document.querySelectorAll('[data-pane]').forEach((el) => {
+        el.classList.toggle('hidden', el.getAttribute('data-pane') !== id);
+      });
+    });
+  });
+  document.querySelectorAll('.toggle').forEach((t) => {
+    t.addEventListener('click', () => t.classList.toggle('on'));
+  });
+  document.getElementById('aiSend').addEventListener('click', aiSend);
+
+  function readImage(file, apply) {
+    if (!file || !file.type.startsWith('image/')) return;
+    const r = new FileReader();
+    r.onload = () => apply(String(r.result));
+    r.readAsDataURL(file);
+  }
+  function setAvatarImage(el, url) {
+    if (!el) return;
+    el.style.backgroundImage = 'url(' + url + ')';
+    el.style.backgroundSize = 'cover';
+    el.style.backgroundPosition = 'center';
+    el.textContent = '';
+    el.dataset.img = url;
+  }
+  function resetAvatar(el, letter, bg) {
+    if (!el) return;
+    el.style.backgroundImage = '';
+    el.style.background = bg || '';
+    el.textContent = letter;
+    delete el.dataset.img;
+  }
+  const aiAvatarEl = document.getElementById('aiAvatar');
+  const gaiPreview = document.getElementById('gaiAvatarPreview');
+  const paiPreview = document.getElementById('paiAvatarPreview');
+
+  const aiFile = document.getElementById('aiAvatarFile');
+  if (aiFile) aiFile.addEventListener('change', (e) => {
+    readImage(e.target.files && e.target.files[0], (url) => {
+      setAvatarImage(aiAvatarEl, url);
+      setAvatarImage(gaiPreview, url);
+    });
+  });
+  const gaiFile = document.getElementById('gaiAvatarFile');
+  if (gaiFile) gaiFile.addEventListener('change', (e) => {
+    readImage(e.target.files && e.target.files[0], (url) => {
+      setAvatarImage(aiAvatarEl, url);
+      setAvatarImage(gaiPreview, url);
+    });
+  });
+  const paiFile = document.getElementById('paiAvatarFile');
+  if (paiFile) paiFile.addEventListener('change', (e) => {
+    readImage(e.target.files && e.target.files[0], (url) => {
+      setAvatarImage(paiPreview, url);
+    });
+  });
+  const gaiReset = document.getElementById('gaiAvatarReset');
+  if (gaiReset) gaiReset.addEventListener('click', () => {
+    resetAvatar(aiAvatarEl, (document.getElementById('aiName').value || 'A').slice(0,1).toUpperCase(), '');
+    resetAvatar(gaiPreview, (document.getElementById('aiName').value || 'A').slice(0,1).toUpperCase(), '');
+    if (aiFile) aiFile.value = '';
+    if (gaiFile) gaiFile.value = '';
+  });
+  const paiReset = document.getElementById('paiAvatarReset');
+  if (paiReset) paiReset.addEventListener('click', () => {
+    resetAvatar(paiPreview, '项', 'radial-gradient(circle at 32% 28%, #fff, rgba(143,190,232,0.35))');
+    if (paiFile) paiFile.value = '';
+  });
+
+  document.getElementById('aiInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') aiSend();
+  });
+
+</script>
+</body>
+</html>

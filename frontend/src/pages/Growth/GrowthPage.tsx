@@ -1,133 +1,178 @@
-/** 成长（原型 hifi-lumen.html 双栏对齐）：真实计数 + 成对里程碑 + 信任面板。 */
+/**
+ * 成长（content-line-prototype.html · 成长）：
+ * 左：能力台帐｜右：里程碑与信任 + 进化可见区（哪里变了）。
+ */
 import { useCallback, useEffect, useState } from 'react';
 
 import { extractErrorMessage } from '@/utils/error';
-import { getCreatorState, listProjects } from '@/services/api/v2/projects';
-import { listCreatorViewpoints, listCreatorSeries } from '@/services/api/v2/projects';
+import { getCreatorState, listProjects, listCreatorViewpoints, listCreatorSeries } from '@/services/api/v2/projects';
+import { getEvolutionSummary, type EvolutionChange } from '@/services/api/v2/evolution';
 import type { CreatorState } from '@/types/contracts/v2/content';
 
-type GrowthCounts = {
-  validatedInsights: number;
-  viewpoints: number;
-  series: number;
-  projects: number;
-  autopilotEligible: boolean;
-  aiCalls: number;
+type CapabilityRow = {
+  name: string;
+  meta: string;
+  level: string;
+  on: boolean;
 };
 
-const pct = (n: number) => `${Math.min(100, Math.round((n / 10) * 100))}%`;
+type MilestoneRow = {
+  title: string;
+  meta: string;
+};
 
 export default function GrowthPage() {
-  const [state, setState] = useState<GrowthCounts | null>(null);
+  const [caps, setCaps] = useState<CapabilityRow[]>([]);
+  const [milestones] = useState<MilestoneRow[]>([
+    {
+      title: '连续 4 周按时复盘',
+      meta: '升级：预填周计划 ｜ 回报：每周约省 25 分钟',
+    },
+    {
+      title: '语音转写零纠错 × 10',
+      meta: '升级：语音素材免逐条核对 ｜ 回报：每次少点 3 次',
+    },
+  ]);
   const [error, setError] = useState<string | null>(null);
-  const [trustNote, setTrustNote] = useState<string | null>(null);
+  const [changes, setChanges] = useState<EvolutionChange[]>([]);
 
   const load = useCallback(async () => {
-    const [creatorState, projects, viewpoints, series] = await Promise.all([
-      getCreatorState(),
-      listProjects(),
-      listCreatorViewpoints().catch(() => ({ items: [], total: 0 })),
-      listCreatorSeries().catch(() => ({ items: [], total: 0 })),
-    ]);
-    const cs = creatorState as unknown as CreatorState;
-    setState({
-      validatedInsights: Array.isArray(cs?.validated_insights) ? cs.validated_insights.length : 0,
-      viewpoints: viewpoints.items.length,
-      series: series.items.length,
-      projects: projects.items.length,
-      autopilotEligible: Boolean((cs as { autopilot_eligible?: boolean })?.autopilot_eligible),
-      aiCalls: Number((cs as { ai_calls_today?: number })?.ai_calls_today ?? 0),
-    });
+    try {
+      const [creatorState, projects, viewpoints, series, evolution] = await Promise.all([
+        getCreatorState(),
+        listProjects(),
+        listCreatorViewpoints().catch(() => ({ items: [], total: 0 })),
+        listCreatorSeries().catch(() => ({ items: [], total: 0 })),
+        getEvolutionSummary().catch(() => ({ changes: [], capability_trust: {}, recent_signals: [] })),
+      ]);
+      setChanges(evolution.changes ?? []);
+      const cs = creatorState as unknown as CreatorState & {
+        autopilot_eligible?: boolean;
+        candidate_acceptance_rate?: number;
+        unresolved_correction_count?: number;
+      };
+      const insights = Array.isArray(cs?.validated_insights) ? cs.validated_insights.length : 0;
+      const acceptRate = cs?.candidate_acceptance_rate ?? 0;
+      const corrections = cs?.unresolved_correction_count ?? 0;
+      setCaps([
+        {
+          name: '候选确认',
+          meta: `累计接受 ${insights} 次 · 自动准备：${cs?.autopilot_eligible ? '可用' : '未解锁'}`,
+          level: insights >= 15 ? 'L2' : insights >= 5 ? 'L1' : 'L0',
+          on: insights >= 15,
+        },
+        {
+          name: '发布前检查',
+          meta: `累计 ${projects.items.length} 次 · 你纠正 ${corrections} 次`,
+          level: corrections === 0 && projects.items.length >= 5 ? 'L1' : 'L0',
+          on: false,
+        },
+        {
+          name: '长期经验写入',
+          meta: '受保护决策 · 永不自动',
+          level: '人工',
+          on: false,
+        },
+        {
+          name: '观点提炼',
+          meta: `已确认 ${viewpoints.items.length} 条 · 系列 ${series.items.length} 个`,
+          level: viewpoints.items.length >= 3 ? 'L1' : 'L0',
+          on: viewpoints.items.length >= 3,
+        },
+      ]);
+      void acceptRate;
+    } catch (e) {
+      setError(extractErrorMessage(e, '成长数据加载失败'));
+    }
   }, []);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      load().catch((err) => setError(extractErrorMessage(err, '成长数据加载失败')));
+      void load();
     }, 0);
     return () => window.clearTimeout(timer);
   }, [load]);
 
-  const caps = state
-    ? [
-        { name: '已确认经验', lv: state.validatedInsights, hint: '来自你确认过的复盘结论，未经确认不进入。' },
-        { name: '已确认观点', lv: state.viewpoints, hint: '你提炼并确认的创作者视角。' },
-        { name: '持续系列', lv: state.series, hint: '至少两篇发布后才会发现的系列关系。' },
-        { name: '内容项目', lv: state.projects, hint: '包括进行中与已发布的全部项目。' },
-      ]
-    : [];
-
   return (
     <div>
-      {error ? <p className="login-err" role="alert">{error}</p> : null}
-      <p className="kicker">成长 · 你和它，一起</p>
-      <h1 className="pg">你养成它，它养成你的创作者生涯。</h1>
+      {error ? (
+        <p className="login-err" role="alert">
+          {error}
+        </p>
+      ) : null}
 
-      <div className="growth">
-        <div className="card gcard glass">
-          <h3>它的积累</h3>
-          {caps.map((cap) => (
-            <div className="cap" key={cap.name}>
-              <div className="name"><b>{cap.name}</b><span className="lv">{cap.lv} 项</span></div>
-              <div className="meter"><b>{cap.lv}</b><span className="nobar" style={{ width: pct(cap.lv) }} /></div>
-              <p className="hint">{cap.hint}</p>
-            </div>
-          ))}
-          <div className="cap">
-            <div className="name"><b>今日 AI 调用</b><span className="lv">{state?.aiCalls ?? 0}</span></div>
-            <p className="hint">每一项都来自你确认过的内容——未经确认的结论不会进入这里。</p>
-          </div>
-        </div>
-
+      <div className="lumen-topbar">
         <div>
-          <div className="card gcard glass">
-            <h3>成对里程碑</h3>
-            <div className="milestone">
-              <span>🌱</span>
-              <span><span className="you">你 · 连续更新满 4 周</span> <span className="arrow">→</span> <span className="ai">它 · 反应判断升级，开始预填周计划</span></span>
-            </div>
-            <div className="milestone">
-              <span>✍️</span>
-              <span><span className="you">你 · 连续 2 周复盘全确认</span> <span className="arrow">→</span> <span className="ai">它 · 结构预检解锁免逐条核对</span></span>
-            </div>
-            <p className="cap .hint" style={{ fontSize: 11.5, color: 'var(--faint)', marginTop: 7 }}>
-              里程碑只在真实行为满足时点亮——不作表演性进度。当前均为「待达成」。
-            </p>
-          </div>
-
-          <div className="card gcard glass" style={{ marginTop: 18 }}>
-            <h3>信任面板 · 每一项都能收回</h3>
-            <div className="trust">
-              <div className="t"><b>自主准备 · 到可发布为止</b><span>{state?.autopilotEligible ? '信任额度已达标，可申请' : '连续接受 ≥3 次且无未解决纠正后解锁'} · 即将开放，当前不可切换</span></div>
-              {/* F16: 未开放能力用 disabled + 常驻说明，不做「能点但不变」。 */}
-              <button
-                type="button"
-                className="switch off"
-                disabled
-                aria-pressed={false}
-                aria-disabled="true"
-                aria-label="自主准备开关（即将开放，当前不可用）"
-              >
-                <i />
-              </button>
-            </div>
-            <div className="trust">
-              <div className="t"><b>探索位 · 每批 1 条</b><span>落选不计入成长分</span></div>
-              <button type="button" className="switch" aria-pressed onClick={() => setTrustNote('探索位已开启：每批只推 1 条试探性方向，落选不计入成长分。')} aria-label="探索位开关"><i /></button>
-            </div>
-            <div className="trust">
-              <div className="t"><b>私密素材参与生产</b><span>永不开启——标记私密后不出本地 · 保持关闭</span></div>
-              <button type="button" className="switch off" disabled aria-pressed={false} aria-disabled="true" aria-label="私密素材参与生产开关（保持关闭，不可用）"><i /></button>
-            </div>
-            {trustNote ? <p className="hint" style={{ fontSize: 11.5, color: 'var(--faint)', marginTop: 10 }}>{trustNote}</p> : null}
-            <p className="hint" style={{ fontSize: 11.5, color: 'var(--faint)', marginTop: 10 }}>
-              发布、公开范围、事实与长期经验四个决策永远不会委托。
-            </p>
-          </div>
+          <h1>成长</h1>
+          <p className="sub" style={{ margin: 0 }}>
+            行为 → 能力 → 时间回报 · 等级可升可降
+          </p>
         </div>
       </div>
 
-      <div className="weekfoot">
-        <span>它记住的你（全部可改可删）· 观点 / 系列 / 经验都以你的确认为准</span>
+      <div className="lumen-split-2">
+        {/* 左：能力台帐 */}
+        <div className="lumen-split-col">
+          <div className="lumen-band grow">
+            <div className="lumen-band-h">
+              <h2>能力台帐</h2>
+              <span className="lumen-chip">{caps.length}</span>
+            </div>
+            {caps.map((cap) => (
+              <div key={cap.name} className="lumen-row">
+                <div className="body">
+                  <div className="title">{cap.name}</div>
+                  <div className="meta">{cap.meta}</div>
+                </div>
+                <span className={`lumen-chip${cap.on ? ' on' : ''}`}>{cap.level}</span>
+              </div>
+            ))}
+            <div className="lumen-fill">等级可升可降，改动都有记录</div>
+          </div>
+        </div>
+
+        {/* 右：里程碑与信任 */}
+        <div className="lumen-split-col">
+          <div className="lumen-band grow">
+            <div className="lumen-band-h">
+              <h2>里程碑与信任</h2>
+            </div>
+            {milestones.map((m) => (
+              <div key={m.title} className="lumen-row">
+                <div className="body">
+                  <div className="title">{m.title}</div>
+                  <div className="meta">{m.meta}</div>
+                </div>
+              </div>
+            ))}
+            <div className="lumen-row">
+              <div className="body">
+                <div className="title">信任说明</div>
+                <div className="meta">保护你决策的规则，不会因为系统变强而放松</div>
+              </div>
+            </div>
+            <div className="lumen-fill">行为 → 能力 → 时间回报</div>
+          </div>
+          {/* P4-F1 进化可见区：哪里变了 */}
+          <div className="lumen-band">
+            <div className="lumen-band-h">
+              <h2>哪里变了</h2>
+              <span className="lumen-chip">{changes.length}</span>
+            </div>
+            {changes.length === 0 ? (
+              <div className="lumen-fill">还没有变化记录。决策、对账、规则变更会出现在这里。</div>
+            ) : (
+              changes.slice(0, 6).map((c, i) => (
+                <div key={i} className="lumen-row" style={{ cursor: 'default' }}>
+                  <div className="body">
+                    <div className="title">{c.summary}</div>
+                    <div className="meta">{c.kind}{c.at ? ` · ${c.at.slice(0, 10)}` : ''}</div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

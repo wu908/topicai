@@ -25,7 +25,12 @@ vi.mock('@/pages/Content/ContentPage', () => pageMock('page-content'));
 vi.mock('@/pages/Opportunities/OpportunitiesPage', () => pageMock('page-opportunities'));
 vi.mock('@/pages/Materials/MaterialsPage', () => pageMock('page-materials'));
 vi.mock('@/pages/Me/MePage', () => pageMock('page-me'));
-vi.mock('@/pages/Starter/StarterPage', () => pageMock('page-starter'));
+vi.mock('@/pages/Review/ReviewPage', () => pageMock('page-review'));
+vi.mock('@/pages/Path/PathPage', () => pageMock('page-path'));
+vi.mock('@/pages/Settings/SettingsPage', () => pageMock('page-settings'));
+vi.mock('@/pages/Growth/GrowthPage', () => pageMock('page-growth'));
+vi.mock('@/pages/Onboarding/ReferenceAnchorPage', () => pageMock('page-reference'));
+vi.mock('@/pages/GrowthOnboarding/GrowthOnboardingPage', () => pageMock('page-growth-onboarding'));
 vi.mock('@/pages/NotFound/NotFoundPage', () => pageMock('page-notfound'));
 
 import App from '../App';
@@ -53,16 +58,36 @@ describe('App routing', () => {
   it.each([
     ['/', 'page-home'],
     ['/content', 'page-content'],
+    ['/review', 'page-review'],
+    ['/path', 'page-path'],
+    ['/settings', 'page-settings'],
     ['/opportunities', 'page-opportunities'],
     ['/materials', 'page-materials'],
     ['/me', 'page-me'],
-    ['/onboarding/assessment', 'page-starter'],
-    ['/onboarding/directions', 'page-starter'],
-    ['/onboarding/sprint', 'page-starter'],
   ])('renders primary route %s', async (path, testId) => {
     renderAt(path);
     expect(await screen.findByTestId(testId)).toBeInTheDocument();
     expect(screen.getByTestId('app-layout')).toBeInTheDocument();
+  });
+
+  // 旧入口收容：功能已迁，路由重定向到新家（方案 §4.3）。
+  it.each([
+    ['/loop', 'page-content'],
+    ['/loop/inbox', 'page-materials'],
+    ['/loop/review', 'page-review'],
+    ['/urgent', 'page-home'],
+    ['/onboarding/assessment', 'page-path'],
+    ['/onboarding/directions', 'page-path'],
+    ['/onboarding/sprint', 'page-path'],
+    ['/onboarding/reference', 'page-reference'],
+  ])('redirects legacy route %s to its new home', async (path, testId) => {
+    renderAt(path);
+    expect(await screen.findByTestId(testId)).toBeInTheDocument();
+  });
+
+  it('keeps historical calibration as a live entry from path', async () => {
+    renderAt('/onboarding/growth');
+    expect(await screen.findByTestId('page-growth-onboarding')).toBeInTheDocument();
   });
 
   it.each([
@@ -74,7 +99,6 @@ describe('App routing', () => {
     ['/titles', 'page-content'],
     ['/viral', 'page-content'],
     ['/publish', 'page-content'],
-    ['/review', 'page-content'],
     ['/analytics', 'page-home'],
     ['/accounts', 'page-me'],
     ['/tracks', 'page-me'],

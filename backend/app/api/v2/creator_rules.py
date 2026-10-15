@@ -75,3 +75,50 @@ async def resolve_creator_rule_conflict(
         user["id"], rule_id, conflict_rule_id, body
     )
     return _response(response, result, replayed)
+
+
+@router.get("/creator-rules/{rule_id}/replay")
+async def replay_creator_rule(
+    rule_id: str,
+    user=Depends(get_current_user),
+    db: Database = Depends(get_db),
+):
+    """规则变更回放对比（P4-B2）：按版本时间线给出「哪里变了」。
+
+    只回放历史，不改规则、不预测效果。
+    """
+    rules = await CreatorRuleService(db).list(user["id"])
+    target = next((r for r in rules if r.get("id") == rule_id), None)
+    if target is None:
+        raise ValueError("creator rule not found")
+    versions = list(target.get("versions") or [])
+    # 时间线：旧 → 新
+    timeline = list(reversed(versions))
+    steps = []
+    prev = None
+    for v in timeline:
+        step = {
+            "version_id": v.get("id"),
+            "version_number": v.get("version_number"),
+            "statement": v.get("statement", ""),
+            "scope": v.get("scope") or {},
+            "status": v.get("status", ""),
+            "created_at": v.get("created_at", ""),
+            "changed_fields": [],
+        }
+        if prev is not None:
+            if (prev.get("statement") or "") != (v.get("statement") or ""):
+                step["changed_fields"].append("statement")
+            if (prev.get("scope") or {}) != (v.get("scope") or {}):
+                step["changed_fields"].append("scope")
+            if (prev.get("status") or "") != (v.get("status") or ""):
+                step["changed_fields"].append("status")
+        steps.append(step)
+        prev = v
+    return ApiResponse(
+        data={
+            "rule_id": rule_id,
+            "steps": steps,
+            "active_version_id": (target.get("active_version") or {}).get("id"),
+        }
+    )

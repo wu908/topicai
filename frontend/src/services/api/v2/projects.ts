@@ -156,6 +156,15 @@ export const openHumanGate = (actionId: string) =>
 export const decideHumanGate = (gateId: string, input: HumanGateDecisionInput) =>
   getData(v2Client.post<ApiEnvelope<unknown>>(`/human-gates/${encodeURIComponent(gateId)}:decide`, input));
 
+/** 人话化一段成稿正文（P2-B1）：只改说法不改事实；无模型时原样返回。 */
+export const humanizeBody = (projectId: string, bodyText: string) =>
+  getData(
+    v2Client.post<ApiEnvelope<{ body_text: string; changed: boolean }>>(
+      `/projects/${encodeURIComponent(projectId)}/humanize`,
+      { body_text: bodyText },
+    ),
+  );
+
 export const listProjectEvidence = (projectId: string) =>
   getData(v2Client.get<ApiEnvelope<Evidence[]>>(`/projects/${encodeURIComponent(projectId)}/evidence`));
 
@@ -416,8 +425,9 @@ export const updateUserSettings = (input: {
   content_strategy: string;
   xiaohongshu_account_reference?: string;
   consent: Record<string, unknown>;
-  /** 夜间自动消化开关（默认关）。 */
   auto_digest_enabled?: boolean;
+  agent_identity?: Record<string, unknown>;
+  product_prefs?: Record<string, unknown>;
   expected_version: number;
 }) => getData(v2Client.put<ApiEnvelope<UserSettings>>('/settings', input));
 

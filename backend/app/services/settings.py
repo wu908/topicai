@@ -12,6 +12,29 @@ from app.services.v2_utils import now
 from config.settings import get_settings
 
 
+_AGENT_KEY = "agent_identity"
+_PRODUCT_KEY = "product_prefs"
+
+
+def _prefs_from_consent(consent: dict) -> tuple[dict, dict]:
+    agent = consent.get(_AGENT_KEY) or {}
+    product = consent.get(_PRODUCT_KEY) or {}
+    return agent, product
+
+
+def _merge_prefs(consent: dict, agent: dict | None, product: dict | None) -> dict:
+    next_consent = dict(consent or {})
+    if agent is not None:
+        merged = dict(next_consent.get(_AGENT_KEY) or {})
+        merged.update({k: v for k, v in agent.items() if v is not None})
+        next_consent[_AGENT_KEY] = merged
+    if product is not None:
+        merged = dict(next_consent.get(_PRODUCT_KEY) or {})
+        merged.update({k: v for k, v in product.items() if v is not None})
+        next_consent[_PRODUCT_KEY] = merged
+    return next_consent
+
+
 class UserSettingsService:
     def __init__(self, db: Any):
         self.db = db
@@ -32,6 +55,8 @@ class UserSettingsService:
             for value in config.llm_capabilities.split(",")
             if value.strip()
         }
+        consent = json.loads(user["consent_json"] or "{}")
+        agent_prefs, product_prefs = _prefs_from_consent(consent)
         return UserSettingsView.model_validate({
             "weekly_publish_goal": user["weekly_publish_goal"],
             "timezone": user["timezone"],
@@ -39,7 +64,9 @@ class UserSettingsService:
             "xiaohongshu_account_reference": user[
                 "xiaohongshu_account_reference"
             ],
-            "consent": json.loads(user["consent_json"] or "{}"),
+            "consent": consent,
+            "agent_identity": agent_prefs,
+            "product_prefs": product_prefs,
             "auto_digest_enabled": bool(user["auto_digest_enabled"]),
             "version": user["settings_version"],
             "ai": {
@@ -78,7 +105,17 @@ class UserSettingsService:
                         if body.weekly_publish_goal is not None
                         else current["weekly_publish_goal"],
                         "consent": json.dumps(
-                            body.consent if body.consent is not None else current["consent"],
+                            _merge_prefs(
+                                body.consent
+                                if body.consent is not None
+                                else current["consent"],
+                                body.agent_identity.model_dump(exclude_none=True)
+                                if body.agent_identity is not None
+                                else None,
+                                body.product_prefs.model_dump(exclude_none=True)
+                                if body.product_prefs is not None
+                                else None,
+                            ),
                             ensure_ascii=False,
                         ),
                         "account": body.xiaohongshu_account_reference

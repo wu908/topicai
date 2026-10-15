@@ -88,18 +88,18 @@ describe('MaterialsPage', () => {
   it('lists reusable materials with privacy and project usages', async () => {
     render(<MemoryRouter><MaterialsPage /></MemoryRouter>);
     expect(await screen.findByText('失败现场')).toBeInTheDocument();
-    // F6（用户验收测试 2026-09-19）：这个 chip 是**隐私级别**，必须点明轴名，
-    // 否则会被读成收件箱里那条**生成授权**，两处看着互相矛盾。
-    expect(screen.getByText('隐私：私密')).toBeInTheDocument();
-    expect(screen.queryByText('私密')).toBeNull();
+    // 原型 meta：隐私值 · 引用状态
+    expect(screen.getByText(/私密 · 已引用 1 个项目/)).toBeInTheDocument();
     expect(screen.getByText(/一次真实调整/)).toBeInTheDocument();
+    // 原型行尾 chip
+    expect(screen.getByText('引用 1')).toBeInTheDocument();
   });
 
   it('reuses the idempotency key when saving a material fails and is retried', async () => {
     createMaterial.mockRejectedValueOnce(new Error('network'));
     render(<MemoryRouter><MaterialsPage /></MemoryRouter>);
     await screen.findByText('失败现场');
-    fireEvent.click(screen.getByRole('button', { name: '添加素材' }));
+    fireEvent.click(screen.getByRole('button', { name: '丢一条' }));
     fireEvent.change(screen.getByLabelText(/素材标题/), { target: { value: '方法复盘' } });
     fireEvent.change(screen.getByLabelText(/素材内容/), { target: { value: '具体复盘内容' } });
 
@@ -116,7 +116,7 @@ describe('MaterialsPage', () => {
   it('creates a text material and links it to a project', async () => {
     render(<MemoryRouter><MaterialsPage /></MemoryRouter>);
     await screen.findByText('失败现场');
-    fireEvent.click(screen.getByRole('button', { name: '添加素材' }));
+    fireEvent.click(screen.getByRole('button', { name: '丢一条' }));
     fireEvent.change(screen.getByLabelText(/素材标题/), { target: { value: '方法复盘' } });
     fireEvent.change(screen.getByLabelText(/素材内容/), { target: { value: '具体复盘内容' } });
     fireEvent.mouseDown(screen.getByLabelText('关联项目'));
@@ -141,7 +141,7 @@ describe('MaterialsPage', () => {
 
     fireEvent.mouseDown(screen.getByLabelText('复用到项目'));
     fireEvent.click(screen.getByRole('option', { name: '第二个项目' }));
-    fireEvent.click(screen.getByRole('button', { name: '关联' }));
+    fireEvent.click(screen.getByRole('button', { name: '进稿' }));
 
     await waitFor(() => expect(addMaterialUsage).toHaveBeenCalledWith(
       'm1',
@@ -149,7 +149,7 @@ describe('MaterialsPage', () => {
     ));
     // Audit e54a2643 medium: 关联成功后选中值必须清空，
     // 否则刷新后选项掉出列表，MUI select 回显失同步。
-    await waitFor(() => expect(screen.getByRole('button', { name: '关联' })).toBeDisabled());
+    await waitFor(() => expect(screen.getByRole('button', { name: '进稿' })).toBeDisabled());
   });
 
   it('clears the previous error as soon as a new operation starts', async () => {
@@ -164,7 +164,7 @@ describe('MaterialsPage', () => {
     render(<MemoryRouter><MaterialsPage /></MemoryRouter>);
     await screen.findByText('失败现场');
 
-    fireEvent.click(screen.getByRole('button', { name: '添加素材' }));
+    fireEvent.click(screen.getByRole('button', { name: '丢一条' }));
     fireEvent.change(screen.getByLabelText(/素材标题/), { target: { value: '方法复盘' } });
     fireEvent.change(screen.getByLabelText(/素材内容/), { target: { value: '具体复盘内容' } });
     fireEvent.click(screen.getByRole('button', { name: '保存素材' }));
@@ -176,7 +176,7 @@ describe('MaterialsPage', () => {
     }));
     fireEvent.mouseDown(screen.getByLabelText('复用到项目'));
     fireEvent.click(screen.getByRole('option', { name: '第二个项目' }));
-    fireEvent.click(screen.getByRole('button', { name: '关联' }));
+    fireEvent.click(screen.getByRole('button', { name: '进稿' }));
 
     // Audit e54a2643 medium: 新操作开始时就要清掉旧错误，
     // 而不是等旧请求的 load() 收尾。
@@ -196,15 +196,17 @@ describe('MaterialsPage', () => {
     });
     render(<MemoryRouter><MaterialsPage /></MemoryRouter>);
 
-    // Audit e54a2643 medium: 后端缺 size 时 undefined/1024 渲染成 NaN KB。
-    expect(await screen.findByText(/文字 · 1 KB/)).toBeInTheDocument();
+    // Audit e54a2643 medium: 后端缺 size 时不再渲染 NaN KB（原型 meta 不含体积）。
+    expect(await screen.findByText('失败现场')).toBeInTheDocument();
+    expect(screen.getByText(/私密 · 仅本地/)).toBeInTheDocument();
+    expect(screen.queryByText(/NaN/)).toBeNull();
   });
 
   it('rejects an empty file upload instead of posting empty base64', async () => {
     render(<MemoryRouter><MaterialsPage /></MemoryRouter>);
     await screen.findByText('失败现场');
 
-    fireEvent.click(screen.getByRole('button', { name: '添加素材' }));
+    fireEvent.click(screen.getByRole('button', { name: '丢一条' }));
     fireEvent.mouseDown(screen.getByLabelText('素材类型'));
     fireEvent.click(screen.getByRole('option', { name: '图片' }));
     fireEvent.change(screen.getByLabelText(/素材标题/), { target: { value: '空图' } });

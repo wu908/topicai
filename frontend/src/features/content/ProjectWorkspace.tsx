@@ -29,6 +29,8 @@ import ObservationList from './ObservationList';
 import ViewpointPanel from './ViewpointPanel';
 import SeriesPanel, { type SeriesOpportunityDecisionValues } from './SeriesPanel';
 import { readableRef } from '@/utils/labels';
+import WorkspaceAiDock from './WorkspaceAiDock';
+import { respondToAction } from '@/services/api/v2/projects';
 import {
   readProjectDraft,
   removeProjectDraft,
@@ -215,11 +217,10 @@ export default function ProjectWorkspace({
   const baseBodyText = version?.body_text ?? '';
   const hypothesis = workspace.publish_hypothesis;
   const latestObservation = workspace.observations[0];
-  // R5：进度与写作提醒默认收起，避免一屏并列三栏没有主次。
+  // R5：进度默认收起，避免一屏并列三栏没有主次。
   const [showProgress, setShowProgress] = useState(false);
-  // 判断：只默认收起"纯状态"的进度栏（5 步里 4 步还没发生，是纯噪音）。
-  // 「参考与提醒」里装着你复盘沉淀的资产与「提炼候选/发现系列」这类动作，
-  // 默认可见——把可操作的东西藏起来是过度分层。
+  // 「参考与提醒」默认可见：里面装着观点/系列候选与「知道了/忽略」提醒，
+  // 是用户要拍板的动作入口；进度是纯状态，默认收起。
   const [showTips, setShowTips] = useState(true);
 
   const [title, setTitle] = useState(baseTitle);
@@ -492,6 +493,23 @@ export default function ProjectWorkspace({
         </aside>
 
         <main className="workspace-editor" aria-label="内容编辑区">
+          <WorkspaceAiDock
+            workspace={workspace}
+            busy={busy}
+            onChanged={onRefresh}
+            onBodyChange={(text) => {
+              void onSaveVersion(workspace.project.title || '草稿', text);
+            }}
+            onConfirmCandidate={() => {
+              if (workspace.orchestrated_action) {
+                void respondToAction(workspace.orchestrated_action.id, {
+                  decision: 'accept',
+                  expected_action_version: workspace.orchestrated_action.version,
+                  idempotency_key: `cand-${Date.now()}`,
+                }).then(() => onRefresh());
+              }
+            }}
+          />
           {actionPanel ? (
             <section className="workspace-action-card" aria-labelledby="workspace-action-heading">
               <div className="workspace-action-intro">

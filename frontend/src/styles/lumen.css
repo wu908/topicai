@@ -19,14 +19,12 @@
   --disp: 'Space Grotesk', -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
   --spring: cubic-bezier(0.32, 0.72, 0, 1);
   --shadow: 0 22px 60px rgba(70, 95, 130, 0.14);
-  --sidebar-w: 226px;
+  --sidebar-w: 228px;
 }
 
 .lm-body {
   color: var(--body-c);
-  /* 正文基准＝阶梯里的 --fs-body。此前写死 15px，与 --text-base(14px) 并存，
-     于是同屏出现两种正文字号：没 class 的段落 15px、有 class 的 14px。 */
-  font: var(--fs-body) / 1.7 -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
+  font: 15px/1.7 -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 .lm-body ::selection { background: rgba(143, 190, 232, 0.3); }
@@ -52,40 +50,62 @@
     width: var(--sidebar-w);
     display: flex;
     flex-direction: column;
-    padding: 24px 14px 18px;
+    padding: 18px 12px 14px;
     z-index: 30;
   }
 }
 @media (min-width: 721px) {
-.lm-brand { display: flex; align-items: center; gap: 10px; padding: 0 10px 26px; }
-.lm-brand .mark {
-  width: 30px; height: 30px; border-radius: 10px; color: var(--ink);
-  background: linear-gradient(145deg, #ffffff, #dce6f2);
-  display: flex; align-items: center; justify-content: center;
-  font-size: var(--fs-body); font-weight: 800;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.95), 0 4px 12px rgba(70, 95, 130, 0.2);
+/* 原型 .brand：16px/700 ink，mark 深底白字 */
+.lm-brand {
+  display: flex; align-items: center; gap: 10px; padding: 4px 10px 18px;
+  font-family: inherit; font-size: 16px; color: var(--ink);
+  font-weight: 700; letter-spacing: -0.4px;
 }
-.lm-brand span:last-child { font-family: var(--disp); font-size: var(--fs-body); color: var(--ink); font-weight: 700; letter-spacing: 0.2px; }
-.lm-sidebar nav { display: flex; flex-direction: column; gap: 3px; }
+.lm-brand .mark {
+  width: 28px; height: 28px; border-radius: 10px; color: #fff;
+  background: var(--ink);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--disp); font-size: 13px; font-weight: 600;
+  box-shadow: 0 10px 24px rgba(25, 30, 38, 0.18);
+}
+.lm-brand span:last-child {
+  font-family: inherit; font-size: 16px; color: var(--ink);
+  font-weight: 700; letter-spacing: -0.4px;
+}
+.lm-sidebar nav { display: flex; flex-direction: column; gap: 4px; }
 .lm-sidebar nav a, .lm-sidebar nav button.lm-navlink {
-  color: var(--muted); font-size: var(--fs-meta); font-weight: 500; padding: 9px 13px; border-radius: 12px;
+  color: var(--body-c); font-size: 14px; font-weight: 500; padding: 10px 12px; border-radius: 14px;
   display: flex; align-items: center; gap: 11px; cursor: pointer; transition: all 0.2s var(--spring);
   background: none; border: none; font-family: inherit; text-align: left; width: 100%;
 }
 .lm-sidebar nav a .ico, .lm-sidebar nav button.lm-navlink .ico { width: 18px; text-align: center; font-style: normal; font-size: var(--fs-meta); display: grid; place-items: center; }
 .lm-sidebar nav a .ico svg, .lm-sidebar nav button.lm-navlink .ico svg { width: 16px; height: 16px; fill: currentColor; }
-.lm-sidebar nav a:hover, .lm-sidebar nav button.lm-navlink:hover { color: var(--ink); background: rgba(255, 255, 255, 0.55); }
+.lm-sidebar nav a:hover, .lm-sidebar nav button.lm-navlink:hover {
+  color: var(--ink); background: rgba(255, 255, 255, 0.55); transform: translateX(2px);
+}
 .lm-sidebar nav a.on, .lm-sidebar nav a.active, .lm-sidebar nav button.lm-navlink.on {
-  color: var(--ink); font-weight: 600; background: rgba(255, 255, 255, 0.85);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 4px 14px rgba(70, 95, 130, 0.12);
+  color: var(--ink); font-weight: 650; background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 8px 20px rgba(70, 95, 130, 0.08);
 }
 .lm-sidebar nav .bdg { margin-left: auto; font-size: var(--fs-meta); color: var(--ink); background: rgba(143, 190, 232, 0.35); border-radius: 9999px; padding: 1px 8px; font-weight: 700; }
 .lm-nav-group { margin: 12px 13px 4px; font-size: var(--fs-meta); letter-spacing: 0.14em; color: var(--faint); text-transform: uppercase; }
-.lm-sb-foot { margin-top: auto; padding: 0 12px; font-size: var(--fs-meta); color: var(--faint); }
-.lm-sb-foot .ai { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: var(--fs-meta); margin-bottom: 9px; }
-.lm-sb-foot .ai b { width: 7px; height: 7px; border-radius: 50%; background: var(--glow); box-shadow: 0 0 8px var(--glow); }
-.lm-sb-foot .rowline { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-.lm-sb-foot button { background: none; border: none; color: var(--faint); font: inherit; font-size: var(--fs-meta); cursor: pointer; padding: 0; }
+.lm-sb-foot {
+  margin-top: auto; padding: 12px 10px 4px;
+  border-top: 1px solid var(--hairline);
+  font-size: 12px; color: var(--muted); line-height: 1.5;
+}
+.lm-sb-foot .ai { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; margin-bottom: 4px; }
+.lm-sb-foot .ai b {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--glow);
+  box-shadow: 0 0 10px var(--glow-soft); animation: breathe 3.5s ease-in-out infinite;
+}
+.lm-contract { color: var(--muted); font-size: 12px; line-height: 1.5; margin-bottom: 2px; }
+.lm-sb-foot .rowline {
+  display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  font-size: 11px; opacity: 0.85;
+}
+.lm-sb-foot button { background: none; border: none; color: var(--faint); font: inherit; font-size: 11px; cursor: pointer; padding: 0 2px; }
 .lm-sb-foot button:hover { color: var(--ink); }
 }
 

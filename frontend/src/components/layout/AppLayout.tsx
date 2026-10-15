@@ -6,8 +6,8 @@
 import React from 'react';
 import { useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
-import { CompanionDialog } from '@/features/companion';
 import CompanionMotion from '@/features/companion/CompanionMotion';
+import GlobalAIPanel from '@/features/companion/GlobalAIPanel';
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -21,17 +21,17 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
     <div className="app-shell lm-body" style={{ minHeight: '100vh', background: 'transparent' }}>
       <Sidebar />
       <CompanionMotion />
-      <CompanionDialog />
+      <GlobalAIPanel />
       <main
         className="app-main lm-main"
-        style={{ overflowY: 'auto', height: '100vh', background: 'transparent' }}
+        style={{ overflowY: 'auto', height: '100vh', background: 'transparent', padding: '18px 14px 18px 0' }}
       >
         <div
-          className="app-main-content lm-content"
+          className="app-main-content lm-content lumen-panel"
           style={
             isProjectWorkspace
-              ? { maxWidth: 'none', padding: '24px 28px 48px' }
-              : undefined
+              ? { maxWidth: 'none', padding: '20px 24px 48px', minHeight: 'calc(100vh - 36px)' }
+              : { minHeight: 'calc(100vh - 36px)', padding: '20px 24px 40px' }
           }
         >
           {children}

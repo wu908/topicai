@@ -15,10 +15,8 @@ import {
   Typography,
 } from '@mui/material';
 import {
-  Add,
   ArrowForward,
   CheckCircleOutline,
-  FolderOpenOutlined,
   LinkOutlined,
   ScienceOutlined,
 } from '@mui/icons-material';
@@ -43,21 +41,8 @@ import {
   respondToAction,
   openHumanGate,
   decideHumanGate,
-  transitionObservation,
   reviseCandidate,
   restoreCandidateVersion,
-  proposeRuleCandidate,
-  decideRuleCandidate,
-  rollbackCreatorRule,
-  resolveCreatorRuleConflict,
-  proposeViewpointCandidate,
-  decideViewpointCandidate,
-  revokeCreatorViewpoint,
-  proposeSeriesCandidate,
-  decideSeriesCandidate,
-  revokeCreatorSeries,
-  proposeSeriesExtension,
-  decideContentOpportunity,
   createMaterial,
   extractSnapshotMetrics,
   listMaterials,
@@ -68,19 +53,11 @@ import {
 import type {
   CalibrationWorkspace,
   ContentProject,
-  Observation,
-  ObservationStatus,
   ContentIntent,
   HumanGate,
   IntentAction,
   CandidateReview,
   CandidateSegment,
-  CreatorRule,
-  CreatorRuleConflict,
-  CreatorRuleVersion,
-  CreatorViewpoint,
-  CreatorSeries,
-  ContentOpportunity,
   Material,
 } from '@/types/contracts/v2/content';
 import {
@@ -92,9 +69,8 @@ import {
   VersionForm,
 } from '@/features/content/StageForms';
 import ProjectStartPanel from '@/features/content/ProjectStartPanel';
-import ProjectWorkspace from '@/features/content/ProjectWorkspace';
+import ProjectStagePage from '@/features/content/ProjectStagePage';
 import ProjectListRow from '@/features/content/ProjectListRow';
-import ProjectDetailPane from '@/features/content/ProjectDetailPane';
 import { nextActionLabels, searchProjects, viewProjects, type ProjectView } from '@/features/content/projectListModel';
 import './ContentPage.css';
 
@@ -264,20 +240,6 @@ export default function ContentPage() {
     [projectId],
   );
 
-  const handleTransition = (
-    observation: Observation,
-    status: ObservationStatus,
-    reason: string,
-  ) => {
-    void runCommand(() =>
-      transitionObservation(observation.id, {
-        to_status: status,
-        reason,
-        expected_observation_version: observation.version,
-        idempotency_key: stableKey(`observation-${status}-${observation.id}`),
-      }), `observation-${status}-${observation.id}`);
-  };
-
   if (loading) {
     // F5（用户验收测试 2026-09-19）：这里原来整页只剩一个 spinner。
     // DESIGN.md §9 要的是**骨架**，NN/g 也把「该用骨架的地方用 spinner」
@@ -314,18 +276,25 @@ export default function ContentPage() {
 
   if (!projectId) {
     const empty = projects.length === 0;
+    const counts = {
+      all: projects.length,
+      needs_me: projects.filter((p) => viewProjects([p], 'needs_me').length > 0).length,
+      observing: projects.filter((p) => viewProjects([p], 'observing').length > 0).length,
+      done: projects.filter((p) => viewProjects([p], 'done').length > 0).length,
+    };
     return (
       <div className="content-page">
-        <header className="content-page-header">
+        <header className="content-page-header lumen-topbar">
           <div>
             <h1 className="content-page-title">内容</h1>
-            <p className="content-page-subtitle">从一次真实经历开始，完成一篇发布并复盘它。 · {projects.length} 个项目</p>
+            <p className="content-page-subtitle">
+              全部 {counts.all} · 需要我 {counts.needs_me} · 观察中 {counts.observing} · 已沉淀{' '}
+              {counts.done}
+            </p>
           </div>
-          {empty ? null : (
-            <Button startIcon={<Add />} variant="contained" onClick={() => setShowCreate(true)}>
-              新建项目
-            </Button>
-          )}
+          <Button variant="contained" onClick={() => setShowCreate(true)}>
+            快速开始
+          </Button>
         </header>
         {/* 审计修复 2026-08-16 UX-L9：列表视图错误补充重试入口。 */}
         {error ? <Alert severity="error" sx={{ mb: 2 }} action={<Button color="inherit" size="small" onClick={() => void load()}>重试</Button>}>{error}</Alert> : null}
@@ -337,7 +306,7 @@ export default function ContentPage() {
               <p>盘点真实经历、兴趣和技能做一条 14 天实验；或者贴 2–3 个你想做成的账号，让系统替你读它们的选题和写法。</p>
             </div>
             <div className="starter-entry-actions">
-              <Button variant="outlined" endIcon={<ArrowForward />} onClick={() => navigate('/onboarding/assessment')}>开始起步实验</Button>
+              <Button variant="outlined" endIcon={<ArrowForward />} onClick={() => navigate('/path')}>去路径设定方向</Button>
               <Button variant="outlined" endIcon={<ArrowForward />} onClick={() => navigate('/onboarding/reference')}>贴参考，读方向</Button>
             </div>
           </section>
@@ -357,53 +326,53 @@ export default function ContentPage() {
             }}
           />
         ) : (
-          <div className="content-project-split">
-            <div className="content-project-list" data-testid="project-list">
-              <div className="content-project-toolbar">
-                <TextField
-                  size="small"
-                  fullWidth
-                  placeholder="搜标题或形态"
-                  aria-label="搜标题或形态"
-                  value={searchQuery}
-                  onChange={(event) => setSearchQuery(event.target.value)}
-                />
-                <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ mt: 1 }}>
-                  {(['all', 'needs_me', 'observing', 'done'] as const).map((v) => (
-                    <Chip
-                      key={v}
-                      size="small"
-                      label={{ all: '全部', needs_me: '需要我', observing: '观察中', done: '已完成' }[v]}
-                      onClick={() => setView(v)}
-                      color={view === v ? 'primary' : 'default'}
-                      variant={view === v ? 'filled' : 'outlined'}
-                      // 主题 primary 填充色过浅时文字会糊掉——选中态强制深底白字。
-                      sx={view === v ? { bgcolor: '#191E26', color: '#fff', borderColor: '#191E26' } : undefined}
-                      data-testid={`view-${v}`}
-                    />
-                  ))}
-                </Stack>
+          /* 原型：通栏列表，行点击 → 项目屏 */
+          <div className="lumen-band grow" data-testid="project-list">
+            <div className="lumen-band-h">
+              <h2>全部内容</h2>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {(['all', 'needs_me', 'observing', 'done'] as const).map((v) => (
+                  <button
+                    key={v}
+                    type="button"
+                    className={`lumen-chip${view === v ? ' on' : ''}`}
+                    onClick={() => setView(v)}
+                    data-testid={`view-${v}`}
+                  >
+                    {{ all: '全部', needs_me: '需要我', observing: '观察中', done: '已沉淀' }[v]}{' '}
+                    {counts[v]}
+                  </button>
+                ))}
               </div>
-              {visibleProjects.map((project) => (
-                <ProjectListRow
-                  key={project.id}
-                  project={project}
-                  selected={selectedId === project.id}
-                  onSelect={(id) => setSelectedId(id)}
-                />
-              ))}
-              {visibleProjects.length === 0 ? (
-                <Typography color="text.secondary" sx={{ p: 2 }}>
-                  这个视图下还没有项目。
-                </Typography>
-              ) : null}
             </div>
-            <aside className="content-project-aside">
-              <ProjectDetailPane
-                project={projects.find((p) => p.id === selectedId) ?? null}
-                onOpen={(id) => navigate(`/content/${id}`)}
+            <div style={{ padding: '0 8px 8px' }}>
+              <TextField
+                size="small"
+                fullWidth
+                placeholder="搜标题或形态"
+                aria-label="搜标题或形态"
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
               />
-            </aside>
+            </div>
+            {visibleProjects.map((project) => (
+              <ProjectListRow
+                key={project.id}
+                project={project}
+                selected={selectedId === project.id}
+                onSelect={(id) => {
+                  setSelectedId(id);
+                  navigate(`/content/${id}`);
+                }}
+              />
+            ))}
+            {visibleProjects.length === 0 ? (
+              <div className="lumen-fill">这个视图下还没有项目。</div>
+            ) : (
+              <div className="lumen-fill">
+                共 {visibleProjects.length} 条 · 搜索标题或形态
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -435,15 +404,6 @@ export default function ContentPage() {
     <div className="content-page content-workspace-page">
       {/* 审计修复 2026-08-16 UX-L9：工作台视图错误补充重试入口。 */}
       {error ? <Alert severity="error" sx={{ mb: 2 }} action={<Button color="inherit" size="small" onClick={() => void load()}>重试</Button>}>{error}</Alert> : null}
-      <Box display="flex" justifyContent="flex-end" mb={1}>
-        <Button
-          variant="outlined"
-          startIcon={<FolderOpenOutlined />}
-          onClick={() => setMaterialsOpen(true)}
-        >
-          项目素材
-        </Button>
-      </Box>
       <ProjectMaterialsDrawer
         open={materialsOpen}
         busy={busy}
@@ -482,140 +442,11 @@ export default function ContentPage() {
           </span>
         </section>
       ) : null}
-      <ProjectWorkspace
+      <ProjectStagePage
         key={workspace.current_version?.id ?? `project-${workspace.project.id}`}
         workspace={workspace}
-        busy={busy}
-        actionPanel={workspace.orchestrated_action?.status === 'cancelled'
-          ? (
-            <Stack spacing={2}>
-              <Alert severity="info">
-                AI 已停止这条建议。你仍可使用下面的手动步骤；项目变化后，AI 会重新判断。
-              </Alert>
-              <StageAction workspace={workspace} busy={busy} runCommand={runCommand} makeKey={stableKey} />
-            </Stack>
-          )
-          : workspace.orchestrated_action && (
-          ['confirm_intent', 'answer_key_question', 'review_candidate'].includes(workspace.orchestrated_action.action_type)
-          || (workspace.orchestrated_action.action_type === 'confirm_learning' && workspace.next_action === 'create_observation')
-        )
-          ? <IntentActionPanel key={`${workspace.orchestrated_action.id}-${workspace.orchestrated_action.human_gate?.id ?? 'no-gate'}`} workspace={workspace} action={workspace.orchestrated_action} busy={busy} runCommand={runCommand} />
-          : <StageAction workspace={workspace} busy={busy} runCommand={runCommand} makeKey={stableKey} />}
-        onBack={() => navigate('/content')}
-        onRefresh={() => void load()}
-        onSaveVersion={async (title, bodyText) => {
-          let saved = false;
-          await runCommand(async () => {
-            await createContentVersion(workspace.project.id, {
-              title,
-              body_text: bodyText,
-              expected_project_version: workspace.project.version,
-              idempotency_key: stableKey('workspace-version'),
-            });
-            saved = true;
-          }, 'workspace-version');
-          return saved;
-        }}
-        onTransition={handleTransition}
-        onProposeRule={(observation) => void runCommand(() => proposeRuleCandidate(observation.id, {
-          expected_creator_state_version: workspace.creator_state?.version ?? workspace.project.creator_state_version,
-          idempotency_key: stableKey(`rule-candidate-${observation.id}`),
-        }), `rule-candidate-${observation.id}`)}
-        onDecideRule={(version: CreatorRuleVersion, decision) => void runCommand(() => decideRuleCandidate(version.id, {
-          decision,
-          expected_candidate_version: version.version_number,
-          idempotency_key: stableKey(`rule-${decision}-${version.id}`),
-        }), `rule-${decision}-${version.id}`)}
-        onRollbackRule={(rule: CreatorRule, version: CreatorRuleVersion) => void runCommand(() => rollbackCreatorRule(rule.id, {
-          target_version_id: version.id,
-          expected_rule_version: rule.version,
-          idempotency_key: stableKey(`rule-rollback-${rule.id}-${version.id}`),
-        }), `rule-rollback-${rule.id}-${version.id}`)}
-        onResolveConflict={(rule: CreatorRule, conflict: CreatorRuleConflict, resolutionType, scope) =>
-          void runCommand(() => resolveCreatorRuleConflict(rule.id, conflict.rule_id, {
-            resolution_type: resolutionType,
-            scope,
-            expected_rule_version: rule.version,
-            expected_conflict_rule_version: conflict.rule_version,
-            idempotency_key: stableKey(`rule-conflict-${resolutionType}-${rule.id}-${conflict.rule_id}`),
-          }), `rule-conflict-${resolutionType}-${rule.id}-${conflict.rule_id}`)}
-        onProposeViewpoint={(sourceEvidenceIds) => void runCommand(() => proposeViewpointCandidate(
-          workspace.project.id,
-          {
-            source_evidence_ids: sourceEvidenceIds,
-            source_content_version_id: workspace.current_version?.id,
-            expected_project_version: workspace.project.version,
-            idempotency_key: stableKey(`viewpoint-propose-${workspace.project.id}`),
-          },
-        ), `viewpoint-propose-${workspace.project.id}`)}
-        onDecideViewpoint={(viewpoint: CreatorViewpoint, decision, confirmedStatement) => void runCommand(() => decideViewpointCandidate(
-          viewpoint.id,
-          {
-            decision,
-            confirmed_statement: confirmedStatement,
-            reason: decision === 'reject' ? '用户确认这条候选不代表自己的观点' : undefined,
-            expected_viewpoint_version: viewpoint.version,
-            idempotency_key: stableKey(`viewpoint-${decision}-${viewpoint.id}`),
-          },
-        ), `viewpoint-${decision}-${viewpoint.id}`)}
-        onRevokeViewpoint={(viewpoint: CreatorViewpoint) => void runCommand(() => revokeCreatorViewpoint(
-          viewpoint.id,
-          {
-            reason: '用户从内容工作台撤销了这条观点',
-            expected_viewpoint_version: viewpoint.version,
-            idempotency_key: stableKey(`viewpoint-revoke-${viewpoint.id}`),
-          },
-        ), `viewpoint-revoke-${viewpoint.id}`)}
-        projects={projects}
-        onProposeSeries={(sourceProjects) => void runCommand(() => proposeSeriesCandidate({
-          source_project_ids: sourceProjects.map((project) => project.id),
-          expected_project_versions: Object.fromEntries(
-            sourceProjects.map((project) => [project.id, project.version]),
-          ),
-          idempotency_key: stableKey('series-propose'),
-        }), 'series-propose')}
-        onDecideSeries={(series: CreatorSeries, decision, values) => void runCommand(() => decideSeriesCandidate(
-          series.id,
-          {
-            decision,
-            confirmed_name: values?.name,
-            confirmed_promise: values?.promise,
-            confirmed_continuation_prompt: values?.continuationPrompt,
-            reason: decision === 'reject' ? '用户确认这些内容不属于同一系列' : undefined,
-            expected_series_version: series.version,
-            idempotency_key: stableKey(`series-${decision}-${series.id}`),
-          },
-        ), `series-${decision}-${series.id}`)}
-        onRevokeSeries={(series: CreatorSeries) => void runCommand(() => revokeCreatorSeries(
-          series.id,
-          {
-            reason: '用户从内容工作台撤销了这个系列',
-            expected_series_version: series.version,
-            idempotency_key: stableKey(`series-revoke-${series.id}`),
-          },
-        ), `series-revoke-${series.id}`)}
-        onProposeSeriesExtension={(series: CreatorSeries) => void runCommand(() => proposeSeriesExtension(
-          series.id,
-          {
-            expected_series_version: series.version,
-            idempotency_key: stableKey(`series-extension-${series.id}`),
-          },
-        ), `series-extension-${series.id}`)}
-        onDecideOpportunity={(opportunity: ContentOpportunity, decision, values) => void runCommand(() => decideContentOpportunity(
-          opportunity.id,
-          {
-            decision,
-            confirmed_title: values?.title,
-            confirmed_audience_change: values?.audienceChange,
-            confirmed_material_requirements: values?.materialRequirements,
-            confirmed_content_intent: values?.contentIntent,
-            confirmed_content_format: values?.contentFormat,
-            reason: decision === 'reject' ? '用户确认这篇延展内容现在不合适' : undefined,
-            expected_opportunity_version: opportunity.version,
-            idempotency_key: stableKey(`opportunity-${decision}-${opportunity.id}`),
-          },
-        ), `opportunity-${decision}-${opportunity.id}`)}
-        onOpenOpportunityProject={(nextProjectId) => navigate(`/content/${nextProjectId}`)}
+        materials={materials}
+        onChanged={() => void load()}
       />
     </div>
   );
@@ -711,7 +542,7 @@ function projectIntentLabel(project: ContentProject): string {
   return copy ? copy.label : '未分类内容';
 }
 
-function IntentActionPanel({
+export function _IntentActionPanel({
   workspace,
   action,
   busy,
@@ -1254,7 +1085,7 @@ function decisionLabel(decision: 'accepted' | 'rejected' | 'replaced' | undefine
   return '待确认';
 }
 
-function StageAction({
+export function _StageAction({
   workspace,
   busy,
   runCommand,

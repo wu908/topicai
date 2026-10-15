@@ -69,6 +69,35 @@ describe('nextActionLabels（G4 同源）', () => {
     expect(nextActionLabel(p)).toBe(nextActionLabels.lock_hypothesis);
   });
 
+  it('prefers orchestrated_action.title over stage mapping (F12: matches workspace 现在先做)', () => {
+    const p = project({
+      next_action: 'lock_hypothesis',
+      orchestrated_action: {
+        id: 'a1',
+        project_id: 'p1',
+        action_type: 'review_candidate',
+        content_intent: 'solve',
+        title: '确认候选内容是否准确表达了你',
+        reason: '',
+        evidence_refs: [],
+        unknown_refs: [],
+        expected_state_change: {},
+        estimated_effort_minutes: 2,
+        automation_level: 'guided',
+        human_gate_type: null,
+        human_gate: null,
+        fallback_action: { action_type: 'none' },
+        status: 'proposed',
+        version: 1,
+        expires_at: null,
+        last_event: null,
+      },
+    });
+    // 列表/详情栏必须与 ProjectWorkspace.nextStepGuide 的 title 同源。
+    expect(nextActionLabel(p)).toBe('确认候选内容是否准确表达了你');
+    expect(nextActionLabel(p)).not.toBe(nextActionLabels.lock_hypothesis);
+  });
+
   it('falls back to orchestrated_action.title, then create_version', () => {
     expect(
       nextActionLabel(

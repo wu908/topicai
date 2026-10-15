@@ -1,8 +1,17 @@
-/** 列表行：阶段 + 标题 + 意图 + 进度 + 时间 + 下一步（G4 与工作台同源）。 */
-import { Box, Chip, Typography } from '@mui/material';
+/**
+ * 列表行（content-line-prototype.html · 内容行）：
+ * tag(阶段 n/5) + 标题 + meta(下一步 · 时间) + 右 chip。
+ * 「下一步」与工作台同源（G4）：唯一来源 projectListModel.nextActionLabel。
+ */
 import type { ContentProject } from '@/types/contracts/v2/content';
-import { intentLabel, nextActionLabel, progressOf, stageOf, stageLabels } from './projectListModel';
-import StageMeter from './StageMeter';
+import {
+  intentLabel,
+  needsMe as projectNeedsMe,
+  nextActionLabel,
+  progressOf,
+  stageOf,
+  stageLabels,
+} from './projectListModel';
 
 function formatTime(iso: string): string {
   const date = new Date(iso);
@@ -17,6 +26,19 @@ function formatTime(iso: string): string {
   return date.toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' });
 }
 
+function rowTag(project: ContentProject): string {
+  const stage = stageOf(project);
+  const label = stageLabels[stage - 1];
+  return `${label} ${progressOf(project)}`;
+}
+
+function rowChip(project: ContentProject): { label: string; on: boolean } {
+  if (projectNeedsMe(project)) return { label: '需要我', on: true };
+  if (project.status === 'settled') return { label: '已沉淀', on: false };
+  if (project.status === 'published') return { label: '已发', on: false };
+  return { label: intentLabel(project), on: false };
+}
+
 export default function ProjectListRow({
   project,
   selected,
@@ -26,41 +48,26 @@ export default function ProjectListRow({
   selected: boolean;
   onSelect: (id: string) => void;
 }) {
-  const stage = stageOf(project);
-  const needsMe = project.status !== 'settled' && project.next_action !== 'await_observation_window';
+  const chip = rowChip(project);
   return (
-    <button
-      type="button"
-      className={`project-row${selected ? ' is-selected' : ''}`}
+    <div
+      className={`lumen-row${selected ? ' is-selected' : ''}`}
       data-testid="project-row"
       data-project-id={project.id}
       aria-current={selected ? 'true' : undefined}
+      style={{ cursor: 'pointer' }}
       onClick={() => onSelect(project.id)}
     >
-      <Box className="project-row-top">
-        <Chip
-          size="small"
-          className="project-row-stage"
-          label={`${stageLabels[stage - 1]} · ${progressOf(project)}`}
-          aria-label={`阶段 ${stageLabels[stage - 1]}，进度 ${progressOf(project)}`}
-        />
-        <Typography className="project-row-time">{formatTime(project.updated_at)}</Typography>
-      </Box>
-      <Typography component="h3" className="project-row-title">
-        {project.title}
-      </Typography>
-      <Box className="project-row-meta">
-        <Typography component="span">{intentLabel(project)}</Typography>
-        <Typography component="span" className="project-row-next" data-testid="project-next-action">
-          {nextActionLabel(project)}
-        </Typography>
-      </Box>
-      {needsMe ? (
-        <Typography component="span" className="project-row-flag">
-          ⌾ 需要我
-        </Typography>
-      ) : null}
-      <StageMeter project={project} />
-    </button>
+      <div className="lumen-tag">{rowTag(project)}</div>
+      <div className="body">
+        <div className="title">{project.title}</div>
+        <div className="meta">
+          <span data-testid="project-next-action">{nextActionLabel(project)}</span>
+          {' · '}
+          {formatTime(project.updated_at)}
+        </div>
+      </div>
+      <span className={`lumen-chip${chip.on ? ' on' : ''}`}>{chip.label}</span>
+    </div>
   );
 }

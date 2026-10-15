@@ -12,18 +12,19 @@ import theme from '@/styles/theme';
 const LoginPage = React.lazy(() => import('@/pages/Login/LoginPage'));
 const HomePage = React.lazy(() => import('@/pages/Home/HomePage'));
 const ContentPage = React.lazy(() => import('@/pages/Content/ContentPage'));
+const PathPage = React.lazy(() => import('@/pages/Path/PathPage'));
+const SettingsPage = React.lazy(() => import('@/pages/Settings/SettingsPage'));
 const OpportunitiesPage = React.lazy(() => import('@/pages/Opportunities/OpportunitiesPage'));
 const MaterialsPage = React.lazy(() => import('@/pages/Materials/MaterialsPage'));
-const AsyncLoopPage = React.lazy(() => import('@/pages/AsyncLoop/AsyncLoopPage'));
-const InboxPage = React.lazy(() => import('@/pages/Inbox/InboxPage'));
 const ReviewPage = React.lazy(() => import('@/pages/Review/ReviewPage'));
-const UrgentPage = React.lazy(() => import('@/pages/Urgent/UrgentPage'));
 const GrowthPage = React.lazy(() => import('@/pages/Growth/GrowthPage'));
 const MePage = React.lazy(() => import('@/pages/Me/MePage'));
-const StarterPage = React.lazy(() => import('@/pages/Starter/StarterPage'));
 const GrowthOnboardingPage = React.lazy(() => import('@/pages/GrowthOnboarding/GrowthOnboardingPage'));
 const ReferenceAnchorPage = React.lazy(() => import('@/pages/Onboarding/ReferenceAnchorPage'));
 const NotFoundPage = React.lazy(() => import('@/pages/NotFound/NotFoundPage'));
+
+/** P0 导航收敛：旧一级入口重定向到新六入口对应处，功能不丢。 */
+const Redirect = ({ to }: { to: string }) => <Navigate to={to} replace />;
 
 const LazyRoute = ({ children }: { children: React.ReactNode }) => (
   <Suspense fallback={<LoadingFallback />}>{children}</Suspense>
@@ -70,17 +71,25 @@ export default function App() {
             <Route path="/" element={protectedPage(<HomePage />)} />
             <Route path="/content" element={protectedPage(<ContentPage />)} />
             <Route path="/content/:projectId" element={protectedPage(<ContentPage />)} />
-            <Route path="/opportunities" element={protectedPage(<OpportunitiesPage />)} />
+            <Route path="/review" element={protectedPage(<ReviewPage />)} />
+            <Route path="/path" element={protectedPage(<PathPage />)} />
+            <Route path="/settings" element={protectedPage(<SettingsPage />)} />
+            <Route path="/settings/:section" element={protectedPage(<SettingsPage />)} />
             <Route path="/materials" element={protectedPage(<MaterialsPage />)} />
-            <Route path="/loop" element={protectedPage(<AsyncLoopPage />)} />
-            <Route path="/loop/inbox" element={protectedPage(<InboxPage />)} />
-            <Route path="/loop/review" element={protectedPage(<ReviewPage />)} />
-            <Route path="/urgent" element={protectedPage(<UrgentPage />)} />
-            <Route path="/growth" element={protectedPage(<GrowthPage />)} />
             <Route path="/me" element={protectedPage(<MePage />)} />
-            <Route path="/onboarding/assessment" element={protectedPage(<StarterPage />)} />
-            <Route path="/onboarding/directions" element={protectedPage(<StarterPage />)} />
-            <Route path="/onboarding/sprint" element={protectedPage(<StarterPage />)} />
+            {/* 旧入口收容（方案 §4.3）：功能已迁，路由重定向，不再挂独立页。
+                急稿 → 今日快速开始；产出架 → 内容；收件箱 → 素材；
+                starter 三步/历史校准 → 路径设定；对标锚保留（路径深链）。 */}
+            <Route path="/loop" element={protectedPage(<Redirect to="/content" />)} />
+            <Route path="/loop/inbox" element={protectedPage(<Redirect to="/materials" />)} />
+            <Route path="/loop/review" element={protectedPage(<Redirect to="/review" />)} />
+            <Route path="/urgent" element={protectedPage(<Redirect to="/" />)} />
+            <Route path="/opportunities" element={protectedPage(<OpportunitiesPage />)} />
+            <Route path="/growth" element={protectedPage(<GrowthPage />)} />
+            <Route path="/onboarding/assessment" element={protectedPage(<Redirect to="/path" />)} />
+            <Route path="/onboarding/directions" element={protectedPage(<Redirect to="/path" />)} />
+            <Route path="/onboarding/sprint" element={protectedPage(<Redirect to="/path" />)} />
+            {/* 历史校准：方案「保留·改」，作为路径的锚点入口 */}
             <Route path="/onboarding/growth" element={protectedPage(<GrowthOnboardingPage />)} />
             <Route path="/onboarding/reference" element={protectedPage(<ReferenceAnchorPage />)} />
             {/* 404 stays outside the auth guard: unknown paths should show
