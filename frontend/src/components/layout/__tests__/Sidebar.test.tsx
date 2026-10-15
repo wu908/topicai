@@ -2,7 +2,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockAuthState } = vi.hoisted(() => ({
+const { mockAuthState, mockGetUserSettings } = vi.hoisted(() => ({
   mockAuthState: {
     user: { id: 1, username: 'tester', email: 'tester@example.com' },
     isAuthenticated: true,
@@ -15,11 +15,16 @@ const { mockAuthState } = vi.hoisted(() => ({
     fetchCurrentUser: vi.fn(),
     clearError: vi.fn(),
   },
+  mockGetUserSettings: vi.fn(),
 }));
 
 vi.mock('@/store/authStore', () => ({
   useAuthStore: (selector: (state: typeof mockAuthState) => unknown) =>
     selector(mockAuthState),
+}));
+
+vi.mock('@/services/api/v2/projects', () => ({
+  getUserSettings: () => mockGetUserSettings(),
 }));
 
 import Sidebar from '../Sidebar';
@@ -32,9 +37,13 @@ const PathDisplay = () => {
 describe('Sidebar', () => {
   beforeEach(() => {
     mockAuthState.logout.mockClear();
+    mockGetUserSettings.mockReset();
+    mockGetUserSettings.mockResolvedValue({
+      ai: { enabled: true, configured: true, model_identifier: 'test-model', capabilities: ['text'] },
+    });
   });
 
-  it('renders the create and manage navigation groups', () => {
+  it('renders the eight primary navigation entries (prototype)', () => {
     render(
       <MemoryRouter>
         <Sidebar />
@@ -42,12 +51,19 @@ describe('Sidebar', () => {
     );
     expect(screen.getByText('TopicAI')).toBeInTheDocument();
     // 桌面组 + 移动组常驻 DOM（CSS 控制显隐），高频标签会出现两次。
-    for (const label of ['晨报', '产出架', '收件箱', '急稿', '周复盘', '内容', '机会', '素材', '我的']) {
+    for (const label of ['今日', '内容', '周复盘', '成长', '路径', '素材', '我的', '设置']) {
       expect(screen.getAllByText(label).length).toBeGreaterThanOrEqual(1);
     }
-    expect(screen.getByText('管理')).toBeInTheDocument();
-    // 移动端底栏：4 个高频入口 + 更多按钮（D9 修复）。
     expect(screen.getByRole('button', { name: '更多导航' })).toBeInTheDocument();
+  });
+
+  it('shows the human–AI contract line under AI status', async () => {
+    render(
+      <MemoryRouter>
+        <Sidebar />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByText('你只负责输入和拍板；其余交给 AI 跑腿')).toBeInTheDocument();
   });
 
   it('opens the mobile more sheet with the remaining links and logout', () => {
@@ -59,13 +75,21 @@ describe('Sidebar', () => {
     fireEvent.click(screen.getByRole('button', { name: '更多导航' }));
     const sheet = screen.getByLabelText('更多导航面板');
     expect(sheet).toBeInTheDocument();
-    for (const label of ['急稿', '周复盘', '成长', '内容', '机会', '素材']) {
+    for (const label of ['成长', '路径', '素材']) {
       expect(within(sheet).getAllByText(label).length).toBeGreaterThanOrEqual(1);
     }
-    // 此前移动端没有任何退出途径（UX 审计 D9）。
     expect(within(sheet).getByRole('button', { name: '退出登录' })).toBeInTheDocument();
     fireEvent.click(within(sheet).getByRole('button', { name: '退出登录' }));
     expect(mockAuthState.logout).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows honest AI status from settings instead of a hard-coded claim', async () => {
+    render(
+      <MemoryRouter>
+        <Sidebar />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByText(/AI 已连接 · test-model/)).toBeInTheDocument();
   });
 
   it('opens the creator state from the user card', () => {
@@ -102,12 +126,9 @@ describe('Sidebar', () => {
       </MemoryRouter>,
     );
     fireEvent.click(screen.getByRole('button', { name: '退出登录' }));
-    // Audit e54a2643 medium: a throwing logout must not strand the user.
     expect(screen.getByTestId('current-path')).toHaveTextContent('/login');
   });
 
-  // 审计 e54a2643 medium：激活态应由 NavLink 自身的匹配结果驱动，
-  // 手写 isActive 与 NavLink 的 end 语义可能分叉。嵌套路由同样命中父节点。
   it('marks the matching section active on nested routes', () => {
     render(
       <MemoryRouter initialEntries={['/content/p1']}>
@@ -115,8 +136,7 @@ describe('Sidebar', () => {
       </MemoryRouter>,
     );
     expect(screen.getAllByRole('link', { name: '内容' })[0]).toHaveClass('active');
-    // 晨报在桌面组与移动组各渲染一次，两组都必须保持非激活。
-    for (const link of screen.getAllByRole('link', { name: '晨报' })) {
+    for (const link of screen.getAllByRole('link', { name: '今日' })) {
       expect(link).not.toHaveClass('active');
     }
   });

@@ -118,3 +118,27 @@ browser-screenshots/
 
 # 走查用的临时驱动脚本（本地工具，不进仓库）
 frontend/scripts/loop-*.mjs
+
+# Dev tooling / one-off artifacts (not product code)
+.archify/
+.playwright-cli/
+.rules/
+frontend/output/
+designs/
+content-page.css
+content-page.js
+index.html
+scripts/patch_*.py
+scripts/swap_*.py
+scripts/wire_*.py
+scripts/densify_proto.py
+scripts/fix_*.py
+scripts/clean_*.py
+scripts/style_*.py
+scripts/add_avatar_upload.py
+scripts/purge_test_users.py
+scripts/*omni*
+scripts/verify-deploy*.sh
+frontend/scripts/visual-*.mjs
+frontend/scripts/web-*.mjs
+frontend/scripts/fix-e2e-selectors.py

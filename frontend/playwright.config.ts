@@ -69,6 +69,10 @@ export default defineConfig({
       url: 'http://127.0.0.1:5173',
       reuseExistingServer: true,
       timeout: 60_000,
+      env: {
+        ...process.env,
+        VITE_API_TARGET: 'http://127.0.0.1:8765',
+      },
     },
   ],
 });

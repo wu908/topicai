@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Alert, Button, Chip, CircularProgress, FormControlLabel, Stack, Switch, TextField } from '@mui/material';
 import { DeleteOutline, Download, SaveOutlined } from '@mui/icons-material';
-import PageContainer from '@/components/layout/PageContainer';
 import {
   decideHumanGate,
   deleteAccount,
@@ -74,7 +73,6 @@ export default function MePage() {
   const [pwNotice, setPwNotice] = useState<{ ok: boolean; text: string } | null>(null);
   // 审计修复 2026-08-16 UX-L8：信任条件长段落默认折叠。
   const [showTrustDetail, setShowTrustDetail] = useState(false);
-  const aiAvailable = Boolean(settings?.ai.enabled && settings.ai.configured);
   // Number.isInteger 在 lib 里不是类型守卫，用局部守卫收窄 number | null。
   const isWholeGoal = (value: number | null): value is number =>
     value !== null && Number.isInteger(value);
@@ -200,125 +198,229 @@ export default function MePage() {
   });
 
   return (
-    <PageContainer title="我的" subtitle="查看 AI 当前了解了什么、信任边界在哪里，以及你的持续创作进度。">
-      {loading ? <div className="operations-loading"><CircularProgress size={26} /></div> : state && settings ? (
+    <div>
+      <div className="lumen-topbar">
+        <div>
+          <h1>我的</h1>
+          <p className="sub" style={{ margin: 0 }}>
+            账号 · AI · 数据
+          </p>
+        </div>
+        <button type="button" className="lumen-btn" onClick={() => navigate('/settings')}>
+          打开设置
+        </button>
+      </div>
+      {loading ? (
+        <div className="operations-loading"><CircularProgress size={26} /></div>
+      ) : state && settings ? (
         <>
           {error ? <Alert severity="error" action={<Button onClick={() => void load()}>重试</Button>}>{error}</Alert> : null}
           {notice ? <Alert severity="success">{notice}</Alert> : null}
-          <div className="operations-summary">
-            <div className="operations-stat"><strong>{projectCount}</strong><span>全部内容项目</span></div>
-            <div className="operations-stat"><strong>{state.completed_project_count}</strong><span>已完成发布闭环</span></div>
-            <div className="operations-stat"><strong>{Math.round((state.candidate_acceptance_rate ?? 0) * 100)}%</strong><span>AI 候选确认率</span></div>
+
+          {/* 原型「账户」band —— 首屏主体 */}
+          <div className="lumen-band grow">
+            <div className="lumen-band-h">
+              <h2>账户</h2>
+            </div>
+            <div className="lumen-row" style={{ cursor: 'default' }}>
+              <div className="body">
+                <div className="title">AI 能力状态</div>
+                <div className="meta">
+                  {settings.ai.configured
+                    ? `已连接 · ${settings.ai.model_identifier || '本地编排'} · 文本${
+                        settings.ai.capabilities.includes('text') ? '可用' : '不可用'
+                      }`
+                    : settings.ai.enabled
+                      ? '已启用 · 服务未配置完整'
+                      : '当前未启用'}
+                </div>
+              </div>
+              <span className={`lumen-chip${settings.ai.configured ? ' on' : ''}`}>
+                {settings.ai.configured ? '可用' : '不可用'}
+              </span>
+            </div>
+            <div className="lumen-row" style={{ cursor: 'default' }}>
+              <div className="body">
+                <div className="title">人机契约</div>
+                <div className="meta">
+                  你只负责输入和拍板；其余交给 AI 跑腿；记忆 / 公式写入默认提案
+                </div>
+              </div>
+            </div>
+            <div className="lumen-row" style={{ cursor: 'pointer' }} onClick={() => navigate('/settings')}>
+              <div className="body">
+                <div className="title">全部设置</div>
+                <div className="meta">产品 · 全局 AI · 项目助手 · 记忆 · 隐私</div>
+              </div>
+              <button
+                type="button"
+                className="lumen-btn sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate('/settings');
+                }}
+              >
+                打开设置
+              </button>
+            </div>
+            <div className="lumen-row" style={{ cursor: 'default' }}>
+              <div className="body">
+                <div className="title">导出与删除</div>
+                <div className="meta">数据可导出；账号删除走人工确认</div>
+              </div>
+              <button
+                type="button"
+                className="lumen-btn sm ghost"
+                disabled={busy || Boolean(exportGate)}
+                onClick={() => void prepareExport()}
+              >
+                导出
+              </button>
+            </div>
+            <div className="lumen-fill">AI 只出建议；发布、公开范围、长期经验、删除由你决定</div>
           </div>
-          <section className="operations-row">
-            <div className="operations-row-header"><div><h2>当前创作目标</h2><p className="operations-row-copy">{humanizeGoal(state.current_goal) || '稳定更新并通过复盘持续涨粉'}</p></div><Chip size="small" label={trustLabels[state.automation_trust_level]} /></div>
-            <p className="operations-helper">AI 默认只负责准备下一步。发布、公开范围、事实确认和长期经验写入始终由你决定。</p>
-          </section>
-          <section className="operations-row">
-            <div className="operations-row-header"><div><h2>创作设置</h2><p className="operations-row-copy">这些设置会用于安排后续内容项目，不包含平台密码或访问令牌。</p></div></div>
-            <Stack spacing={2}>
-              <TextField label="每周发布目标" type="number" value={weeklyGoal ?? ''} inputProps={{ min: 1, max: 7 }} onChange={(event) => setWeeklyGoal(event.target.value === '' ? null : Number(event.target.value))} required />
-              <TextField label="内容策略" value={contentStrategy} onChange={(event) => setContentStrategy(event.target.value)} multiline minRows={2} required helperText="用一句话描述你这段时间的创作重点，例如：每周分享一条真实踩坑经验" />
-              <TextField label="小红书账号备注" value={accountReference} onChange={(event) => setAccountReference(event.target.value)} helperText="仅用于区分账号，不要填写密码或令牌" />
-              {/* 夜间自动消化：默认关，用户主动开启后才在每晚整理素材。 */}
-              <FormControlLabel
-                control={<Switch checked={autoDigest} onChange={(event) => setAutoDigest(event.target.checked)} />}
-                label="每晚自动整理收件箱（03:00）"
-              />
+
+          {/* 管理区默认折叠，避免抢首屏（原型「我的」只有账户 band） */}
+          <details className="lumen-more">
+            <summary>更多管理（创作设置 · 密码 · 信任 · 删除）</summary>
+
+          <div className="lumen-band">
+            <div className="lumen-band-h">
+              <h2>创作进度</h2>
+            </div>
+            <div className="lumen-row" style={{ cursor: 'default' }}>
+              <div className="body">
+                <div className="title">
+                  {projectCount} 个项目 · {state.completed_project_count} 次闭环
+                </div>
+                <div className="meta">当前创作目标：{humanizeGoal(state.current_goal) || '稳定更新并通过复盘持续涨粉'}</div>
+                <div className="meta">AI 候选确认率 {Math.round((state.candidate_acceptance_rate ?? 0) * 100)}%</div>
+              </div>
+              <span className="lumen-chip">{trustLabels[state.automation_trust_level]}</span>
+            </div>
+            <div style={{ padding: '0 16px 12px' }}>
               <p className="operations-helper">
-                开启后每晚最多整理 {2} 条可发布素材；私密素材永不参与。关闭时请在收件箱手动点「消化生产」。
+                AI 默认只负责准备下一步。发布、公开范围、事实确认和长期经验写入始终由你决定。
               </p>
-              <div className="operations-row-actions">
-                <Button variant="contained" startIcon={<SaveOutlined />} disabled={busy || !goalValid || !contentStrategy.trim()} onClick={() => void saveSettings()}>保存设置</Button>
-              </div>
-            </Stack>
-          </section>
-          <section className="operations-row">
-            <div className="operations-row-header"><div><h2>账户</h2><p className="operations-row-copy">修改登录密码。当前密码用于确认是你本人操作。</p></div></div>
-            <Stack spacing={2}>
-              <TextField label="当前密码" type="password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} />
-              <TextField
-                label="新密码（至少 8 位）"
-                type="password"
-                value={newPassword}
-                onChange={(event) => setNewPassword(event.target.value)}
-                helperText={newPassword && newPassword === currentPassword ? '新密码不能与当前密码相同' : undefined}
-              />
-              <TextField
-                label="再输入一次新密码"
-                type="password"
-                value={confirmNewPassword}
-                onChange={(event) => setConfirmNewPassword(event.target.value)}
-                error={Boolean(confirmNewPassword) && confirmNewPassword !== newPassword}
-                helperText={confirmNewPassword && confirmNewPassword !== newPassword ? '两次输入的新密码不一致' : undefined}
-              />
-              {pwNotice ? <Alert severity={pwNotice.ok ? 'success' : 'error'}>{pwNotice.text}</Alert> : null}
-              <div className="operations-row-actions">
-                <Button
-                  variant="contained"
-                  disabled={pwBusy || !currentPassword || newPassword.length < 8 || newPassword === currentPassword || confirmNewPassword !== newPassword}
-                  onClick={() => void submitPasswordChange()}
-                >
-                  更新密码
-                </Button>
-              </div>
-            </Stack>
-          </section>
-          <section className="operations-row">
-            <div className="operations-row-header">
-              <div><h2>AI 能力状态</h2><p className="operations-row-copy">{settings.ai.configured ? `已连接${settings.ai.model_identifier ? ` · ${settings.ai.model_identifier}` : ''}` : settings.ai.enabled ? '已启用，但服务尚未配置完整' : '当前未启用'}</p></div>
-              <Chip size="small" color={settings.ai.configured ? 'success' : 'default'} label={settings.ai.configured ? '可用' : '不可用'} />
             </div>
-            {/* 审计修复 2026-08-16 UX-M3：降级时补充具体缺失项和影响范围。 */}
-            {!settings.ai.configured ? (
-              <p className="operations-helper">需要管理员先完成 AI 服务配置（服务地址、密钥和模型名称）。在此之前，问题生成、候选内容准备等 AI 能力暂不可用，但你仍可手动创建和推进内容项目。</p>
-            ) : null}
-            <p className="operations-meta">文本能力：{aiAvailable && settings.ai.capabilities.includes('text') ? '可用' : '不可用'} · 截图识别：{aiAvailable && settings.ai.vision_enabled ? '可用' : '不可用'}</p>
-          </section>
-          <section className="operations-row">
-            <div className="operations-row-header"><div><h2>自动化信任条件</h2><p className="operations-row-copy">每项能力累计 {REQUIRED_ACCEPTED} 次被采纳的结果后，可开启项目级自动准备。</p></div><Chip size="small" color={state.autopilot_eligible ? 'success' : 'default'} label={state.autopilot_eligible ? '条件已满足' : '继续积累中'} /></div>
-            <div className="operations-row-actions">
-              <Button size="small" onClick={() => setShowTrustDetail((value) => !value)}>{showTrustDetail ? '收起条件说明' : '查看条件说明'}</Button>
-            </div>
-            {showTrustDetail ? (
-              <p className="operations-helper">采纳次数按能力分别累计，不使用全局信任分。发布、公开范围等受保护的决定始终需要你确认，不计入这里；处理完事实或隐私纠正后才可开启自动准备。</p>
-            ) : null}
-            <ul className="operations-capability-list">
-              {AUTO_PREPARE_CAPABILITIES.map(({ key, label }) => {
-                const accepted = state.capability_trust?.[key] ?? 0;
-                const met = accepted >= REQUIRED_ACCEPTED;
-                return (
-                  <li key={key} className="operations-capability-item">
-                    <span>{label}</span>
-                    <Chip size="small" color={met ? 'success' : 'default'} variant={met ? 'filled' : 'outlined'} label={`${Math.min(accepted, REQUIRED_ACCEPTED)}/${REQUIRED_ACCEPTED} 次已采纳`} />
-                  </li>
-                );
-              })}
-            </ul>
-            <p className="operations-meta">未处理纠正 {state.unresolved_correction_count} 条 · 当前可投入 {state.available_minutes ?? '未设置'} 分钟</p>
-          </section>
-          <section className="operations-row">
-            <div className="operations-row-header"><div><h2>个人数据</h2><p className="operations-row-copy">导出当前账户数据，或永久删除账户及其存储文件。</p></div></div>
-            {exportGate ? <Alert severity="info" action={<Button disabled={busy} onClick={() => void confirmExport()}>确认并下载</Button>}>请确认导出仅属于当前账户的数据。</Alert> : null}
-            {deletionGate ? (
-              <Stack spacing={2} mt={2}>
-                <Alert severity="error">{`此操作不可撤销。输入“${DELETION_CONFIRMATION_TEXT}”后，账户、项目、素材文件和学习记录都会被删除。`}</Alert>
-                <TextField label="删除确认" value={deletionConfirmation} onChange={(event) => setDeletionConfirmation(event.target.value)} helperText={`请输入：${DELETION_CONFIRMATION_TEXT}`} />
-                <Button color="error" variant="contained" startIcon={<DeleteOutline />} disabled={busy || deletionConfirmation !== DELETION_CONFIRMATION_TEXT} onClick={() => void confirmDeletion()}>永久删除账户</Button>
+          </div>
+
+          <section className="lumen-band">
+            <div className="lumen-band-h"><h2>创作设置</h2></div>
+            <div style={{ padding: '4px 16px 16px' }}>
+              <Stack spacing={2}>
+                <TextField label="每周发布目标" type="number" value={weeklyGoal ?? ''} inputProps={{ min: 1, max: 7 }} onChange={(event) => setWeeklyGoal(event.target.value === '' ? null : Number(event.target.value))} required />
+                <TextField label="内容策略" value={contentStrategy} onChange={(event) => setContentStrategy(event.target.value)} multiline minRows={2} required helperText="用一句话描述你这段时间的创作重点，例如：每周分享一条真实踩坑经验" />
+                <TextField label="小红书账号备注" value={accountReference} onChange={(event) => setAccountReference(event.target.value)} helperText="仅用于区分账号，不要填写密码或令牌" />
+                <FormControlLabel
+                  control={<Switch checked={autoDigest} onChange={(event) => setAutoDigest(event.target.checked)} />}
+                  label="每晚自动整理收件箱（03:00）"
+                />
+                <p className="operations-helper">
+                  开启后每晚最多整理 {2} 条可发布素材；私密素材永不参与。关闭时请在收件箱手动点「消化生产」。
+                </p>
+                <div className="operations-row-actions">
+                  <Button variant="contained" startIcon={<SaveOutlined />} disabled={busy || !goalValid || !contentStrategy.trim()} onClick={() => void saveSettings()}>保存设置</Button>
+                </div>
               </Stack>
-            ) : null}
-            {!deletionGate ? <div className="operations-row-actions">
-              <Button startIcon={<Download />} disabled={busy || Boolean(exportGate)} onClick={() => void prepareExport()}>导出个人数据</Button>
-              <Button color="error" startIcon={<DeleteOutline />} disabled={busy} onClick={() => void prepareDeletion()}>删除账户</Button>
-            </div> : null}
+            </div>
           </section>
+
+          <section className="lumen-band">
+            <div className="lumen-band-h"><h2>账户安全</h2></div>
+            <div style={{ padding: '4px 16px 16px' }}>
+              <Stack spacing={2}>
+                <TextField label="当前密码" type="password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} />
+                <TextField
+                  label="新密码（至少 8 位）"
+                  type="password"
+                  value={newPassword}
+                  onChange={(event) => setNewPassword(event.target.value)}
+                  helperText={newPassword && newPassword === currentPassword ? '新密码不能与当前密码相同' : undefined}
+                />
+                <TextField
+                  label="再输入一次新密码"
+                  type="password"
+                  value={confirmNewPassword}
+                  onChange={(event) => setConfirmNewPassword(event.target.value)}
+                  error={Boolean(confirmNewPassword) && confirmNewPassword !== newPassword}
+                  helperText={confirmNewPassword && confirmNewPassword !== newPassword ? '两次输入的新密码不一致' : undefined}
+                />
+                {pwNotice ? <Alert severity={pwNotice.ok ? 'success' : 'error'}>{pwNotice.text}</Alert> : null}
+                <div className="operations-row-actions">
+                  <Button
+                    variant="contained"
+                    disabled={pwBusy || !currentPassword || newPassword.length < 8 || newPassword === currentPassword || confirmNewPassword !== newPassword}
+                    onClick={() => void submitPasswordChange()}
+                  >
+                    更新密码
+                  </Button>
+                </div>
+              </Stack>
+            </div>
+          </section>
+
+          <section className="lumen-band">
+            <div className="lumen-band-h">
+              <h2>自动化信任条件</h2>
+              <span className={`lumen-chip${state.autopilot_eligible ? ' on' : ''}`}>
+                {state.autopilot_eligible ? '条件已满足' : '继续积累中'}
+              </span>
+            </div>
+            <div style={{ padding: '4px 16px 16px' }}>
+              <p className="operations-helper">每项能力累计 {REQUIRED_ACCEPTED} 次被采纳的结果后，可开启项目级自动准备。</p>
+              <div className="operations-row-actions">
+                <Button size="small" onClick={() => setShowTrustDetail((value) => !value)}>{showTrustDetail ? '收起条件说明' : '查看条件说明'}</Button>
+              </div>
+              {showTrustDetail ? (
+                <p className="operations-helper">采纳次数按能力分别累计，不使用全局信任分。发布、公开范围等受保护的决定始终需要你确认，不计入这里；处理完事实或隐私纠正后才可开启自动准备。</p>
+              ) : null}
+              <ul className="operations-capability-list">
+                {AUTO_PREPARE_CAPABILITIES.map(({ key, label }) => {
+                  const accepted = state.capability_trust?.[key] ?? 0;
+                  const met = accepted >= REQUIRED_ACCEPTED;
+                  return (
+                    <li key={key} className="operations-capability-item">
+                      <span>{label}</span>
+                      <Chip size="small" color={met ? 'success' : 'default'} variant={met ? 'filled' : 'outlined'} label={`${Math.min(accepted, REQUIRED_ACCEPTED)}/${REQUIRED_ACCEPTED} 次已采纳`} />
+                    </li>
+                  );
+                })}
+              </ul>
+              <p className="operations-meta">未处理纠正 {state.unresolved_correction_count} 条 · 当前可投入 {state.available_minutes ?? '未设置'} 分钟</p>
+            </div>
+          </section>
+
+          <section className="lumen-band">
+            <div className="lumen-band-h"><h2>个人数据</h2></div>
+            <div style={{ padding: '4px 16px 16px' }}>
+              {exportGate ? <Alert severity="info" action={<Button disabled={busy} onClick={() => void confirmExport()}>确认并下载</Button>}>请确认导出仅属于当前账户的数据。</Alert> : null}
+              {deletionGate ? (
+                <Stack spacing={2} mt={2}>
+                  <Alert severity="error">{`此操作不可撤销。输入“${DELETION_CONFIRMATION_TEXT}”后，账户、项目、素材文件和学习记录都会被删除。`}</Alert>
+                  <TextField label="删除确认" value={deletionConfirmation} onChange={(event) => setDeletionConfirmation(event.target.value)} helperText={`请输入：${DELETION_CONFIRMATION_TEXT}`} />
+                  <Button color="error" variant="contained" startIcon={<DeleteOutline />} disabled={busy || deletionConfirmation !== DELETION_CONFIRMATION_TEXT} onClick={() => void confirmDeletion()}>永久删除账户</Button>
+                </Stack>
+              ) : null}
+              {!deletionGate ? (
+                <div className="operations-row-actions">
+                  <Button startIcon={<Download />} disabled={busy || Boolean(exportGate)} onClick={() => void prepareExport()}>导出个人数据</Button>
+                  <Button color="error" startIcon={<DeleteOutline />} disabled={busy} onClick={() => void prepareDeletion()}>删除账户</Button>
+                </div>
+              ) : null}
+            </div>
+          </section>
+
           <div className="operations-row-actions">
-            <Button variant="contained" onClick={() => navigate('/onboarding/growth')}>导入历史内容并校对画像</Button>
+            <Button variant="contained" onClick={() => navigate('/path')}>去路径设定方向</Button>
             <Button variant="outlined" onClick={() => navigate('/onboarding/reference')}>贴参考，读出你想做成什么样</Button>
             <Button variant="outlined" onClick={() => navigate('/content')}>查看内容项目</Button>
           </div>
+          </details>
         </>
-      ) : <Alert severity="error" action={<Button onClick={() => void load()}>重试</Button>}>{error || '创作者状态暂不可用'}</Alert>}
-    </PageContainer>
+      ) : (
+        <Alert severity="error" action={<Button onClick={() => void load()}>重试</Button>}>{error || '创作者状态暂不可用'}</Alert>
+      )}
+    </div>
   );
 }

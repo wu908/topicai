@@ -61,14 +61,14 @@ describe('MePage', () => {
 
   it('explains creator progress and automation boundary', async () => {
     render(<MemoryRouter><MePage /></MemoryRouter>);
-    expect(await screen.findByRole('heading', { name: '当前创作目标' })).toBeInTheDocument();
+    expect(await screen.findByText(/当前创作目标/)).toBeInTheDocument();
     expect(screen.getByText('引导模式')).toBeInTheDocument();
     expect(screen.getByText(/发布、公开范围、事实确认和长期经验写入始终由你决定/)).toBeInTheDocument();
   });
 
   it('disables saving settings when the weekly goal is cleared or out of range', async () => {
     render(<MemoryRouter><MePage /></MemoryRouter>);
-    await screen.findByRole('heading', { name: '当前创作目标' });
+    await screen.findByRole('heading', { name: '创作设置' });
     const goal = screen.getByRole('spinbutton', { name: '每周发布目标' });
 
     // Audit e54a2643: Number('') is NaN and NaN < 1 / NaN > 7 are both
@@ -93,7 +93,10 @@ describe('MePage', () => {
     });
     render(<MemoryRouter><MePage /></MemoryRouter>);
 
-    expect(await screen.findByText('文本能力：不可用 · 截图识别：不可用')).toBeInTheDocument();
+    // 未配置完整时不得声称「可用」或「文本可用」。
+    expect(await screen.findByText(/已启用 · 服务未配置完整/)).toBeInTheDocument();
+    expect(screen.getByText('不可用')).toBeInTheDocument();
+    expect(screen.queryByText(/文本可用/)).toBeNull();
   });
 
   // ADR 0002: the UI must explain per-capability progress, not a global rate.
@@ -193,7 +196,7 @@ describe('MePage', () => {
     });
     render(<MemoryRouter><MePage /></MemoryRouter>);
 
-    expect(await screen.findByText('0%')).toBeInTheDocument();
+    expect(await screen.findByText(/候选确认率 0%/)).toBeInTheDocument();
   });
 
   it('returns to the loading state while retrying a failed load', async () => {
@@ -206,7 +209,7 @@ describe('MePage', () => {
 
     // Audit e54a2643 medium: 重试期间 load() 未回到 loading 态。
     expect(screen.getByRole('progressbar')).toBeInTheDocument();
-    expect(await screen.findByRole('heading', { name: '当前创作目标' })).toBeInTheDocument();
+    expect(await screen.findByText(/当前创作目标/)).toBeInTheDocument();
   });
 
   it('opens the deletion gate with an empty confirmation field', async () => {

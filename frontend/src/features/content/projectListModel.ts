@@ -19,10 +19,20 @@ export const nextActionLabels: Record<NextAction, string> = {
   review_calibration_issue: '修正数据问题',
 };
 
-/** 列表与工作台共用的唯一映射（F12 / G4）。 */
+/**
+ * 列表与工作台共用的唯一映射（F12 / G4）。
+ * 编排动作更具体（如「确认候选内容是否准确表达了你」），与工作台
+ * `nextStepGuide` 同优先级：有 orchestrated_action 就用它，否则用阶段映射。
+ */
 export function nextActionLabel(project: ContentProject): string {
+  if (project.orchestrated_action?.title) return project.orchestrated_action.title;
   if (project.next_action) return nextActionLabels[project.next_action] ?? nextActionLabels.create_version;
-  return project.orchestrated_action?.title ?? nextActionLabels.create_version;
+  return nextActionLabels.create_version;
+}
+
+/** 「需要我」判定的唯一来源（列表行与视图过滤共用）。 */
+export function needsMe(project: ContentProject): boolean {
+  return !isDone(project) && !isObserving(project);
 }
 
 /** 五段生命周期：①意图 ②证据 ③候选 ④检查 ⑤观察。 */
@@ -76,10 +86,6 @@ function isObserving(project: ContentProject): boolean {
     !isDone(project) &&
     (project.next_action === 'await_observation_window' || project.status === 'awaiting_review')
   );
-}
-
-function needsMe(project: ContentProject): boolean {
-  return !isDone(project) && !isObserving(project);
 }
 
 export function groupByOwner(projects: ContentProject[]): {

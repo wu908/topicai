@@ -1,0 +1,468 @@
+/**
+ * 路径页（content-line-prototype.html · 路径）：
+ * 左：路径画像（可编辑行 + 探索位）｜右：对标 · 解读须确认（接 reference-anchor）。
+ */
+import { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import {
+  getUserSettings,
+  updateUserSettings,
+} from '@/services/api/v2/projects';
+import {
+  getReferenceAnchor,
+  updateReferenceAnchor,
+} from '@/services/api/v2/referenceAnchor';
+import {
+  proposePathRevision,
+  listExplorationSlots,
+  type ExplorationSlot,
+} from '@/services/api/v2/pathProfile';
+import type { UserSettings } from '@/types/contracts/v2/content';
+import type { AnchorItem, ReferenceAnchor } from '@/types/contracts/v2/referenceAnchor';
+import { extractErrorMessage } from '@/utils/error';
+
+type ProfileField = {
+  key: string;
+  label: string;
+  value: string;
+  placeholder: string;
+};
+
+const DEFAULT_PROFILE: ProfileField[] = [
+  { key: 'want', label: '我想做成', value: '', placeholder: '把生活里的小实验讲清楚的效率博主' },
+  { key: 'publish', label: '发什么', value: '', placeholder: '可复现的小方法 · 踩坑复盘' },
+  { key: 'avoid', label: '不发什么', value: '', placeholder: '焦虑贩卖 · 假科学' },
+  { key: 'pace', label: '节奏', value: '', placeholder: '每周 1–2 条，宁缺毋滥' },
+  { key: 'tone', label: '语气', value: '', placeholder: '短句、可先结论、不端着' },
+];
+
+type BenchRow = {
+  key: string;
+  title: string;
+  item: AnchorItem | null;
+  /** audience 无样本时允许手填 */
+  manual?: boolean;
+};
+
+function anchorRows(anchor: ReferenceAnchor | null): BenchRow[] {
+  const topic = anchor?.topics?.[0] ?? null;
+  const structure = anchor?.structure_habits?.[0] ?? null;
+  const audience = anchor?.audience ?? null;
+  return [
+    {
+      key: 'topic',
+      title: '选题',
+      item: topic,
+      manual: !topic,
+    },
+    {
+      key: 'structure',
+      title: '结构',
+      item: structure,
+      manual: !structure,
+    },
+    {
+      key: 'reader',
+      title: '读者',
+      item: audience,
+      manual: !audience,
+    },
+  ];
+}
+
+function itemMeta(item: AnchorItem): string {
+  return `${item.value} · ${item.sample_count} 条里都有${item.limitations?.length ? ` · ${item.limitations[0]}` : ''}`;
+}
+
+export default function PathPage() {
+  const navigate = useNavigate();
+  const [profile, setProfile] = useState<ProfileField[]>(DEFAULT_PROFILE);
+  const [anchor, setAnchor] = useState<ReferenceAnchor | null>(null);
+  const [accepted, setAccepted] = useState<Record<string, boolean>>({});
+  const [editing, setEditing] = useState<string | null>(null);
+  const [draft, setDraft] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [settings, setSettings] = useState<UserSettings | null>(null);
+  const [slots, setSlots] = useState<ExplorationSlot[]>([]);
+  const [proposals, setProposals] = useState<
+    Array<{ field: string; proposed: string; reason: string }>
+  >([]);
+
+  const load = useCallback(async () => {
+    try {
+      const s = await getUserSettings();
+      setSettings(s);
+      const strategy = s.content_strategy || '';
+      setProfile((prev) =>
+        prev.map((f) => {
+          if (f.key === 'want' && strategy) return { ...f, value: strategy };
+          if (f.key === 'pace' && s.weekly_publish_goal) {
+            return { ...f, value: `每周 ${s.weekly_publish_goal} 条` };
+          }
+          return f;
+        }),
+      );
+    } catch (e) {
+      setError(extractErrorMessage(e, '路径画像加载失败'));
+    }
+  }, []);
+
+  const loadAnchor = useCallback(async () => {
+    try {
+      const a = await getReferenceAnchor();
+      setAnchor(a);
+    } catch {
+      // 无参考是正常态；面板自己显示空
+      setAnchor(null);
+    }
+    try {
+      const s = await listExplorationSlots();
+      setSlots(s.items ?? []);
+    } catch {
+      setSlots([]);
+    }
+  }, []);
+
+  const proposeRevision = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await proposePathRevision();
+      setProposals(r.proposals ?? []);
+      setNotice(
+        r.proposals?.length
+          ? `AI 提案 ${r.proposals.length} 条${r.reason ? `：${r.reason}` : ''}。同意可写入画像。`
+          : '暂无修订提案。你可以直接改画像字段。',
+      );
+    } catch (e) {
+      setError(extractErrorMessage(e, '修订提案失败'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      void load();
+      void loadAnchor();
+    }, 0);
+    return () => window.clearTimeout(t);
+  }, [load, loadAnchor]);
+
+  const saveField = async (key: string, value: string) => {
+    if (!settings) return;
+    setBusy(true);
+    setError(null);
+    try {
+      setProfile((prev) => prev.map((f) => (f.key === key ? { ...f, value } : f)));
+      // 想做成 → content_strategy；节奏里的数字 → weekly_publish_goal。
+      const goalMatch = value.match(/(\d+)/);
+      await updateUserSettings({
+        weekly_publish_goal:
+          key === 'pace' && goalMatch ? Number(goalMatch[1]) : settings.weekly_publish_goal,
+        content_strategy: key === 'want' ? value : settings.content_strategy,
+        consent: settings.consent ?? {},
+        auto_digest_enabled: settings.auto_digest_enabled,
+        expected_version: settings.version,
+      });
+      setSettings((s) =>
+        s
+          ? {
+              ...s,
+              content_strategy: key === 'want' ? value : s.content_strategy,
+              weekly_publish_goal:
+                key === 'pace' && goalMatch ? Number(goalMatch[1]) : s.weekly_publish_goal,
+              version: s.version + 1,
+            }
+          : s,
+      );
+      setNotice('已保存。');
+    } catch (e) {
+      setError(extractErrorMessage(e, '保存失败，请重试'));
+    } finally {
+      setBusy(false);
+      setEditing(null);
+    }
+  };
+
+  /** 确认一条解读：写入 accepted（本地确认态）；拒绝走 anchor.rejected。 */
+  const confirmBenchmark = (key: string) => {
+    setAccepted((prev) => ({ ...prev, [key]: true }));
+    setNotice('已确认这条解读。');
+  };
+
+  const rejectBenchmark = async (item: AnchorItem) => {
+    if (!anchor) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const next = await updateReferenceAnchor({
+        rejected: [...(anchor.rejected ?? []), item.value],
+        expected_version: anchor.version,
+      });
+      setAnchor(next);
+      setNotice('已否证，不再出现；参考变了会重推。');
+    } catch (e) {
+      setError(extractErrorMessage(e, '否证失败'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const writeBenchmark = async (key: string, value: string) => {
+    if (!anchor) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const patch: Parameters<typeof updateReferenceAnchor>[0] = {
+        expected_version: anchor.version,
+      };
+      if (key === 'topic') patch.topics = [value];
+      if (key === 'structure') patch.structure_habits = [value];
+      if (key === 'reader') patch.audience = value;
+      const next = await updateReferenceAnchor(patch);
+      setAnchor(next);
+      setNotice('已按你写的为准。');
+      setEditing(null);
+    } catch (e) {
+      setError(extractErrorMessage(e, '写入失败'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div>
+      {error ? (
+        <p className="login-err" role="alert">
+          {error}
+        </p>
+      ) : null}
+      {notice ? <p className="pg-sub">{notice}</p> : null}
+
+      <div className="lumen-topbar">
+        <div>
+          <h1>路径</h1>
+          <p className="sub" style={{ margin: 0 }}>
+            画像 · 对标 · 探索位
+          </p>
+        </div>
+      </div>
+
+      {proposals.length > 0 ? (
+        <div className="lumen-quick-overlay" role="region" aria-label="AI 修订提案">
+          <div style={{ fontSize: 12, color: 'var(--lumen-muted)', marginBottom: 8 }}>
+            AI 修订提案（只提议，写入由你决定）
+          </div>
+          {proposals.map((p) => (
+            <div key={p.field} style={{ marginBottom: 8, fontSize: 13 }}>
+              <b>{p.field}</b> → {p.proposed}
+              {p.reason ? <div style={{ fontSize: 12, color: 'var(--lumen-muted)' }}>{p.reason}</div> : null}
+            </div>
+          ))}
+          <button type="button" className="lumen-btn sm ghost" onClick={() => setProposals([])}>
+            知道了
+          </button>
+        </div>
+      ) : null}
+
+      <div className="lumen-split-2">
+        {/* 左：路径画像 */}
+        <div className="lumen-split-col">
+          <div className="lumen-band grow">
+            <div className="lumen-band-h">
+              <h2>路径画像</h2>
+              <button
+                type="button"
+                className="lumen-btn sm ghost"
+                disabled={busy}
+                onClick={() => void proposeRevision()}
+              >
+                AI 建议修订
+              </button>
+            </div>
+            {profile.map((f) => (
+              <div key={f.key} className="lumen-row" style={{ cursor: 'pointer' }}>
+                <div className="body" style={{ width: '100%' }}>
+                  <div className="meta">{f.label}</div>
+                  {editing === f.key ? (
+                    <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+                      <input
+                        className="lumen-input"
+                        style={{ flex: 1, minWidth: 0 }}
+                        value={draft}
+                        autoFocus
+                        aria-label={f.label}
+                        onChange={(e) => setDraft(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') void saveField(f.key, draft.trim());
+                          if (e.key === 'Escape') setEditing(null);
+                        }}
+                      />
+                      <button
+                        type="button"
+                        className="lumen-btn sm"
+                        disabled={busy}
+                        onClick={() => void saveField(f.key, draft.trim())}
+                      >
+                        存
+                      </button>
+                      <button type="button" className="lumen-btn sm ghost" onClick={() => setEditing(null)}>
+                        取消
+                      </button>
+                    </div>
+                  ) : (
+                    <div
+                      className="title"
+                      onClick={() => {
+                        setEditing(f.key);
+                        setDraft(f.value);
+                      }}
+                    >
+                      {f.value || <span style={{ color: '#aeb6c4' }}>{f.placeholder}</span>}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+            {/* 探索位（P3-B4）：真实实验记录，落选不计能力等级 */}
+            {slots.length === 0 ? (
+              <div className="lumen-row" style={{ cursor: 'default' }}>
+                <div className="body">
+                  <div className="title">探索位</div>
+                  <div className="meta">还没记实验。探索位用来试方向，未选用不计能力等级。</div>
+                </div>
+                <span className="lumen-chip" style={{ color: '#c98a4b', borderColor: 'rgba(201,138,75,0.35)' }}>
+                  实验
+                </span>
+              </div>
+            ) : (
+              slots.map((s) => (
+                <div key={s.id} className="lumen-row" style={{ cursor: 'default' }}>
+                  <div className="body">
+                    <div className="title">探索位：{s.title}</div>
+                    <div className="meta">
+                      {s.hypothesis ? `${s.hypothesis} · ` : ''}
+                      {s.status === 'running'
+                        ? '实验中'
+                        : s.status === 'adopted'
+                          ? `已选用${s.attribution ? ` · ${s.attribution}` : ''}`
+                          : `未选用${s.attribution ? ` · ${s.attribution}` : ''}`}
+                    </div>
+                  </div>
+                  <span className="lumen-chip" style={{ color: '#c98a4b', borderColor: 'rgba(201,138,75,0.35)' }}>
+                    实验
+                  </span>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* 右：对标 · 解读须确认 */}
+        <div className="lumen-split-col">
+          <div className="lumen-band grow">
+            <div className="lumen-band-h">
+              <h2>对标 · 解读须确认</h2>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button
+                  type="button"
+                  className="lumen-btn sm"
+                  onClick={() => navigate('/onboarding/reference')}
+                >
+                  粘贴
+                </button>
+                <button
+                  type="button"
+                  className="lumen-btn sm ghost"
+                  onClick={() => navigate('/onboarding/reference')}
+                >
+                  链接解析
+                </button>
+              </div>
+            </div>
+            {anchor && anchor.reference_count === 0 ? (
+              <div className="lumen-fill">
+                还没贴参考。点「粘贴」贴 2–3 条你想做成的账号，读出选题与写法。
+              </div>
+            ) : (
+              anchorRows(anchor).map((row) => (
+                <div key={row.key} className="lumen-row">
+                  <div className="body">
+                    <div className="title">{row.title}</div>
+                    {editing === `bm-${row.key}` ? (
+                      <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+                        <input
+                          className="lumen-input"
+                          style={{ flex: 1, minWidth: 0 }}
+                          value={draft}
+                          autoFocus
+                          aria-label={row.title}
+                          onChange={(e) => setDraft(e.target.value)}
+                        />
+                        <button
+                          type="button"
+                          className="lumen-btn sm"
+                          disabled={busy || !draft.trim()}
+                          onClick={() => void writeBenchmark(row.key, draft.trim())}
+                        >
+                          存
+                        </button>
+                        <button type="button" className="lumen-btn sm ghost" onClick={() => setEditing(null)}>
+                          取消
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="meta">
+                        {row.item ? itemMeta(row.item) : '读不出，需你自己定'}
+                      </div>
+                    )}
+                  </div>
+                  {row.item && !accepted[row.key] ? (
+                    <>
+                      <button
+                        type="button"
+                        className="lumen-btn sm"
+                        disabled={busy}
+                        onClick={() => confirmBenchmark(row.key)}
+                      >
+                        确认
+                      </button>
+                      <button
+                        type="button"
+                        className="lumen-btn sm ghost"
+                        disabled={busy}
+                        onClick={() => void rejectBenchmark(row.item!)}
+                      >
+                        不收
+                      </button>
+                    </>
+                  ) : row.item && accepted[row.key] ? (
+                    <span className="lumen-chip on">已确认</span>
+                  ) : (
+                    <button
+                      type="button"
+                      className="lumen-btn sm ghost"
+                      onClick={() => {
+                        setEditing(`bm-${row.key}`);
+                        setDraft('');
+                      }}
+                    >
+                      我去写
+                    </button>
+                  )}
+                </div>
+              ))
+            )}
+            <div className="lumen-fill">
+              每条解读都注明来自哪几个样本；不抄写原文
+              {anchor?.capability ? ` · 读取：${anchor.capability}` : ''}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -320,6 +320,25 @@ export interface SnapshotExtractionProposal {
   };
 }
 
+export interface AgentIdentityPrefs {
+  global_name?: string | null;
+  global_avatar?: string | null;
+  project_name?: string | null;
+  project_avatar?: string | null;
+  global_agent_md?: string | null;
+  project_agent_md?: string | null;
+}
+
+export interface ProductPrefs {
+  default_content_kind?: 'graphic_note' | 'vlog_plan' | null;
+  retro_reminder_days?: number | null;
+  memory_write_mode?: 'propose' | 'auto' | 'manual' | null;
+  default_material_privacy?: 'private' | 'public' | null;
+  publish_check_level?: 'standard' | 'strict' | 'soft' | null;
+  /** 人话化（去 AI 味）默认开 */
+  humanize_enabled?: boolean | null;
+}
+
 export interface UserSettings {
   weekly_publish_goal: number;
   timezone: string;
@@ -336,6 +355,8 @@ export interface UserSettings {
     capabilities: string[];
     vision_enabled: boolean;
   };
+  agent_identity: AgentIdentityPrefs;
+  product_prefs: ProductPrefs;
 }
 
 export interface AccountDataJob {

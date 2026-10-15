@@ -1,32 +1,43 @@
-/** 周复盘（原型 hifi-lumen.html wrow 对齐）：判断 vs 实际，聚合只读；确认走项目工作台门控。 */
+/**
+ * 周复盘（content-line-prototype.html · 周复盘）：
+ * 左：本周对照｜右：欠对账 + 公式笔记。
+ */
 import { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 
 import { extractErrorMessage } from '@/utils/error';
 import { listWeekly } from '@/services/api/v2/asyncLoop';
 import type { WeeklyRow } from '@/types/contracts/v2/asyncLoop';
-import { openCompanion } from '@/features/companion';
 import { metricLabel, primaryResponseLabel } from '@/features/content/labels';
+import RetroFillForm from '@/features/content/RetroFillForm';
+import FormulaNotesPanel from '@/features/content/FormulaNotesPanel';
 
-const STAGES: Array<{ key: WeeklyRow['stage']; label: string }> = [
-  { key: 'needs_snapshot', label: '待回填数据' },
-  { key: 'needs_review', label: '待盲评' },
-  { key: 'review_insufficient', label: '数据不足' },
-  { key: 'ready_to_confirm', label: '待确认结论' },
-  { key: 'confirmed', label: '已确认' },
-];
+/** 对照结论 chip：证实 / 方向对 / 未知。 */
+function compareChip(row: WeeklyRow): { label: string; on: boolean } {
+  if (row.actual.result_availability === 'unavailable') return { label: '未知', on: false };
+  if (row.review?.intent_outcome === 'confirmed') return { label: '证实', on: true };
+  if (row.judgment.primary_response && row.actual.result_availability === 'observed') {
+    return { label: '方向对', on: false };
+  }
+  return { label: '未知', on: false };
+}
 
-const STAGE_NOTE: Record<WeeklyRow['stage'], string> = {
-  needs_snapshot: '拿不到数据也是结论 · 不补 0',
-  needs_review: '先盲评，再看数据',
-  review_insufficient: '数据不足 · 继续观察',
-  ready_to_confirm: '判断 vs 实际 · 等你确认',
-  confirmed: '判断已沉淀为经验',
-};
+function actualLine(row: WeeklyRow): string {
+  if (row.actual.result_availability === 'unavailable') {
+    return '拿不到数据 → unknown，仍可选下一步';
+  }
+  const metrics = Object.entries(row.actual.metrics)
+    .filter(([, v]) => v !== null && v !== undefined)
+    .map(([k, v]) => `${metricLabel(k)} ${v}`)
+    .join(' / ');
+  return metrics || '尚未回填';
+}
 
 export default function ReviewPage() {
+  const navigate = useNavigate();
   const [weekly, setWeekly] = useState<WeeklyRow[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
     const rows = await listWeekly(60);
@@ -40,64 +51,149 @@ export default function ReviewPage() {
     return () => window.clearTimeout(timer);
   }, [reload]);
 
-  const published = weekly.length;
-  const confirmed = weekly.filter((r) => r.stage === 'confirmed').length;
+  const pending = weekly.filter((r) => r.stage === 'needs_snapshot');
+  const compared = weekly.filter((r) => r.stage !== 'needs_snapshot');
 
   return (
     <div>
-      {error ? <p className="login-err" role="alert">{error}</p> : null}
-      <p className="kicker">周复盘 · 每周一次，一次几分钟</p>
-      <h1 className="pg">看看这一周，哪些判断被证实了。</h1>
-      <p className="pg-sub">本周已发 {published} 篇 · 已确认 {confirmed} 篇</p>
+      {error ? (
+        <p className="login-err" role="alert">
+          {error}
+        </p>
+      ) : null}
 
-      <div style={{ marginTop: 14 }}>
-        {weekly.length === 0 ? (
-          <p className="pg-sub">本周期还没有已发布的内容。发布并回填数据后，这里会出现对照行。</p>
-        ) : (
-          weekly.map((row) => (
-            <div className="wrow" key={row.project_id}>
-              <div>
-                <h3>
-                  <Link to={`/content/${row.project_id}`} style={{ color: 'inherit' }}>{row.title}</Link>
-                </h3>
-                <p className="jl">
-                  判断 ·{' '}
-                  <b>
-                    {row.judgment.primary_response
-                      ? primaryResponseLabel(row.judgment.primary_response)
-                      : '未记录'}
-                  </b>{' '}
-                  ｜ 实际 ·{' '}
-                  <b>
-                    {row.actual.result_availability === 'unavailable'
-                      ? '截图缺失'
-                      : Object.entries(row.actual.metrics)
-                          .filter(([, v]) => v !== null)
-                          .map(([k, v]) => `${metricLabel(k)} ${v}`)
-                          .join(' · ') || '尚未回填'}
-                  </b>
-                </p>
-              </div>
-              <p className="jl">{STAGE_NOTE[row.stage]}</p>
-              <div className="concl" aria-label={`当前阶段：${STAGES.find((s) => s.key === row.stage)?.label}`}>
-                {STAGES.map((s) => (
-                  <span key={s.key} className={`cpill${s.key === row.stage ? ' on' : ''}`}>{s.label}</span>
-                ))}
-              </div>
-              <button type="button" className="askbtn" onClick={() => openCompanion(`周复盘 · ${row.title}`)}>
-                问
-              </button>
+      <div className="lumen-topbar">
+        <div>
+          <h1>周复盘</h1>
+          <p className="sub" style={{ margin: 0 }}>
+            判断写在发布前 · 可核对 · 本周对照 {compared.length} · 欠对账 {pending.length}
+          </p>
+        </div>
+        <button
+          type="button"
+          className="lumen-btn"
+          onClick={() => {
+            const first = document.querySelector<HTMLElement>('.lumen-reconcile input');
+            if (first) {
+              first.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              first.focus();
+            }
+          }}
+        >
+          去对账
+        </button>
+      </div>
+
+      <div className="lumen-split-2">
+        {/* 左：本周对照 */}
+        <div className="lumen-split-col">
+          <div className="lumen-band grow">
+            <div className="lumen-band-h">
+              <h2>本周对照</h2>
+              <span className="lumen-chip">{compared.length}</span>
             </div>
-          ))
-        )}
-      </div>
+            {compared.length === 0 ? (
+              <div className="lumen-fill">本周期还没有可对照的判断。发布并回填数据后，这里会出现对照行。</div>
+            ) : (
+              compared.map((row) => {
+                const chip = compareChip(row);
+                return (
+                  <div
+                    key={row.project_id}
+                    className="lumen-row"
+                    style={{ cursor: 'pointer', flexDirection: 'column', alignItems: 'stretch' }}
+                    onClick={() =>
+                      setExpanded((cur) => (cur === row.project_id ? null : row.project_id))
+                    }
+                  >
+                    <div style={{ display: 'flex', gap: 12, alignItems: 'center', width: '100%' }}>
+                      <div className="body">
+                        <div className="title">{row.title}</div>
+                        <div className="meta">
+                          判断：
+                          {row.judgment.primary_response
+                            ? primaryResponseLabel(row.judgment.primary_response)
+                            : '未记录'}{' '}
+                          ｜ 实际：{actualLine(row)}
+                        </div>
+                      </div>
+                      <span className={`lumen-chip${chip.on ? ' on' : ''}`}>{chip.label}</span>
+                    </div>
+                    {expanded === row.project_id ? (
+                      <div
+                        style={{
+                          marginTop: 8,
+                          paddingTop: 8,
+                          borderTop: '1px solid rgba(23,28,38,0.06)',
+                          fontSize: 12,
+                          color: '#7e8898',
+                        }}
+                      >
+                        判断原文：{row.judgment.audience_change || '（未记录）'}
+                        <br />
+                        实际来源：{row.actual.result_availability === 'observed' ? '你回填的数据' : '未观测'}
+                        <br />
+                        <button
+                          type="button"
+                          className="lumen-btn sm"
+                          style={{ marginTop: 8 }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/content/${row.project_id}`);
+                          }}
+                        >
+                          打开项目确认
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })
+            )}
+            <div className="lumen-fill">判断写在发布前 · 可核对</div>
+          </div>
+        </div>
 
-      <div className="review-cta">
-        <Link to="/content" className="btn btn-primary" style={{ textDecoration: 'none' }}>去项目工作台确认</Link>
-        <span className="note">确认后，有效经验才会进入它的成长 · 盲评 → 观察 → 经验</span>
-      </div>
-      <div className="weekfoot">
-        <span>它从本周学到（待你确认）· 只有你确认过的结论才会沉淀</span>
+        {/* 右：欠对账 + 公式笔记 */}
+        <div className="lumen-split-col">
+          <div className="lumen-band">
+            <div className="lumen-band-h">
+              <h2>欠对账</h2>
+              <span className="lumen-chip">{pending.length}</span>
+            </div>
+            {pending.length === 0 ? (
+              <div className="lumen-fill">暂无待对账内容</div>
+            ) : (
+              pending.slice(0, 3).map((row) => (
+                <div key={row.project_id} className="lumen-row lumen-reconcile" style={{ flexWrap: 'wrap' }}>
+                  <div className="body" style={{ width: '100%' }}>
+                    <div className="title">{row.title}</div>
+                    <div className="meta">
+                      你的判断：
+                      {row.judgment.primary_response
+                        ? primaryResponseLabel(row.judgment.primary_response)
+                        : '未记录'}
+                    </div>
+                  </div>
+                  <div style={{ width: '100%', marginTop: 10 }}>
+                    <RetroFillForm projectId={row.project_id} onDone={() => void reload()} />
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          <div className="lumen-band grow">
+            <div className="lumen-band-h">
+              <h2>公式笔记</h2>
+              <span className="lumen-chip">提案</span>
+            </div>
+            <div style={{ padding: '4px 12px 12px' }}>
+              <FormulaNotesPanel />
+            </div>
+            <div className="lumen-fill">「收下」会写入你的路径笔记，之后可以撤销</div>
+          </div>
+        </div>
       </div>
     </div>
   );

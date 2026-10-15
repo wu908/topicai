@@ -1,6 +1,7 @@
 """Thin HTTP adapters for the first ContentProject vertical slice."""
 
 from fastapi import APIRouter, Depends, Response
+from pydantic import Field
 
 from app.api.deps import get_current_user, get_db
 from app.core.database import Database
@@ -15,12 +16,14 @@ from app.models.v2.field_suggestion import (
     FieldSuggestionRequest,
     FieldSuggestionsView,
 )
+from app.models.v2.intent_actions import StrictModel
 from app.models.v2.project_start import ProjectStartRequest
 from app.models.v2.publish_hypothesis import PublishHypothesisLock
 from app.services.calibration_workspace import CalibrationWorkspaceService
 from app.services.content_project import ContentProjectService
 from app.services.content_version import ContentVersionService
 from app.services.field_suggestions import FieldSuggestionService
+from app.services.humanize import HumanizeService
 from app.services.project_start import ProjectStartService
 from app.services.project_state import ProjectStateService
 from app.services.publish_hypothesis import PublishHypothesisService
@@ -169,6 +172,32 @@ async def create_version(
         code=response.status_code,
         data=version,
         meta={"idempotency_replayed": replayed},
+    )
+
+
+class HumanizeRequest(StrictModel):
+    body_text: str = Field(min_length=1, max_length=20_000)
+
+
+class HumanizeResponse(StrictModel):
+    body_text: str
+    changed: bool
+
+
+@router.post("/{project_id}/humanize", response_model=ApiResponse[HumanizeResponse])
+async def humanize_body(
+    project_id: str,
+    body: HumanizeRequest,
+    user=Depends(get_current_user),
+    db: Database = Depends(get_db),
+):
+    """人话化一段成稿正文（P2-B1）。只改说法不改事实；无模型/失败时原样返回。"""
+    # 确认项目属于当前用户，避免跨用户滥用
+    await ContentProjectService(db).get(user["id"], project_id)
+    out = HumanizeService().rewrite(body.body_text)
+    return ApiResponse(
+        code=200,
+        data={"body_text": out, "changed": out != body.body_text},
     )
 
 

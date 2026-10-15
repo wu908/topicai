@@ -11,35 +11,53 @@ vi.mock('@/services/api/v2/projects', () => ({
   listCreatorViewpoints: (...a: unknown[]) => listCreatorViewpoints(...a),
   listCreatorSeries: (...a: unknown[]) => listCreatorSeries(...a),
 }));
+vi.mock('@/services/api/v2/evolution', () => ({
+  getEvolutionSummary: vi.fn().mockResolvedValue({
+    changes: [{ kind: 'retro', summary: '对账：收藏 45', at: '2026-10-15T00:00:00Z' }],
+    capability_trust: {},
+    recent_signals: [],
+  }),
+}));
 
 import GrowthPage from '../GrowthPage';
 
 describe('GrowthPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    getCreatorState.mockResolvedValue({ validated_insights: [{ statement: '开头放翻车图收藏率更高' }], autopilot_eligible: false, ai_calls_today: 0 });
-    listProjects.mockResolvedValue({ items: [], total: 0 });
+    getCreatorState.mockResolvedValue({
+      validated_insights: [{ statement: '开头放翻车图收藏率更高' }],
+      autopilot_eligible: false,
+      candidate_acceptance_rate: 0.5,
+      unresolved_correction_count: 1,
+    });
+    listProjects.mockResolvedValue({ items: [{ id: 'p1' }], total: 1 });
     listCreatorViewpoints.mockResolvedValue({ items: [], total: 0 });
     listCreatorSeries.mockResolvedValue({ items: [], total: 0 });
   });
 
-  it('renders real counts and honest achievement states', async () => {
+  it('renders capability ledger and milestones (prototype layout)', async () => {
     render(<GrowthPage />);
-    // 「它的积累」是静态标题：findByText 在第一帧就满足了，随后同步断言的
-    // 「已确认经验」却来自异步加载完的 state——负载高时它会先于 state 到达而变红
-    // （CI 上就这样偶发失败）。等数据驱动的那一项，断言才真正成立。
-    expect(await screen.findByText('已确认经验')).toBeTruthy();
-    expect(screen.getByText('1 项')).toBeTruthy();
-    expect(screen.getAllByText(/待达成/).length).toBeGreaterThan(0);
-    expect(screen.getByText(/连续接受/)).toBeTruthy();
-    expect(screen.getByText(/永远不会委托/)).toBeTruthy();
+    // 等数据驱动的行出现，再断言结构。
+    expect(await screen.findByText('候选确认')).toBeTruthy();
+    expect(screen.getByText('能力台帐')).toBeTruthy();
+    expect(screen.getByText(/累计接受 1 次/)).toBeTruthy();
+    expect(screen.getByText('长期经验写入')).toBeTruthy();
+    expect(screen.getByText('人工')).toBeTruthy();
+    // 里程碑与信任
+    expect(screen.getByText('里程碑与信任')).toBeTruthy();
+    expect(screen.getByText('连续 4 周按时复盘')).toBeTruthy();
+    expect(screen.getAllByText(/行为 → 能力 → 时间回报/).length).toBeGreaterThan(0);
   });
 
-  it('marks autopilot eligible when trust reached', async () => {
-    getCreatorState.mockResolvedValue({ validated_insights: [], autopilot_eligible: true, ai_calls_today: 2 });
+  it('shows honest auto-prepare status', async () => {
+    getCreatorState.mockResolvedValue({
+      validated_insights: [],
+      autopilot_eligible: true,
+      candidate_acceptance_rate: 1,
+      unresolved_correction_count: 0,
+    });
     render(<GrowthPage />);
-    expect(await screen.findByText(/信任额度已达标/)).toBeTruthy();
-    expect(screen.getByText(/可申请/)).toBeTruthy();
+    expect(await screen.findByText(/自动准备：可用/)).toBeTruthy();
   });
 
   it('surfaces load error', async () => {

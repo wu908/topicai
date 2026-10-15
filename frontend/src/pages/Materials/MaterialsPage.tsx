@@ -2,14 +2,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
   Button,
-  Chip,
   CircularProgress,
   MenuItem,
   Stack,
   TextField,
 } from '@mui/material';
-import { Add, DeleteOutline, GraphicEqOutlined, LinkOutlined, UploadFile } from '@mui/icons-material';
-import PageContainer from '@/components/layout/PageContainer';
+import { UploadFile } from '@mui/icons-material';
 import {
   addMaterialUsage,
   analyzeMaterial,
@@ -199,14 +197,20 @@ export default function MaterialsPage() {
   const canSave = Boolean(title.trim() && (needsFile ? file : content.trim()));
 
   return (
-    <PageContainer title="素材" subtitle="保存可复用的真实经历、链接、图片和文档，并查看它们正在支持哪些内容。">
-      <div className="operations-row-actions">
-        <Button variant="contained" startIcon={<Add />} onClick={() => setShowCreate((value) => !value)}>
-          添加素材
-        </Button>
+    <div>
+      <div className="lumen-topbar">
+        <div>
+          <h1>素材</h1>
+          <p className="sub" style={{ margin: 0 }}>
+            隐私标签全站统一；每条素材都能查到来源
+          </p>
+        </div>
+        <button type="button" className="lumen-btn" onClick={() => setShowCreate((value) => !value)}>
+          丢一条
+        </button>
       </div>
       {showCreate ? (
-        <section className="operations-row">
+        <section className="lumen-quick-overlay" aria-label="丢一条素材">
           <Stack spacing={2}>
             <TextField select label="素材类型" value={kind} onChange={(event) => setKind(event.target.value as Material['kind'])}>
               {Object.entries(kindLabels).map(([value, label]) => <MenuItem key={value} value={value}>{label}</MenuItem>)}
@@ -236,80 +240,129 @@ export default function MaterialsPage() {
       ) : null}
       {error ? <Alert severity="error" action={<Button onClick={() => void load()}>重试</Button>}>{error}</Alert> : null}
       {notice ? <Alert severity="success">{notice}</Alert> : null}
-      {loading ? <div className="operations-loading"><CircularProgress size={26} /></div> : materials.length ? (
-        <div className="operations-list">
+      {loading ? (
+        <div className="operations-loading"><CircularProgress size={26} /></div>
+      ) : materials.length ? (
+        <div className="lumen-band grow" data-testid="materials-list">
+          <div className="lumen-band-h">
+            <h2>素材库</h2>
+            <span className="lumen-chip">{materials.length}</span>
+          </div>
           {materials.map((material) => (
-            <article className="operations-row" key={material.id}>
-              <div className="operations-row-header">
-                <div><h2>{material.title}</h2><p className="operations-meta">{kindLabels[material.kind]} · {Math.max(1, Math.ceil((material.size ?? 0) / 1024))} KB</p></div>
-                {/* F6（用户验收测试 2026-09-19）：这个 chip 说的是素材的**隐私级别**，
-                    而收件箱里说的是**生成授权**（consent）。两处都用两三个字、都不点明
-                    是哪个轴，用户就会读成同一个属性、进而以为系统自相矛盾
-                    （「可发布类」vs「私密」）。这里显式写出轴名。 */}
-                <Chip size="small" label={`隐私：${privacyLabels[material.privacy_level]}`} color={material.privacy_level === 'sensitive' ? 'warning' : 'default'} />
+            <div key={material.id}>
+              {/* 原型行：tag + 标题/meta + 右 chip */}
+              <div className="lumen-row" style={{ cursor: 'default' }}>
+                <div className={`lumen-tag${material.privacy_level === 'sensitive' ? ' warn' : ''}`}>
+                  {kindLabels[material.kind]}
+                </div>
+                <div className="body">
+                  <div className="title">{material.title}</div>
+                  <div className="meta">
+                    {/* 原型 meta：隐私值 · 引用状态（F6：隐私值本身即「隐私」轴） */}
+                    {privacyLabels[material.privacy_level]}
+                    {' · '}
+                    {material.usages.length
+                      ? `已引用 ${material.usages.length} 个项目`
+                      : material.privacy_level === 'private'
+                        ? '仅本地'
+                        : '未引用'}
+                  </div>
+                </div>
+                {material.usages.length ? (
+                  <span className="lumen-chip">引用 {material.usages.length}</span>
+                ) : (
+                  <span className="lumen-chip">{privacyLabels[material.privacy_level]}</span>
+                )}
               </div>
-              {material.content ? <p className="operations-row-copy">{material.content}</p> : null}
-              {/* 音视频素材的文字是模型读出来的——必须在界面上说明，不能当成作者写的。 */}
-              {material.analysis ? (
-                <p className="operations-helper">
-                  这段文字是模型（{material.analysis.model || '全模态模型'}）读出来的，
-                  可能听错或漏读；「未能确认」的地方请自己核对。
-                </p>
-              ) : null}
-              {material.kind === 'audio' || material.kind === 'video' ? (
-                material.content ? null : (
+              {/* 详情与动作（保留识别/关联/删除能力） */}
+              <div style={{ padding: '0 16px 12px 84px' }}>
+                {material.content ? <p className="operations-row-copy">{material.content}</p> : null}
+                {material.analysis ? (
                   <p className="operations-helper">
-                    这条{kindLabels[material.kind]}还没有识别过；识别会把它发给外部模型（敏感素材不会被发送）。
+                    这段文字是模型（{material.analysis.model || '全模态模型'}）读出来的，
+                    可能听错或漏读；「未能确认」的地方请自己核对。
                   </p>
-                )
-              ) : null}
-              <p className="operations-helper">
-                {material.usages.length ? `正在用于：${material.usages.map((usage) => usage.project_title).join('、')}` : '尚未关联内容项目'}
-              </p>
-              {deleteImpact[material.id]?.length ? (
-                <Alert
-                  severity="warning"
-                  action={
-                    <>
-                      <Button color="inherit" disabled={busy} onClick={() => void remove(material, true)}>保留引用快照并删除</Button>
-                      {/* 审计修复 2026-08-16 UX-L5：删除确认提供取消出口。 */}
-                      <Button color="inherit" disabled={busy} onClick={() => setDeleteImpact((current) => ({ ...current, [material.id]: [] }))}>取消</Button>
-                    </>
-                  }
-                >
-                  将影响：{deleteImpact[material.id].join('、')}
-                </Alert>
-              ) : null}
-              <div className="operations-row-actions">
-                <TextField
-                  select
-                  size="small"
-                  label="复用到项目"
-                  value={reuseProject[material.id] || ''}
-                  onChange={(event) => setReuseProject((current) => ({ ...current, [material.id]: event.target.value }))}
-                  sx={{ minWidth: 180 }}
-                >
-                  <MenuItem value="">选择项目</MenuItem>
-                  {projects.filter((project) => !material.usages.some((usage) => usage.project_id === project.id)).map((project) => <MenuItem key={project.id} value={project.id}>{project.title}</MenuItem>)}
-                </TextField>
-                <Button startIcon={<LinkOutlined />} disabled={busy || !reuseProject[material.id]} onClick={() => void link(material.id)}>关联</Button>
-                {(material.kind === 'audio' || material.kind === 'video') ? (
-                  <Button
-                    startIcon={<GraphicEqOutlined />}
-                    disabled={busy}
-                    onClick={() => void analyze(material.id)}
-                  >
-                    {material.content ? '重新识别' : '识别内容'}
-                  </Button>
                 ) : null}
-                <Button color="error" startIcon={<DeleteOutline />} disabled={busy} onClick={() => void remove(material)}>删除</Button>
+                {material.kind === 'audio' || material.kind === 'video' ? (
+                  material.content ? null : (
+                    <p className="operations-helper">
+                      这条{kindLabels[material.kind]}还没有识别过；识别会把它发给外部模型（敏感素材不会被发送）。
+                    </p>
+                  )
+                ) : null}
+                <p className="operations-helper">
+                  {material.usages.length
+                    ? `正在用于：${material.usages.map((usage) => usage.project_title).join('、')}`
+                    : '尚未关联内容项目'}
+                </p>
+                {deleteImpact[material.id]?.length ? (
+                  <Alert
+                    severity="warning"
+                    action={
+                      <>
+                        <Button color="inherit" disabled={busy} onClick={() => void remove(material, true)}>保留引用快照并删除</Button>
+                        <Button color="inherit" disabled={busy} onClick={() => setDeleteImpact((current) => ({ ...current, [material.id]: [] }))}>取消</Button>
+                      </>
+                    }
+                  >
+                    将影响：{deleteImpact[material.id].join('、')}
+                  </Alert>
+                ) : null}
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8, alignItems: 'center' }}>
+                  <TextField
+                    select
+                    size="small"
+                    label="复用到项目"
+                    value={reuseProject[material.id] || ''}
+                    onChange={(event) => setReuseProject((current) => ({ ...current, [material.id]: event.target.value }))}
+                    sx={{ minWidth: 180 }}
+                  >
+                    <MenuItem value="">选择项目</MenuItem>
+                    {projects.filter((project) => !material.usages.some((usage) => usage.project_id === project.id)).map((project) => <MenuItem key={project.id} value={project.id}>{project.title}</MenuItem>)}
+                  </TextField>
+                  <button
+                    type="button"
+                    className="lumen-btn sm ghost"
+                    disabled={busy || !reuseProject[material.id]}
+                    onClick={() => void link(material.id)}
+                  >
+                    进稿
+                  </button>
+                  {(material.kind === 'audio' || material.kind === 'video') ? (
+                    <button
+                      type="button"
+                      className="lumen-btn sm ghost"
+                      disabled={busy}
+                      onClick={() => void analyze(material.id)}
+                    >
+                      {material.content ? '重新识别' : '识别内容'}
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="lumen-btn sm ghost"
+                    disabled={busy}
+                    onClick={() => void remove(material)}
+                  >
+                    删除
+                  </button>
+                </div>
               </div>
-            </article>
+            </div>
           ))}
+          <div className="lumen-fill">隐私标签全站统一；每条素材都能查到来源</div>
         </div>
       ) : (
-        <section className="operations-empty"><h2>还没有素材</h2><p>先保存一条真实经历、链接或图片，后续项目可以直接复用。</p></section>
+        <div className="lumen-band grow" data-testid="materials-list">
+          <div className="lumen-band-h">
+            <h2>素材库</h2>
+            <span className="lumen-chip">0</span>
+          </div>
+          <div className="lumen-fill">
+            还没有素材。先「丢一条」真实经历、链接或图片，后续项目可以直接复用。
+          </div>
+        </div>
       )}
-    </PageContainer>
+    </div>
   );
 }
