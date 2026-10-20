@@ -2,7 +2,7 @@
  * ContentPage：列表 + 项目屏（ProjectStagePage）对齐原型。
  * 旧工作台表单流已由确认卡/产物取代，对应旧断言已删并记录。
  */
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 

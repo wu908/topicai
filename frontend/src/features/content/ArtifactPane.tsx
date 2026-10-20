@@ -3,7 +3,7 @@
  * 页签：过程 / 稿 / 发布包 / 视频包 / bet对账。
  * 发布包接 PublishCheck 真数据；视频包按素材缺口诚实呈现（无假数据）。
  */
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import BetLockForm from './BetLockForm';
 import type { CalibrationWorkspace, Material, PublishCheck } from '@/types/contracts/v2/content';
 import { StageBar } from './StageMeter';
@@ -42,6 +42,8 @@ export default function ArtifactPane(props: {
   title: string;
   body: string;
   onBodyChange?: (v: string) => void;
+  /** 失焦时才提交，避免每敲一个字就建一个版本。 */
+  onBodyBlur?: (v: string) => void;
   onConfirmCandidate?: () => void;
   actions?: ReactNode;
   workspace?: CalibrationWorkspace | null;
@@ -59,20 +61,24 @@ export default function ArtifactPane(props: {
   const hypothesis = props.workspace?.publish_hypothesis ?? null;
   const publishRecord = props.workspace?.publish_record ?? null;
 
-  const loadCheck = useCallback(async () => {
-    if (!project?.id) return;
-    setCheckErr(null);
-    try {
-      const latest = await getLatestPublishCheck(project.id);
-      setCheck(latest ?? null);
-    } catch (e) {
-      setCheckErr(extractErrorMessage(e, '发前检查加载失败'));
-    }
-  }, [project?.id]);
+  const projectId = project?.id;
 
   useEffect(() => {
-    if (tab === 'publish' && project?.id) void loadCheck();
-  }, [tab, project?.id, loadCheck]);
+    if (tab !== 'publish' || !projectId) return;
+    let cancelled = false;
+    getLatestPublishCheck(projectId)
+      .then((latest) => {
+        if (cancelled) return;
+        setCheck(latest ?? null);
+        setCheckErr(null);
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) setCheckErr(extractErrorMessage(e, '发前检查加载失败'));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tab, projectId]);
 
   const runCheck = async () => {
     if (!project?.id || !version?.id) return;
@@ -155,6 +161,7 @@ export default function ArtifactPane(props: {
               value={props.body}
               disabled={!editable || !props.onBodyChange}
               onChange={(e) => props.onBodyChange?.(e.target.value)}
+              onBlur={(e) => props.onBodyBlur?.(e.target.value)}
               aria-label="稿正文"
             />
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
