@@ -259,11 +259,12 @@ describe('WorkspaceAiDock', () => {
     expect(screen.queryByText('已否决并记录原因。流程不会卡住：可以改稿，或稍后在「今日」继续。')).toBeNull();
   });
 
-  it('disables the confirm actions while the parent is busy', () => {
+  it('disables the confirm actions and the chat input while the parent is busy', () => {
     render(<WorkspaceAiDock workspace={workspace} busy />);
 
-    // props.busy 只用于确认卡（对话输入框由组件内部动作态控制）。
     expect(screen.getByRole('button', { name: '同意' })).toBeDisabled();
+    expect(screen.getByRole('textbox', { name: '对项目助手说话' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '发送' })).toBeDisabled();
   });
 
   it('wires draft edits and candidate confirmation to the parent', () => {

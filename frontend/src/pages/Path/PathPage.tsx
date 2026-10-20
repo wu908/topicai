@@ -49,6 +49,34 @@ const DEFAULT_PROFILE: ProfileField[] = [
   { key: 'tone', label: '语气', value: '', placeholder: '短句、可先结论、不端着' },
 ];
 
+/** 已确认解读的本机持久化 key；值为解读 value 的 JSON string[]。 */
+const ACCEPTED_STORAGE_KEY = 'topicai.path-accepted.v1';
+
+/**
+ * 安全读取已确认集合：storage 不可用、坏 JSON、类型不对都回落空，绝不让路径页崩。
+ * 仅本机持久化（见 confirmBenchmark 注释），换浏览器 / 清站点数据即丢。
+ */
+function readAcceptedBenchmarks(): string[] {
+  try {
+    const raw = window.localStorage.getItem(ACCEPTED_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((v): v is string => typeof v === 'string');
+  } catch {
+    return [];
+  }
+}
+
+/** 写失败（隐私模式 / 配额满）只影响持久化，不影响本次确认。 */
+function writeAcceptedBenchmarks(values: string[]): void {
+  try {
+    window.localStorage.setItem(ACCEPTED_STORAGE_KEY, JSON.stringify(values));
+  } catch {
+    // 写不进去就算了：确认态本次会话内仍有效。
+  }
+}
+
 type BenchRow = {
   key: string;
   title: string;
@@ -91,7 +119,7 @@ export default function PathPage() {
   const navigate = useNavigate();
   const [profile, setProfile] = useState<ProfileField[]>(DEFAULT_PROFILE);
   const [anchor, setAnchor] = useState<ReferenceAnchor | null>(null);
-  const [accepted, setAccepted] = useState<Record<string, boolean>>({});
+  const [acceptedValues, setAcceptedValues] = useState<string[]>(readAcceptedBenchmarks);
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
@@ -204,9 +232,18 @@ export default function PathPage() {
     }
   };
 
-  /** 确认一条解读：写入 accepted（本地确认态）；拒绝走 anchor.rejected。 */
-  const confirmBenchmark = (key: string) => {
-    setAccepted((prev) => ({ ...prev, [key]: true }));
+  /**
+   * 确认一条解读：同时更新 state 与 localStorage，刷新 / 切页后仍在（按 value 标识）。
+   * 边界：只做本机持久化，换浏览器或清站点数据即丢；后端 reference_anchors 没有 accepted
+   * 字段，加字段需 DB migration，本轮不做，因此不跨设备同步。
+   * rejected / 锚点重推后消失的 value 留在集合里无害，不必清理。
+   */
+  const confirmBenchmark = (item: AnchorItem) => {
+    const next = acceptedValues.includes(item.value)
+      ? acceptedValues
+      : [...acceptedValues, item.value];
+    setAcceptedValues(next);
+    writeAcceptedBenchmarks(next);
     setNotice('已确认这条解读。');
   };
 
@@ -438,13 +475,13 @@ export default function PathPage() {
                       </div>
                     )}
                   </div>
-                  {row.item && !accepted[row.key] ? (
+                  {row.item && !acceptedValues.includes(row.item.value) ? (
                     <>
                       <button
                         type="button"
                         className="lumen-btn sm"
                         disabled={busy}
-                        onClick={() => confirmBenchmark(row.key)}
+                        onClick={() => confirmBenchmark(row.item!)}
                       >
                         确认
                       </button>
@@ -457,7 +494,7 @@ export default function PathPage() {
                         不收
                       </button>
                     </>
-                  ) : row.item && accepted[row.key] ? (
+                  ) : row.item && acceptedValues.includes(row.item.value) ? (
                     <span className="lumen-chip on">已确认</span>
                   ) : (
                     <button

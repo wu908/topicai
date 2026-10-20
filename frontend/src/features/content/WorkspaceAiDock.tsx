@@ -190,7 +190,7 @@ export default function WorkspaceAiDock(props: {
         <ProjectChat
           messages={messages}
           confirmCard={confirmCard}
-          busy={busy}
+          busy={busy || props.busy}
           onSend={handleSend}
           projectName={project?.title}
         />

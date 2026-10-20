@@ -58,8 +58,11 @@ export default function ProjectAssistantBar(props: { projectName?: string }) {
   const [id, setId] = useState<AiIdentity>(() => loadIdentities().project);
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const [draftName, setDraftName] = useState(id.name);
-  const subtitle = props.projectName
-    ? `项目助手 · 只处理「${props.projectName.slice(0, 10)}…」`
+  const projectName = props.projectName;
+  const subtitle = projectName
+    ? `项目助手 · 只处理「${
+        projectName.length > 10 ? `${projectName.slice(0, 10)}…` : projectName
+      }」`
     : '项目助手 · 只处理这一条内容';
 
   useEffect(() => {

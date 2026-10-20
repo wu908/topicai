@@ -14,6 +14,7 @@ export default function TodayQueue() {
   const navigate = useNavigate();
   const [rows, setRows] = useState<ContentProject[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let alive = true;
@@ -25,12 +26,22 @@ export default function TodayQueue() {
       })
       .catch(() => {
         if (alive) setError('待决列表加载失败，可到「内容」里查看。');
+      })
+      .finally(() => {
+        if (alive) setLoading(false);
       });
     return () => {
       alive = false;
     };
   }, []);
 
+  if (loading) {
+    return (
+      <p className="pg-sub" aria-busy="true">
+        正在读取待决列表…
+      </p>
+    );
+  }
   if (error) {
     return (
       <p className="pg-sub" role="alert">

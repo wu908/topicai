@@ -86,7 +86,15 @@ export default function GlobalAIPanel() {
 
   return (
     <>
-      <div className={`ai-panel${open ? ' open' : ''}`} role="dialog" aria-label="全局 AI 助手" aria-hidden={!open}>
+      <div
+        className={`ai-panel${open ? ' open' : ''}`}
+        role="dialog"
+        aria-label="全局 AI 助手"
+        aria-hidden={!open}
+        // inert 让关闭状态的面板整棵子树不可聚焦/不可点中，
+        // 只设 aria-hidden 时输入框仍能被 Tab 到。
+        inert={!open}
+      >
         <div className="ai-panel-h">
           <Avatar identity={identity} />
           <div className="ai-name-wrap">
@@ -136,6 +144,7 @@ export default function GlobalAIPanel() {
           <div className="ai-input-row">
             <input
               id="aiInput"
+              aria-label="给全局助手下指令"
               placeholder="记一条灵感，或让我帮你操作（如：把番茄钟标为待对账）…"
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
@@ -151,7 +160,16 @@ export default function GlobalAIPanel() {
             </button>
           </div>
           <div className="ai-tools">
-            <button type="button" className="ai-tool">
+            <button
+              type="button"
+              className="ai-tool"
+              onClick={() =>
+                setLog((l) => [
+                  ...l,
+                  { role: 'ai', text: '附件还在开发中。现在可以直接打字，或把链接、图片地址贴进来。' },
+                ])
+              }
+            >
               ＋ 附件
             </button>
             <button
@@ -167,7 +185,17 @@ export default function GlobalAIPanel() {
               语音
             </button>
             <span style={{ flex: 1 }} />
-            <button type="button" className="ai-tool" id="aiEditName">
+            <button
+              type="button"
+              className="ai-tool"
+              id="aiEditName"
+              onClick={() =>
+                setLog((l) => [
+                  ...l,
+                  { role: 'ai', text: '名称和头像请到左侧「设置 · 全局 AI」里改，这里只做展示。' },
+                ])
+              }
+            >
               改名字
             </button>
           </div>

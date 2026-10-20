@@ -1,4 +1,12 @@
 import '@testing-library/jest-dom';
+import { configure } from '@testing-library/react';
+
+/**
+ * Heavy MUI pages can take >1s to paint when 60+ files run in parallel on a
+ * loaded machine; Testing Library's 1s default then fails `findBy*` although
+ * the page is fine. Keep the same assertions, just wait a bit longer.
+ */
+configure({ asyncUtilTimeout: 3000 });
 
 /**
  * Node ≥ 22 暴露了一个实验性的 `localStorage` 全局：没有 `--localstorage-file` 时它的值是
