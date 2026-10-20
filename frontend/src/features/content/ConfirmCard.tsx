@@ -42,6 +42,10 @@ export default function ConfirmCard(props: ConfirmCardProps) {
   const [editText, setEditText] = useState(props.suggestion);
   const [rejectReason, setRejectReason] = useState('');
   const [done, setDone] = useState<null | 'ok' | 'chg' | 'no'>(null);
+  // 写入失败时必须留在可重试状态：不能因为点了按钮就显示"已确认"。
+  const [failed, setFailed] = useState<string | null>(null);
+
+  const fail = () => setFailed('这次没有保存成功，请重试。');
 
   const isStrip = props.variant === 'strip';
 
@@ -94,6 +98,11 @@ export default function ConfirmCard(props: ConfirmCardProps) {
           {props.title}。建议：{props.suggestion}
           {props.reason ? `。依据：${props.reason}` : ''}
         </div>
+        {failed ? (
+          <div className="hint" style={{ color: '#b4574e' }}>
+            {failed}
+          </div>
+        ) : null}
         {!editing && !rejecting ? (
           <div className="acts">
             <button
@@ -101,7 +110,11 @@ export default function ConfirmCard(props: ConfirmCardProps) {
               className="lumen-btn sm"
               disabled={props.busy}
               onClick={() => {
-                void Promise.resolve(props.onAgree()).then(() => setDone('ok'));
+                setFailed(null);
+                void Promise.resolve()
+                  .then(() => props.onAgree())
+                  .then(() => setDone('ok'))
+                  .catch(fail);
               }}
             >
               同意
@@ -128,7 +141,11 @@ export default function ConfirmCard(props: ConfirmCardProps) {
               className="lumen-btn sm"
               disabled={props.busy || !editText.trim()}
               onClick={() => {
-                void Promise.resolve(props.onChange?.(editText)).then(() => setDone('chg'));
+                setFailed(null);
+                void Promise.resolve()
+                  .then(() => props.onChange?.(editText))
+                  .then(() => setDone('chg'))
+                  .catch(fail);
               }}
             >
               存
@@ -153,7 +170,11 @@ export default function ConfirmCard(props: ConfirmCardProps) {
               className="lumen-btn sm"
               disabled={props.busy || !rejectReason.trim()}
               onClick={() => {
-                void Promise.resolve(props.onReject?.(rejectReason.trim())).then(() => setDone('no'));
+                setFailed(null);
+                void Promise.resolve()
+                  .then(() => props.onReject?.(rejectReason.trim()))
+                  .then(() => setDone('no'))
+                  .catch(fail);
               }}
             >
               确认
@@ -187,11 +208,20 @@ export default function ConfirmCard(props: ConfirmCardProps) {
         AI 建议：{props.suggestion}
         {props.reason ? `（依据：${props.reason}）` : ''}
       </Typography>
+      {failed ? (
+        <Typography variant="body2" role="status" sx={{ color: 'error.main', mt: 0.75 }}>
+          {failed}
+        </Typography>
+      ) : null}
 
       {!editing && !rejecting ? (
         <Stack direction="row" spacing={1} sx={{ mt: 1.5 }}>
           <Button size="small" variant="contained" disabled={props.busy} onClick={() => {
-            void Promise.resolve(props.onAgree()).then(() => setDone('ok'));
+            setFailed(null);
+            void Promise.resolve()
+              .then(() => props.onAgree())
+              .then(() => setDone('ok'))
+              .catch(fail);
           }}>
             同意
           </Button>
@@ -224,7 +254,11 @@ export default function ConfirmCard(props: ConfirmCardProps) {
               variant="contained"
               disabled={props.busy || !editText.trim()}
               onClick={() => {
-                void Promise.resolve(props.onChange?.(editText)).then(() => setDone('chg'));
+                setFailed(null);
+                void Promise.resolve()
+                  .then(() => props.onChange?.(editText))
+                  .then(() => setDone('chg'))
+                  .catch(fail);
               }}
             >
               保存并确认
@@ -253,7 +287,11 @@ export default function ConfirmCard(props: ConfirmCardProps) {
               variant="contained"
               disabled={props.busy || !rejectReason.trim()}
               onClick={() => {
-                void Promise.resolve(props.onReject?.(rejectReason.trim())).then(() => setDone('no'));
+                setFailed(null);
+                void Promise.resolve()
+                  .then(() => props.onReject?.(rejectReason.trim()))
+                  .then(() => setDone('no'))
+                  .catch(fail);
               }}
             >
               确认否决

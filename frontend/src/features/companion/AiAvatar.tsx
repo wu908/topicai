@@ -20,8 +20,10 @@ export default function AiAvatar(props: {
           height: size,
           borderRadius: '50%',
           flexShrink: 0,
-          background: identity.avatar ? undefined : avatarStyle(identity),
-          backgroundImage: identity.avatar ? `url(${identity.avatar})` : undefined,
+          // 头像与光晕都走 background-image，避免简写相互覆盖。
+          backgroundImage: identity.avatar
+            ? `url(${identity.avatar})`
+            : avatarStyle(identity),
           backgroundSize: 'cover',
           backgroundPosition: 'center',
           border: '1px solid rgba(255,255,255,0.9)',

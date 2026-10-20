@@ -4,28 +4,41 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  getUserSettings,
-  updateUserSettings,
-} from '@/services/api/v2/projects';
+import { getUserSettings } from '@/services/api/v2/projects';
 import {
   getReferenceAnchor,
   updateReferenceAnchor,
 } from '@/services/api/v2/referenceAnchor';
 import {
+  getPathProfile,
+  updatePathProfile,
   proposePathRevision,
   listExplorationSlots,
   type ExplorationSlot,
+  type PathProfile,
 } from '@/services/api/v2/pathProfile';
-import type { UserSettings } from '@/types/contracts/v2/content';
 import type { AnchorItem, ReferenceAnchor } from '@/types/contracts/v2/referenceAnchor';
 import { extractErrorMessage } from '@/utils/error';
 
+type ProfileKey = 'want' | 'publish' | 'avoid' | 'pace' | 'tone';
+
 type ProfileField = {
-  key: string;
+  key: ProfileKey;
   label: string;
   value: string;
   placeholder: string;
+};
+
+/** 展示字段 → /path-profile 落库字段。 */
+const API_FIELD: Record<
+  ProfileKey,
+  'statement' | 'publish_focus' | 'avoid' | 'cadence' | 'tone'
+> = {
+  want: 'statement',
+  publish: 'publish_focus',
+  avoid: 'avoid',
+  pace: 'cadence',
+  tone: 'tone',
 };
 
 const DEFAULT_PROFILE: ProfileField[] = [
@@ -84,28 +97,40 @@ export default function PathPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [settings, setSettings] = useState<UserSettings | null>(null);
+  const [profileVersion, setProfileVersion] = useState<number | null>(null);
   const [slots, setSlots] = useState<ExplorationSlot[]>([]);
   const [proposals, setProposals] = useState<
     Array<{ field: string; proposed: string; reason: string }>
   >([]);
 
   const load = useCallback(async () => {
-    try {
-      const s = await getUserSettings();
-      setSettings(s);
-      const strategy = s.content_strategy || '';
+    // path profile 是画像的唯一写入源；settings 只在字段为空时做显示回退。
+    const [profileResult, settingsResult] = await Promise.allSettled([
+      getPathProfile(),
+      getUserSettings(),
+    ]);
+    if (profileResult.status === 'fulfilled') {
+      const pp = profileResult.value;
+      setProfile((prev) => prev.map((f) => ({ ...f, value: pp[API_FIELD[f.key]] })));
+      setProfileVersion(pp.version);
+    } else {
+      setError(extractErrorMessage(profileResult.reason, '路径画像加载失败'));
+    }
+    if (settingsResult.status === 'fulfilled') {
+      const s = settingsResult.value;
+      // 旧数据只把这两项存在 settings 里：仅用于空字段的显示，不回写。
       setProfile((prev) =>
         prev.map((f) => {
-          if (f.key === 'want' && strategy) return { ...f, value: strategy };
+          if (f.value) return f;
+          if (f.key === 'want' && s.content_strategy) {
+            return { ...f, value: s.content_strategy };
+          }
           if (f.key === 'pace' && s.weekly_publish_goal) {
             return { ...f, value: `每周 ${s.weekly_publish_goal} 条` };
           }
           return f;
         }),
       );
-    } catch (e) {
-      setError(extractErrorMessage(e, '路径画像加载失败'));
     }
   }, []);
 
@@ -151,39 +176,31 @@ export default function PathPage() {
     return () => window.clearTimeout(t);
   }, [load, loadAnchor]);
 
-  const saveField = async (key: string, value: string) => {
-    if (!settings) return;
+  const saveField = async (key: ProfileKey, value: string) => {
+    if (profileVersion === null) {
+      setError('路径画像还没加载好，请稍后再试。');
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
-      setProfile((prev) => prev.map((f) => (f.key === key ? { ...f, value } : f)));
-      // 想做成 → content_strategy；节奏里的数字 → weekly_publish_goal。
-      const goalMatch = value.match(/(\d+)/);
-      await updateUserSettings({
-        weekly_publish_goal:
-          key === 'pace' && goalMatch ? Number(goalMatch[1]) : settings.weekly_publish_goal,
-        content_strategy: key === 'want' ? value : settings.content_strategy,
-        consent: settings.consent ?? {},
-        auto_digest_enabled: settings.auto_digest_enabled,
-        expected_version: settings.version,
-      });
-      setSettings((s) =>
-        s
-          ? {
-              ...s,
-              content_strategy: key === 'want' ? value : s.content_strategy,
-              weekly_publish_goal:
-                key === 'pace' && goalMatch ? Number(goalMatch[1]) : s.weekly_publish_goal,
-              version: s.version + 1,
-            }
-          : s,
+      const patch: Partial<PathProfile> & { expected_version: number } = {
+        expected_version: profileVersion,
+      };
+      patch[API_FIELD[key]] = value;
+      const saved = await updatePathProfile(patch);
+      // 以服务端返回为准：成功才更新本地值与版本，失败不动字段值。
+      setProfileVersion(saved.version);
+      setProfile((prev) =>
+        prev.map((f) => (f.key === key ? { ...f, value: saved[API_FIELD[key]] } : f)),
       );
+      setEditing(null);
       setNotice('已保存。');
     } catch (e) {
+      // 失败保留编辑态：用户写的内容不丢，也不显示假成功。
       setError(extractErrorMessage(e, '保存失败，请重试'));
     } finally {
       setBusy(false);
-      setEditing(null);
     }
   };
 
@@ -297,7 +314,7 @@ export default function PathPage() {
                         aria-label={f.label}
                         onChange={(e) => setDraft(e.target.value)}
                         onKeyDown={(e) => {
-                          if (e.key === 'Enter') void saveField(f.key, draft.trim());
+                          if (e.key === 'Enter' && !busy) void saveField(f.key, draft.trim());
                           if (e.key === 'Escape') setEditing(null);
                         }}
                       />
@@ -317,6 +334,7 @@ export default function PathPage() {
                     <div
                       className="title"
                       onClick={() => {
+                        if (busy) return;
                         setEditing(f.key);
                         setDraft(f.value);
                       }}
