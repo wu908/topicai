@@ -170,7 +170,7 @@ describe('ArtifactPane', () => {
         content: '内容',
         privacy_level: 'private',
         version: 1,
-        usages: [],
+        usages: [{ id: 'u1', project_id: 'p1', project_title: '第一版', used_at: '2026-09-01T08:00:00Z' }],
         created_at: '2026-09-01T08:00:00Z',
         updated_at: '2026-09-01T08:00:00Z',
       },
@@ -180,9 +180,9 @@ describe('ArtifactPane', () => {
     const meter = screen.getByTestId('stage-meter');
     expect(meter).toHaveAttribute('data-stage', '3');
     expect(screen.getByText('踩坑复盘')).toBeInTheDocument();
-    expect(screen.getByText('ready_to_publish')).toBeInTheDocument();
+    expect(screen.getByText('待发布')).toBeInTheDocument();
     expect(screen.getByText('v1')).toBeInTheDocument();
-    expect(screen.getByText('record_publication')).toBeInTheDocument();
+    expect(screen.getByText('记录已经发布')).toBeInTheDocument();
     expect(screen.getByText('已挂 1 件')).toBeInTheDocument();
   });
 
@@ -359,9 +359,9 @@ describe('ArtifactPane', () => {
 
   it('states the video material gap without inventing matched assets', () => {
     const materials: Material[] = [
-      { id: 'm1', title: '封面', kind: 'image', mime_type: 'image/png', size: 1, privacy_level: 'private', version: 1, usages: [], created_at: '', updated_at: '' },
-      { id: 'm2', title: '封面二', kind: 'image', mime_type: 'image/png', size: 1, privacy_level: 'private', version: 1, usages: [], created_at: '', updated_at: '' },
-      { id: 'm3', title: '口播', kind: 'audio', mime_type: 'audio/mpeg', size: 1, privacy_level: 'private', version: 1, usages: [], created_at: '', updated_at: '' },
+      { id: 'm1', title: '封面', kind: 'image', mime_type: 'image/png', size: 1, privacy_level: 'private', version: 1, usages: [{ id: 'u1', project_id: 'p1', project_title: '第一版', used_at: '' }], created_at: '', updated_at: '' },
+      { id: 'm2', title: '封面二', kind: 'image', mime_type: 'image/png', size: 1, privacy_level: 'private', version: 1, usages: [{ id: 'u2', project_id: 'p1', project_title: '第一版', used_at: '' }], created_at: '', updated_at: '' },
+      { id: 'm3', title: '口播', kind: 'audio', mime_type: 'audio/mpeg', size: 1, privacy_level: 'private', version: 1, usages: [{ id: 'u3', project_id: 'p1', project_title: '第一版', used_at: '' }], created_at: '', updated_at: '' },
     ];
     render(<ArtifactPane title="第一版" body="正文" workspace={workspace} materials={materials} />);
 

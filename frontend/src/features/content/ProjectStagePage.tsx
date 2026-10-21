@@ -13,7 +13,7 @@ import {
   createContentVersion,
 } from '@/services/api/v2/projects';
 import type { CalibrationWorkspace, Material } from '@/types/contracts/v2/content';
-import { extractErrorMessage } from '@/utils/error';
+import { extractErrorMessage, extractModelErrorMessage } from '@/utils/error';
 import { askCompanion } from '@/services/api/v2/companion';
 import StageMeter from './StageMeter';
 
@@ -74,7 +74,7 @@ export default function ProjectStagePage(props: {
         push({
           id: makeKey('ai'),
           role: 'assistant',
-          text: extractErrorMessage(e, '问模型失败，请稍后重试。'),
+          text: extractModelErrorMessage(e, '问模型失败，请稍后重试。'),
           source: '未能连接模型',
         });
       });
@@ -152,8 +152,48 @@ export default function ProjectStagePage(props: {
     [action, props],
   );
 
+  /** answer_key_question：用户补充一句真实细节，而不是"同意/否决"。 */
+  const answerQuestion = useCallback(
+    async (answer: string) => {
+      if (!action) return;
+      setBusy(true);
+      setErr(null);
+      try {
+        await respondToAction(action.id, {
+          decision: 'accept',
+          response_payload: { answer },
+          expected_action_version: action.version,
+          idempotency_key: makeKey('act-answer'),
+        });
+        push({
+          id: makeKey('ai'),
+          role: 'assistant',
+          text: '已补充。AI 正在准备候选内容。',
+          source: '已写入审计记录',
+        });
+        props.onChanged?.();
+      } catch (e) {
+        setErr(extractErrorMessage(e, '补充失败，请重试'));
+        throw e;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [action, props],
+  );
+
   const confirmCard = useMemo<ConfirmCardProps | null>(() => {
     if (!action || action.status === 'cancelled' || action.status === 'completed') return null;
+    if (action.action_type === 'answer_key_question' && !action.human_gate_type) {
+      return {
+        type: 'question',
+        title: action.title,
+        suggestion: action.reason ?? '',
+        reason: action.reason,
+        busy,
+        onAnswer: answerQuestion,
+      };
+    }
     const base = {
       title: action.title,
       suggestion: action.title,
@@ -184,7 +224,7 @@ export default function ProjectStagePage(props: {
       return { ...base, type: 'publish' as const, title: '发布前请确认' };
     }
     return { ...base, type: 'public_scope' as const };
-  }, [action, accept, busy, reject]);
+  }, [action, accept, answerQuestion, busy, reject]);
 
   // 输入只改本地；失焦/点「保存草稿」时才建版本，避免每敲一个字建一个版本。
   const handleBodyChange = (text: string) => {
@@ -194,7 +234,10 @@ export default function ProjectStagePage(props: {
 
   const commitDraft = async (text: string) => {
     setBody(text);
-    if (!project?.id || !project.current_version_id) return;
+    if (!project?.id || !project.current_version_id) {
+      setErr('还没有第一版稿：先完成上面的确认卡，AI 生成候选后再来改。');
+      return;
+    }
     if (savingDraftRef.current) return;
     if (text === savedBodyRef.current) {
       setDirty(false);
@@ -253,8 +296,13 @@ export default function ProjectStagePage(props: {
         <ArtifactPane
           title={version?.title || project?.title || ''}
           body={body}
-          onBodyChange={handleBodyChange}
-          onBodyBlur={(t) => void commitDraft(t)}
+          onBodyChange={version?.id ? handleBodyChange : undefined}
+          onBodyBlur={version?.id ? (t) => void commitDraft(t) : undefined}
+          draftHint={
+            version?.id
+              ? undefined
+              : '完成上面的确认卡后，AI 会先生成第一版稿；到那时再来改字。'
+          }
           workspace={props.workspace}
           materials={props.materials}
           actions={

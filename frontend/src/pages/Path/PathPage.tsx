@@ -49,6 +49,19 @@ const DEFAULT_PROFILE: ProfileField[] = [
   { key: 'tone', label: '语气', value: '', placeholder: '短句、可先结论、不端着' },
 ];
 
+/** 设置里的策略枚举不能直接当路径文案显示。 */
+const STRATEGY_LABELS: Record<string, string> = {
+  stable_publish: '稳定更新：先把发布节奏跑通',
+  follower_growth: '涨粉：让更多人看到',
+  experiment: '实验：试新方向',
+};
+
+const CAPABILITY_LABELS: Record<string, string> = {
+  structured_llm: '模型读取',
+  deterministic_fallback: '本地规则推导',
+  user_edited: '你手写的',
+};
+
 /** 已确认解读的服务端持久化：随锚点读数一起返回 accepted（见 /reference-anchor）。 */
 
 type BenchRow = {
@@ -125,7 +138,7 @@ export default function PathPage() {
         prev.map((f) => {
           if (f.value) return f;
           if (f.key === 'want' && s.content_strategy) {
-            return { ...f, value: s.content_strategy };
+            return { ...f, value: STRATEGY_LABELS[s.content_strategy] ?? s.content_strategy };
           }
           if (f.key === 'pace' && s.weekly_publish_goal) {
             return { ...f, value: `每周 ${s.weekly_publish_goal} 条` };
@@ -497,7 +510,9 @@ export default function PathPage() {
             )}
             <div className="lumen-fill">
               每条解读都注明来自哪几个样本；不抄写原文
-              {anchor?.capability ? ` · 读取：${anchor.capability}` : ''}
+              {anchor?.capability
+                ? ` · 读取：${CAPABILITY_LABELS[anchor.capability] ?? anchor.capability}`
+                : ''}
             </div>
           </div>
         </div>

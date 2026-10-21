@@ -9,7 +9,7 @@ import {
   type AiIdentity,
 } from './aiIdentity';
 import { askCompanion } from '@/services/api/v2/companion';
-import { extractErrorMessage } from '@/utils/error';
+import { extractModelErrorMessage } from '@/utils/error';
 
 /** 与 aiIdentity.toneStyles 同源的预览色 */
 const toneStyles: Record<'a' | 'b' | 'c' | 'd', string> = {
@@ -80,7 +80,7 @@ export default function GlobalAIPanel() {
         setLog((l) => [...l, { role: 'ai', text: answer }]);
       })
       .catch((e) => {
-        setLog((l) => [...l, { role: 'ai', text: extractErrorMessage(e, '连接模型失败，稍后重试') }]);
+        setLog((l) => [...l, { role: 'ai', text: extractModelErrorMessage(e, '连接模型失败，稍后重试') }]);
       });
   };
 

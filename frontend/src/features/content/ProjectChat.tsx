@@ -86,7 +86,7 @@ export default function ProjectChat(props: {
           <div className="msg-row">
             <Avatar id={id} size={32} />
             <div className="msg-col">
-              <div className="msg-name">{id.name || '项目助手'} · 项目助手</div>
+              <div className="msg-name">{id.name && id.name !== '项目助手' ? `${id.name} · 项目助手` : '项目助手'}</div>
               <div className="msg-body">
                 只处理这一条内容。你可以说「这段再短一点」或「先确认候选」。
                 {props.projectName ? (
@@ -109,7 +109,9 @@ export default function ProjectChat(props: {
                 )}
                 <div className="msg-col">
                   {!isMe ? (
-                    <div className="msg-name">{id.name || '项目助手'} · 项目助手</div>
+                    <div className="msg-name">
+                      {id.name && id.name !== '项目助手' ? `${id.name} · 项目助手` : '项目助手'}
+                    </div>
                   ) : null}
                   <div className="msg-body">
                     <div style={{ whiteSpace: 'pre-wrap' }}>{m.text}</div>
