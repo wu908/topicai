@@ -159,6 +159,12 @@ describe('SettingsPage', () => {
     expect(nameInput('pai')).toHaveValue('稿子助手');
     expect(textAreaIn('gai')).toHaveValue('称呼我「老板」，先给结论。');
     expect(textAreaIn('pai')).toHaveValue('只谈这条稿。');
+    // agent.md 长文本也要有可访问名。
+    expect(screen.getByLabelText('全局指令 agent.md')).toHaveValue('称呼我「老板」，先给结论。');
+    expect(screen.getByLabelText('项目指令 agent.md')).toHaveValue('只谈这条稿。');
+    // 未存过快捷键/语气时给默认值。
+    expect(selectByLabel('灵感快捷键')).toHaveValue('alt');
+    expect(selectByLabel('起草语气')).toHaveValue('same');
 
     const humanize = screen.getByRole('button', { name: '项目去AI味' });
     expect(humanize).toHaveTextContent('开');
@@ -449,15 +455,36 @@ describe('SettingsPage', () => {
     expect(await screen.findByText('复盘页')).toBeInTheDocument();
   });
 
-  it('acknowledges local-only preference changes without calling the API', async () => {
+  it('persists the shortcut and draft tone through the settings API', async () => {
     renderPage();
     await screen.findByText('默认内容形态');
 
     fireEvent.change(selectByLabel('灵感快捷键'), { target: { value: 'ball' } });
-    expect(await screen.findByText('已保存')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(api.updateUserSettings).toHaveBeenCalledWith(
+        expect.objectContaining({ product_prefs: { inspiration_shortcut: 'ball' } }),
+      ),
+    );
 
     fireEvent.change(selectByLabel('起草语气'), { target: { value: 'short' } });
-    expect(api.updateUserSettings).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(api.updateUserSettings).toHaveBeenLastCalledWith(
+        expect.objectContaining({ product_prefs: { draft_tone: 'short' } }),
+      ),
+    );
+  });
+
+  it('renders the stored shortcut and draft tone', async () => {
+    api.getUserSettings.mockResolvedValue(
+      makeSettings({
+        product_prefs: { ...BASE_PREFS, inspiration_shortcut: 'ball', draft_tone: 'long' },
+      }),
+    );
+    renderPage();
+    await screen.findByText('默认内容形态');
+
+    expect(selectByLabel('灵感快捷键')).toHaveValue('ball');
+    expect(selectByLabel('起草语气')).toHaveValue('long');
   });
 
   it('keeps the flash visible until the latest message expires', async () => {
@@ -470,6 +497,10 @@ describe('SettingsPage', () => {
       expect(screen.getByText('默认内容形态')).toBeInTheDocument();
 
       fireEvent.change(selectByLabel('灵感快捷键'), { target: { value: 'ball' } });
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
       expect(screen.getByText('已保存')).toBeInTheDocument();
 
       await act(async () => {
@@ -477,6 +508,10 @@ describe('SettingsPage', () => {
       });
       // 第二次提示会重置 1.8s 计时：旧计时器不能把新提示提前清掉。
       fireEvent.change(selectByLabel('起草语气'), { target: { value: 'short' } });
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
       await act(async () => {
         await vi.advanceTimersByTimeAsync(200);
       });

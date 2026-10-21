@@ -400,6 +400,7 @@ export default function SettingsPage() {
                     multiline
                     minRows={3}
                     fullWidth
+                    inputProps={{ 'aria-label': '全局指令 agent.md' }}
                     value={globalAgent}
                     onChange={(e) => setGlobalAgent(e.target.value)}
                     sx={{ my: 1.5, mx: 2, width: 'calc(100% - 32px)' }}
@@ -418,13 +419,17 @@ export default function SettingsPage() {
                     hint="按住说话或快捷唤起全局 AI"
                     control={
                       <Sel
-                        value="alt"
+                        value={settings?.product_prefs?.inspiration_shortcut ?? 'alt'}
                         ariaLabel="灵感快捷键"
                         options={[
                           { value: 'alt', label: 'Alt + Space' },
                           { value: 'ball', label: '仅悬浮球' },
                         ]}
-                        onChange={() => say('已保存')}
+                        onChange={(v) =>
+                          void save({
+                            product_prefs: { inspiration_shortcut: v as 'alt' | 'ball' },
+                          })
+                        }
                       />
                     }
                   />
@@ -485,6 +490,7 @@ export default function SettingsPage() {
                     multiline
                     minRows={3}
                     fullWidth
+                    inputProps={{ 'aria-label': '项目指令 agent.md' }}
                     value={projectAgent}
                     onChange={(e) => setProjectAgent(e.target.value)}
                     sx={{ my: 1.5, mx: 2, width: 'calc(100% - 32px)' }}
@@ -515,14 +521,18 @@ export default function SettingsPage() {
                     hint="影响项目助手怎么写稿（全局 AI 不受影响）"
                     control={
                       <Sel
-                        value="same"
+                        value={settings?.product_prefs?.draft_tone ?? 'same'}
                         ariaLabel="起草语气"
                         options={[
                           { value: 'same', label: '跟我平时一样' },
                           { value: 'short', label: '更短更利落' },
                           { value: 'long', label: '更详细' },
                         ]}
-                        onChange={() => say('已保存')}
+                        onChange={(v) =>
+                          void save({
+                            product_prefs: { draft_tone: v as 'same' | 'short' | 'long' },
+                          })
+                        }
                       />
                     }
                   />

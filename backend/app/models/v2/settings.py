@@ -28,6 +28,10 @@ class ProductPrefs(StrictModel):
     publish_check_level: str | None = Field(default=None, pattern="^(standard|strict|soft)$")
     # 人话化（去 AI 味）默认开；显式 False 才关（P2-F3）
     humanize_enabled: bool | None = None
+    # 全局 AI 唤起方式：Alt+Space 或只用悬浮球
+    inspiration_shortcut: str | None = Field(default=None, pattern="^(alt|ball)$")
+    # 项目助手起草语气（只影响项目内成稿，不影响全局 AI）
+    draft_tone: str | None = Field(default=None, pattern="^(same|short|long)$")
 
 
 class UserSettingsUpdate(StrictModel):
