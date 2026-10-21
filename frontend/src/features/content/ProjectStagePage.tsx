@@ -3,7 +3,7 @@
  * 左：应用导航（AppLayout）｜ 中：对话信息流 ｜ 右：过程·结果
  * 不再叠旧 workspace 侧栏/表单壳。
  */
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import ProjectChat, { type ChatMessage } from './ProjectChat';
 import ArtifactPane from './ArtifactPane';
 import type { ConfirmCardProps } from './ConfirmCard';
@@ -21,6 +21,15 @@ function makeKey(prefix: string) {
   return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+/** 同一段正文在重试时复用同一个幂等键，避免重复建版本。 */
+function hashText(text: string) {
+  let hash = 0;
+  for (let i = 0; i < text.length; i += 1) {
+    hash = (hash * 31 + text.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash).toString(36);
+}
+
 export default function ProjectStagePage(props: {
   workspace: CalibrationWorkspace | null;
   materials?: Material[];
@@ -29,7 +38,11 @@ export default function ProjectStagePage(props: {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [body, setBody] = useState('');
+  const [body, setBody] = useState(() => props.workspace?.current_version?.body_text ?? '');
+  const [dirty, setDirty] = useState(false);
+  const [savingDraft, setSavingDraft] = useState(false);
+  const savedBodyRef = useRef(props.workspace?.current_version?.body_text ?? '');
+  const savingDraftRef = useRef(false);
 
   const project = props.workspace?.project;
   const version = props.workspace?.current_version;
@@ -94,6 +107,8 @@ export default function ProjectStagePage(props: {
       props.onChanged?.();
     } catch (e) {
       setErr(extractErrorMessage(e, '确认失败，请重试'));
+      // ConfirmCard 需要感知失败，不能把"同意"当成已写入。
+      throw e;
     } finally {
       setBusy(false);
     }
@@ -129,6 +144,7 @@ export default function ProjectStagePage(props: {
         props.onChanged?.();
       } catch (e) {
         setErr(extractErrorMessage(e, '否决失败，请重试'));
+        throw e;
       } finally {
         setBusy(false);
       }
@@ -170,17 +186,32 @@ export default function ProjectStagePage(props: {
     return { ...base, type: 'public_scope' as const };
   }, [action, accept, busy, reject]);
 
-  const saveDraft = async (text: string) => {
+  // 输入只改本地；失焦/点「保存草稿」时才建版本，避免每敲一个字建一个版本。
+  const handleBodyChange = (text: string) => {
+    setBody(text);
+    setDirty(text !== savedBodyRef.current);
+  };
+
+  const commitDraft = async (text: string) => {
     setBody(text);
     if (!project?.id || !project.current_version_id) return;
-    setBusy(true);
+    if (savingDraftRef.current) return;
+    if (text === savedBodyRef.current) {
+      setDirty(false);
+      return;
+    }
+    savingDraftRef.current = true;
+    setSavingDraft(true);
+    setErr(null);
     try {
       await createContentVersion(project.id, {
         title: project.title || '草稿',
         body_text: text,
         expected_project_version: project.version,
-        idempotency_key: makeKey('ver'),
+        idempotency_key: `draft-${project.current_version_id}-${hashText(text)}`,
       });
+      savedBodyRef.current = text;
+      setDirty(false);
       push({
         id: makeKey('ai'),
         role: 'assistant',
@@ -191,7 +222,8 @@ export default function ProjectStagePage(props: {
     } catch (e) {
       setErr(extractErrorMessage(e, '保存失败，请重试'));
     } finally {
-      setBusy(false);
+      savingDraftRef.current = false;
+      setSavingDraft(false);
     }
   };
 
@@ -220,10 +252,26 @@ export default function ProjectStagePage(props: {
         />
         <ArtifactPane
           title={version?.title || project?.title || ''}
-          body={body || version?.body_text || ''}
-          onBodyChange={(t) => void saveDraft(t)}
+          body={body}
+          onBodyChange={handleBodyChange}
+          onBodyBlur={(t) => void commitDraft(t)}
           workspace={props.workspace}
           materials={props.materials}
+          actions={
+            <>
+              <span style={{ fontSize: 12, color: 'var(--lumen-muted)' }}>
+                {savingDraft ? '保存中…' : dirty ? '有未保存修改' : '已保存'}
+              </span>
+              <button
+                type="button"
+                className="lumen-btn sm"
+                disabled={savingDraft || !dirty}
+                onClick={() => void commitDraft(body)}
+              >
+                保存草稿
+              </button>
+            </>
+          }
         />
       </div>
       {err ? (

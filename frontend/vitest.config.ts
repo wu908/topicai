@@ -14,6 +14,10 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
+    // Heavy pages (GrowthOnboarding/Opportunities) can exceed vitest's 5s
+    // default when 60+ files run in parallel on a loaded machine. 10s keeps
+    // the assertion strict while removing the timing flake.
+    testTimeout: 10000,
     css: false,
     // Exclude Playwright E2E specs from vitest (they have their own runner).
     include: ['src/**/*.{test,spec}.{ts,tsx}'],

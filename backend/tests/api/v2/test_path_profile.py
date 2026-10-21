@@ -1,5 +1,7 @@
 """路径画像 API：GET/PUT 与版本乐观锁。"""
 
+from unittest.mock import patch
+
 
 async def test_path_profile_roundtrip(client):
     got = await client.get("/api/v2/path-profile")
@@ -27,8 +29,6 @@ async def test_path_profile_roundtrip(client):
     assert again.json()["data"]["statement"] == "把生活里的小实验讲清楚"
 
 """P3-B1：路径画像 AI 修订提案 —— 只提议，写入仍走 PUT。"""
-
-from unittest.mock import patch
 
 
 async def test_propose_revision_returns_field_proposals(client):

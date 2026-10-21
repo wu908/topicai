@@ -33,10 +33,11 @@ function ProjectAvatar(props: { identity: AiIdentity; size?: number }) {
         height: size,
         borderRadius: '50%',
         flexShrink: 0,
+        // 头像与光晕都走 background-image：避免 background 简写与
+        // backgroundSize/Position 混用，也避免 undefined 把图片重置掉。
         backgroundImage: identity.avatar
           ? `url(${identity.avatar})`
-          : undefined,
-        background: identity.avatar ? undefined : avatarStyle(identity),
+          : avatarStyle(identity),
         backgroundSize: 'cover',
         backgroundPosition: 'center',
         border: '1px solid rgba(255,255,255,0.9)',

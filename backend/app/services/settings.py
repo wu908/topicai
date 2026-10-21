@@ -11,7 +11,6 @@ from app.services.creator_state import CreatorStateService
 from app.services.v2_utils import now
 from config.settings import get_settings
 
-
 _AGENT_KEY = "agent_identity"
 _PRODUCT_KEY = "product_prefs"
 

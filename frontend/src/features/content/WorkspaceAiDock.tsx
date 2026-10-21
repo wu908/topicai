@@ -97,6 +97,8 @@ export default function WorkspaceAiDock(props: {
       props.onChanged?.();
     } catch (e) {
       setErr(extractErrorMessage(e, '确认失败，请重试'));
+      // ConfirmCard 需要感知失败，不能把"同意"当成已写入。
+      throw e;
     } finally {
       setBusy(false);
     }
@@ -132,6 +134,7 @@ export default function WorkspaceAiDock(props: {
         props.onChanged?.();
       } catch (e) {
         setErr(extractErrorMessage(e, '否决失败，请重试'));
+        throw e;
       } finally {
         setBusy(false);
       }
