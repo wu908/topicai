@@ -49,6 +49,8 @@ const DEFAULT_PROFILE: ProfileField[] = [
   { key: 'tone', label: '语气', value: '', placeholder: '短句、可先结论、不端着' },
 ];
 
+/** 已确认解读的服务端持久化：随锚点读数一起返回 accepted（见 /reference-anchor）。 */
+
 type BenchRow = {
   key: string;
   title: string;
@@ -91,7 +93,7 @@ export default function PathPage() {
   const navigate = useNavigate();
   const [profile, setProfile] = useState<ProfileField[]>(DEFAULT_PROFILE);
   const [anchor, setAnchor] = useState<ReferenceAnchor | null>(null);
-  const [accepted, setAccepted] = useState<Record<string, boolean>>({});
+  const [acceptedValues, setAcceptedValues] = useState<string[]>([]);
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
@@ -138,6 +140,8 @@ export default function PathPage() {
     try {
       const a = await getReferenceAnchor();
       setAnchor(a);
+      // 确认态以服务端为准：跨刷新/换设备保留。
+      setAcceptedValues(a.accepted ?? []);
     } catch {
       // 无参考是正常态；面板自己显示空
       setAnchor(null);
@@ -204,10 +208,27 @@ export default function PathPage() {
     }
   };
 
-  /** 确认一条解读：写入 accepted（本地确认态）；拒绝走 anchor.rejected。 */
-  const confirmBenchmark = (key: string) => {
-    setAccepted((prev) => ({ ...prev, [key]: true }));
-    setNotice('已确认这条解读。');
+  /**
+   * 确认一条解读：写服务端 accepted 集合（跨刷新/换设备保留），以返回值为准更新。
+   * 只累积记录、不冻结重推；rejected / 锚点重推后消失的 value 留在集合里无害。
+   */
+  const confirmBenchmark = async (item: AnchorItem) => {
+    if (!anchor || acceptedValues.includes(item.value)) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const next = await updateReferenceAnchor({
+        accepted: [...acceptedValues, item.value],
+        expected_version: anchor.version,
+      });
+      setAnchor(next);
+      setAcceptedValues(next.accepted ?? []);
+      setNotice('已确认这条解读。');
+    } catch (e) {
+      setError(extractErrorMessage(e, '确认失败，请重试'));
+    } finally {
+      setBusy(false);
+    }
   };
 
   const rejectBenchmark = async (item: AnchorItem) => {
@@ -438,13 +459,13 @@ export default function PathPage() {
                       </div>
                     )}
                   </div>
-                  {row.item && !accepted[row.key] ? (
+                  {row.item && !acceptedValues.includes(row.item.value) ? (
                     <>
                       <button
                         type="button"
                         className="lumen-btn sm"
                         disabled={busy}
-                        onClick={() => confirmBenchmark(row.key)}
+                        onClick={() => void confirmBenchmark(row.item!)}
                       >
                         确认
                       </button>
@@ -457,7 +478,7 @@ export default function PathPage() {
                         不收
                       </button>
                     </>
-                  ) : row.item && accepted[row.key] ? (
+                  ) : row.item && acceptedValues.includes(row.item.value) ? (
                     <span className="lumen-chip on">已确认</span>
                   ) : (
                     <button

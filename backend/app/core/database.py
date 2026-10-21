@@ -371,6 +371,11 @@ class Database:
                     )
                 elif version == "058_material_analysis":
                     await ensure_columns("materials", [("analysis_json", "TEXT")])
+                elif version == "059_reference_anchor_accepted":
+                    await ensure_columns(
+                        "reference_anchors",
+                        [("accepted_json", "TEXT NOT NULL DEFAULT '[]'")],
+                    )
                 elif version == "057_content_form":
                     await ensure_columns("deliverables", [("content_form", "TEXT")])
                     await ensure_columns("content_projects", [("content_form", "TEXT")])

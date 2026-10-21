@@ -46,3 +46,38 @@ def test_agent_identity_model_strips_none():
     assert prefs.model_dump(exclude_none=True) == {"global_name": "A"}
     product = ProductPrefs(memory_write_mode="manual")
     assert product.model_dump(exclude_none=True) == {"memory_write_mode": "manual"}
+
+
+async def test_settings_roundtrip_shortcut_and_draft_tone(client):
+    got = await client.get("/api/v2/settings")
+    version = got.json()["data"]["version"]
+
+    update = await client.put(
+        "/api/v2/settings",
+        json={
+            "expected_version": version,
+            "product_prefs": {
+                "inspiration_shortcut": "ball",
+                "draft_tone": "short",
+            },
+        },
+    )
+    assert update.status_code == 200
+    body = update.json()["data"]
+    assert body["product_prefs"]["inspiration_shortcut"] == "ball"
+    assert body["product_prefs"]["draft_tone"] == "short"
+
+    again = await client.get("/api/v2/settings")
+    persisted = again.json()["data"]
+    assert persisted["product_prefs"]["inspiration_shortcut"] == "ball"
+    assert persisted["product_prefs"]["draft_tone"] == "short"
+
+
+def test_product_prefs_rejects_unknown_shortcut_and_tone():
+    import pytest
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        ProductPrefs(inspiration_shortcut="cmd")
+    with pytest.raises(ValidationError):
+        ProductPrefs(draft_tone="sarcastic")

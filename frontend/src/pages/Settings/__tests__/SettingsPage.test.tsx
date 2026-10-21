@@ -1,11 +1,12 @@
 /**
  * SettingsPage：产品 / 全局 AI / 项目助手 / 记忆 / 隐私五个设置段。
- * 覆盖加载态、读取失败、每段回填、下拉即改即存（成功 / 失败 / 版本递增）、
- * 名称 blur 保存、agent.md 保存、去 AI 味开关、头像上传、段内跳转与本地偏好。
+ * 覆盖加载态、读取失败与重试、每段回填、下拉即改即存（成功 / 失败 / 版本递增）、
+ * 每周目标 1–7 契约、名称 blur 只在改名时保存、agent.md 保存、去 AI 味开关、
+ * 头像上传、段内跳转、SPA 导航、aria-label 与 flash 计时器。
  * 只 mock 设置接口，MUI 与 aiIdentity 走真实实现。
  */
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const api = vi.hoisted(() => ({
@@ -70,16 +71,12 @@ function sectionWrapper(id: SectionId): HTMLElement {
   return header.parentElement;
 }
 
-function controlIn(id: SectionId, label: string, selector: string): HTMLElement {
-  const row = within(sectionWrapper(id)).getByText(label).closest('.lumen-row');
-  if (!row) throw new Error(`找不到设置行 ${label}`);
-  const control = row.querySelector<HTMLElement>(selector);
-  if (!control) throw new Error(`设置行 ${label} 缺少 ${selector}`);
-  return control;
+function selectByLabel(label: string): HTMLSelectElement {
+  return screen.getByLabelText(label) as HTMLSelectElement;
 }
 
-function selectIn(id: SectionId, label: string): HTMLSelectElement {
-  return controlIn(id, label, 'select') as HTMLSelectElement;
+function nameInput(who: 'gai' | 'pai'): HTMLInputElement {
+  return screen.getByLabelText(who === 'gai' ? '全局助手名称' : '项目助手名称') as HTMLInputElement;
 }
 
 function textAreaIn(id: SectionId): HTMLTextAreaElement {
@@ -151,27 +148,44 @@ describe('SettingsPage', () => {
     );
     expect(screen.getByText('整站行为：形态、节奏、检查、对账提醒')).toBeInTheDocument();
 
-    expect(selectIn('prod', '默认内容形态')).toHaveValue('graphic_note');
-    expect(selectIn('prod', '每周目标')).toHaveValue('3');
-    expect(selectIn('prod', '发前检查')).toHaveValue('standard');
-    expect(selectIn('prod', '对账提醒')).toHaveValue('3');
-    expect(selectIn('mem', '写入方式')).toHaveValue('propose');
-    expect(selectIn('priv', '素材默认隐私')).toHaveValue('private');
+    expect(selectByLabel('默认内容形态')).toHaveValue('graphic_note');
+    expect(selectByLabel('每周目标')).toHaveValue('3');
+    expect(selectByLabel('发前检查')).toHaveValue('standard');
+    expect(selectByLabel('对账提醒')).toHaveValue('3');
+    expect(selectByLabel('写入方式')).toHaveValue('propose');
+    expect(selectByLabel('素材默认隐私')).toHaveValue('private');
 
-    expect(controlIn('gai', '名称', 'input.inp')).toHaveValue('小助手');
-    expect(controlIn('pai', '名称', 'input.inp')).toHaveValue('稿子助手');
+    expect(nameInput('gai')).toHaveValue('小助手');
+    expect(nameInput('pai')).toHaveValue('稿子助手');
     expect(textAreaIn('gai')).toHaveValue('称呼我「老板」，先给结论。');
     expect(textAreaIn('pai')).toHaveValue('只谈这条稿。');
+    // agent.md 长文本也要有可访问名。
+    expect(screen.getByLabelText('全局指令 agent.md')).toHaveValue('称呼我「老板」，先给结论。');
+    expect(screen.getByLabelText('项目指令 agent.md')).toHaveValue('只谈这条稿。');
+    // 未存过快捷键/语气时给默认值。
+    expect(selectByLabel('灵感快捷键')).toHaveValue('alt');
+    expect(selectByLabel('起草语气')).toHaveValue('same');
 
     const humanize = screen.getByRole('button', { name: '项目去AI味' });
     expect(humanize).toHaveTextContent('开');
     expect(humanize).toHaveAttribute('aria-pressed', 'true');
 
-    // 记忆段跳转到路径 / 复盘；隐私段提供导出与删除入口。
-    const links = within(sectionWrapper('mem')).getAllByRole('link', { name: '打开编辑' });
-    expect(links.map((link) => link.getAttribute('href'))).toEqual(['/path', '/review']);
+    // 记忆段两个入口是站内按钮（不再整页 href 跳转）；隐私段提供导出与删除入口。
+    const memButtons = within(sectionWrapper('mem')).getAllByRole('button', { name: '打开编辑' });
+    expect(memButtons).toHaveLength(2);
+    memButtons.forEach((button) => expect(button).not.toHaveAttribute('href'));
     expect(within(sectionWrapper('priv')).getByRole('button', { name: '导出…' })).toBeInTheDocument();
     expect(within(sectionWrapper('priv')).getByRole('button', { name: '申请删除…' })).toBeInTheDocument();
+  });
+
+  it('labels every select and both assistant name inputs for assistive tech', async () => {
+    renderPage();
+    await screen.findByText('默认内容形态');
+
+    ['默认内容形态', '每周目标', '发前检查', '对账提醒', '灵感快捷键', '起草语气', '写入方式', '素材默认隐私']
+      .forEach((label) => expect(selectByLabel(label)).toBeInstanceOf(HTMLSelectElement));
+    expect(nameInput('gai')).toBeInstanceOf(HTMLInputElement);
+    expect(nameInput('pai')).toBeInstanceOf(HTMLInputElement);
   });
 
   it('falls back to safe defaults when preferences and identities are missing', async () => {
@@ -179,50 +193,84 @@ describe('SettingsPage', () => {
     renderPage();
     await screen.findByText('默认内容形态');
 
-    expect(selectIn('prod', '默认内容形态')).toHaveValue('graphic_note');
-    expect(selectIn('prod', '发前检查')).toHaveValue('standard');
-    expect(selectIn('prod', '对账提醒')).toHaveValue('3');
-    expect(selectIn('mem', '写入方式')).toHaveValue('propose');
-    expect(selectIn('priv', '素材默认隐私')).toHaveValue('private');
+    expect(selectByLabel('默认内容形态')).toHaveValue('graphic_note');
+    expect(selectByLabel('发前检查')).toHaveValue('standard');
+    expect(selectByLabel('对账提醒')).toHaveValue('3');
+    expect(selectByLabel('写入方式')).toHaveValue('propose');
+    expect(selectByLabel('素材默认隐私')).toHaveValue('private');
     expect(screen.getByRole('button', { name: '项目去AI味' })).toHaveTextContent('开');
 
     // 没有服务端身份时用本地默认身份兜底。
-    expect(controlIn('gai', '名称', 'input.inp')).toHaveValue('阿洛');
-    expect(controlIn('pai', '名称', 'input.inp')).toHaveValue('项目助手');
+    expect(nameInput('gai')).toHaveValue('阿洛');
+    expect(nameInput('pai')).toHaveValue('项目助手');
     expect(textAreaIn('gai')).toHaveValue('');
     expect(textAreaIn('pai')).toHaveValue('');
   });
 
-  it('shows a load error and keeps controls inert', async () => {
-    api.getUserSettings.mockRejectedValue(new Error('设置读取失败'));
+  it('offers a retry when loading fails and recovers', async () => {
+    api.getUserSettings.mockRejectedValueOnce(new Error('设置读取失败'));
     renderPage();
 
     expect(await screen.findByRole('alert')).toHaveTextContent('设置读取失败');
+    const retry = screen.getByRole('button', { name: '重试' });
 
-    // 加载失败后 settings 为空：控件仍可操作，但保存会被静默跳过。
-    fireEvent.change(selectIn('prod', '默认内容形态'), { target: { value: 'vlog_plan' } });
-    fireEvent.change(selectIn('prod', '每周目标'), { target: { value: '1' } });
-    expect(api.updateUserSettings).not.toHaveBeenCalled();
+    api.getUserSettings.mockResolvedValue(makeSettings());
+    fireEvent.click(retry);
+
+    expect(await screen.findByText('默认内容形态')).toBeInTheDocument();
+    expect(api.getUserSettings).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 
-  it('saves a product preference and bumps the expected version', async () => {
+  it('explains that saving is blocked until settings load', async () => {
+    api.getUserSettings.mockRejectedValue(new Error('设置读取失败'));
+    renderPage();
+    expect(await screen.findByRole('alert')).toHaveTextContent('设置读取失败');
+
+    fireEvent.change(selectByLabel('默认内容形态'), { target: { value: 'vlog_plan' } });
+
+    // 不再静默 return：明确提示先重试加载，且重试入口仍在。
+    expect(api.updateUserSettings).not.toHaveBeenCalled();
+    expect(await screen.findByRole('alert')).toHaveTextContent('设置尚未加载，请先重试');
+    expect(screen.getByRole('button', { name: '重试' })).toBeInTheDocument();
+  });
+
+  it('lists all seven weekly goals and renders the backend default of 2', async () => {
+    api.getUserSettings.mockResolvedValue(makeSettings({ weekly_publish_goal: 2 }));
     renderPage();
     await screen.findByText('默认内容形态');
 
-    fireEvent.change(selectIn('prod', '默认内容形态'), { target: { value: 'vlog_plan' } });
+    const goal = selectByLabel('每周目标');
+    expect(goal).toHaveValue('2');
+    expect(Array.from(goal.options).map((option) => option.value)).toEqual([
+      '1', '2', '3', '4', '5', '6', '7',
+    ]);
+    expect(Array.from(goal.options).map((option) => option.label)).toEqual([
+      '每周 1 条', '每周 2 条', '每周 3 条', '每周 4 条', '每周 5 条', '每周 6 条', '每周 7 条',
+    ]);
+  });
+
+  it('saves the weekly goal as a number and uses the response version', async () => {
+    renderPage();
+    await screen.findByText('默认内容形态');
+
+    fireEvent.change(selectByLabel('每周目标'), { target: { value: '5' } });
 
     await waitFor(() =>
       expect(api.updateUserSettings).toHaveBeenCalledWith(
         expect.objectContaining({
-          product_prefs: { default_content_kind: 'vlog_plan' },
+          weekly_publish_goal: 5,
+          content_strategy: '稳定更新',
+          consent: {},
           expected_version: 1,
         }),
       ),
     );
     expect(await screen.findByText('已保存')).toBeInTheDocument();
+    // 保存后以服务端返回更新：下拉显示新的 5，且版本已递增。
+    await waitFor(() => expect(selectByLabel('每周目标')).toHaveValue('5'));
 
-    // 保存返回新 settings 后，下一次保存要带新的 expected_version。
-    fireEvent.change(selectIn('prod', '发前检查'), { target: { value: 'strict' } });
+    fireEvent.change(selectByLabel('发前检查'), { target: { value: 'strict' } });
     await waitFor(() =>
       expect(api.updateUserSettings).toHaveBeenLastCalledWith(
         expect.objectContaining({
@@ -233,42 +281,26 @@ describe('SettingsPage', () => {
     );
   });
 
-  it('saves the weekly goal through its own update path', async () => {
-    renderPage();
-    await screen.findByText('默认内容形态');
-
-    fireEvent.change(selectIn('prod', '每周目标'), { target: { value: '1' } });
-
-    await waitFor(() =>
-      expect(api.updateUserSettings).toHaveBeenCalledWith(
-        expect.objectContaining({
-          weekly_publish_goal: 1,
-          content_strategy: '稳定更新',
-          consent: {},
-          expected_version: 1,
-        }),
-      ),
-    );
-    expect(await screen.findByText('已保存')).toBeInTheDocument();
-  });
-
   it('reports a weekly goal save failure', async () => {
     api.updateUserSettings.mockRejectedValue(new Error('目标保存失败'));
     renderPage();
     await screen.findByText('默认内容形态');
 
-    fireEvent.change(selectIn('prod', '每周目标'), { target: { value: '1' } });
+    fireEvent.change(selectByLabel('每周目标'), { target: { value: '1' } });
 
     expect(await screen.findByRole('alert')).toHaveTextContent('目标保存失败');
   });
 
-  it('saves assistant names on blur', async () => {
+  it('only saves assistant names when they actually changed', async () => {
     renderPage();
     await screen.findByText('默认内容形态');
 
-    const gaiName = controlIn('gai', '名称', 'input.inp') as HTMLInputElement;
-    fireEvent.change(gaiName, { target: { value: '小洛' } });
-    fireEvent.blur(gaiName);
+    // 未改名 blur 不发请求。
+    fireEvent.blur(nameInput('gai'));
+    expect(api.updateUserSettings).not.toHaveBeenCalled();
+
+    fireEvent.change(nameInput('gai'), { target: { value: '小洛' } });
+    fireEvent.blur(nameInput('gai'));
     await waitFor(() =>
       expect(api.updateUserSettings).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -277,11 +309,14 @@ describe('SettingsPage', () => {
         }),
       ),
     );
-    await waitFor(() => expect(controlIn('gai', '名称', 'input.inp')).toHaveValue('小洛'));
+    await waitFor(() => expect(nameInput('gai')).toHaveValue('小洛'));
 
-    const paiName = controlIn('pai', '名称', 'input.inp') as HTMLInputElement;
-    fireEvent.change(paiName, { target: { value: '稿子' } });
-    fireEvent.blur(paiName);
+    // 保存返回后初始值同步为「小洛」，再次 blur 不应重复 PUT。
+    fireEvent.blur(nameInput('gai'));
+    expect(api.updateUserSettings).toHaveBeenCalledTimes(1);
+
+    fireEvent.change(nameInput('pai'), { target: { value: '稿子' } });
+    fireEvent.blur(nameInput('pai'));
     await waitFor(() =>
       expect(api.updateUserSettings).toHaveBeenLastCalledWith(
         expect.objectContaining({ agent_identity: { project_name: '稿子' } }),
@@ -386,36 +421,130 @@ describe('SettingsPage', () => {
     expect(scrollSpy).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' });
   });
 
-  it('acknowledges local-only preference changes without calling the API', async () => {
+  it('navigates to the path profile inside the SPA', async () => {
+    render(
+      <MemoryRouter initialEntries={['/settings']}>
+        <Routes>
+          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/path" element={<div>路径页</div>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    await screen.findByText('默认内容形态');
+
+    fireEvent.click(within(sectionWrapper('mem')).getAllByRole('button', { name: '打开编辑' })[0]);
+
+    // 站内路由切换（MemoryRouter 不触发整页刷新），目标页渲染出来。
+    expect(await screen.findByText('路径页')).toBeInTheDocument();
+    expect(screen.queryByText('默认内容形态')).toBeNull();
+  });
+
+  it('navigates to the review screen inside the SPA', async () => {
+    render(
+      <MemoryRouter initialEntries={['/settings']}>
+        <Routes>
+          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/review" element={<div>复盘页</div>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    await screen.findByText('默认内容形态');
+
+    fireEvent.click(within(sectionWrapper('mem')).getAllByRole('button', { name: '打开编辑' })[1]);
+
+    expect(await screen.findByText('复盘页')).toBeInTheDocument();
+  });
+
+  it('persists the shortcut and draft tone through the settings API', async () => {
     renderPage();
     await screen.findByText('默认内容形态');
 
-    fireEvent.change(selectIn('gai', '灵感快捷键'), { target: { value: 'ball' } });
-    expect(await screen.findByText('已保存')).toBeInTheDocument();
+    fireEvent.change(selectByLabel('灵感快捷键'), { target: { value: 'ball' } });
+    await waitFor(() =>
+      expect(api.updateUserSettings).toHaveBeenCalledWith(
+        expect.objectContaining({ product_prefs: { inspiration_shortcut: 'ball' } }),
+      ),
+    );
 
-    fireEvent.change(selectIn('pai', '起草语气'), { target: { value: 'short' } });
-    expect(api.updateUserSettings).not.toHaveBeenCalled();
+    fireEvent.change(selectByLabel('起草语气'), { target: { value: 'short' } });
+    await waitFor(() =>
+      expect(api.updateUserSettings).toHaveBeenLastCalledWith(
+        expect.objectContaining({ product_prefs: { draft_tone: 'short' } }),
+      ),
+    );
+  });
+
+  it('renders the stored shortcut and draft tone', async () => {
+    api.getUserSettings.mockResolvedValue(
+      makeSettings({
+        product_prefs: { ...BASE_PREFS, inspiration_shortcut: 'ball', draft_tone: 'long' },
+      }),
+    );
+    renderPage();
+    await screen.findByText('默认内容形态');
+
+    expect(selectByLabel('灵感快捷键')).toHaveValue('ball');
+    expect(selectByLabel('起草语气')).toHaveValue('long');
+  });
+
+  it('keeps the flash visible until the latest message expires', async () => {
+    vi.useFakeTimers();
+    try {
+      renderPage();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(screen.getByText('默认内容形态')).toBeInTheDocument();
+
+      fireEvent.change(selectByLabel('灵感快捷键'), { target: { value: 'ball' } });
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(screen.getByText('已保存')).toBeInTheDocument();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1700);
+      });
+      // 第二次提示会重置 1.8s 计时：旧计时器不能把新提示提前清掉。
+      fireEvent.change(selectByLabel('起草语气'), { target: { value: 'short' } });
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(200);
+      });
+      expect(screen.getByText('已保存')).toBeInTheDocument();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1700);
+      });
+      expect(screen.queryByText('已保存')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('saves memory, reminder and privacy preferences', async () => {
     renderPage();
     await screen.findByText('默认内容形态');
 
-    fireEvent.change(selectIn('prod', '对账提醒'), { target: { value: '7' } });
+    fireEvent.change(selectByLabel('对账提醒'), { target: { value: '7' } });
     await waitFor(() =>
       expect(api.updateUserSettings).toHaveBeenCalledWith(
         expect.objectContaining({ product_prefs: { retro_reminder_days: 7 } }),
       ),
     );
 
-    fireEvent.change(selectIn('mem', '写入方式'), { target: { value: 'manual' } });
+    fireEvent.change(selectByLabel('写入方式'), { target: { value: 'manual' } });
     await waitFor(() =>
       expect(api.updateUserSettings).toHaveBeenLastCalledWith(
         expect.objectContaining({ product_prefs: { memory_write_mode: 'manual' } }),
       ),
     );
 
-    fireEvent.change(selectIn('priv', '素材默认隐私'), { target: { value: 'public' } });
+    fireEvent.change(selectByLabel('素材默认隐私'), { target: { value: 'public' } });
     await waitFor(() =>
       expect(api.updateUserSettings).toHaveBeenLastCalledWith(
         expect.objectContaining({ product_prefs: { default_material_privacy: 'public' } }),
@@ -423,14 +552,16 @@ describe('SettingsPage', () => {
     );
   });
 
-  it('reports a generic save failure', async () => {
+  it('reports a generic save failure without a retry action', async () => {
     api.updateUserSettings.mockRejectedValue(new Error('网络不可用'));
     renderPage();
     await screen.findByText('默认内容形态');
 
-    fireEvent.change(selectIn('prod', '默认内容形态'), { target: { value: 'vlog_plan' } });
+    fireEvent.change(selectByLabel('默认内容形态'), { target: { value: 'vlog_plan' } });
 
     expect(await screen.findByRole('alert')).toHaveTextContent('网络不可用');
+    // 设置已加载：保存失败只提示错误，不出现「重试加载」按钮。
+    expect(screen.queryByRole('button', { name: '重试' })).toBeNull();
   });
 
   it('disables instruction saves while a request is in flight', async () => {

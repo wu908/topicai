@@ -209,13 +209,14 @@ describe('BetLockForm', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('锁定判断失败，请重试');
   });
 
-  it('does nothing before the workspace has loaded', async () => {
+  it('explains instead of staying silent before the workspace has loaded', async () => {
     render(<BetLockForm workspace={null} />);
 
     fillBet('收藏会多于点赞');
     fireEvent.click(screen.getByRole('button', { name: '锁定判断' }));
 
-    await waitFor(() => expect(screen.queryByRole('button', { name: '锁定中…' })).not.toBeInTheDocument());
+    expect(await screen.findByRole('alert')).toHaveTextContent('项目还没加载好，请刷新后再试。');
+    expect(screen.queryByRole('button', { name: '锁定中…' })).not.toBeInTheDocument();
     expect(lockPublishHypothesisMock).not.toHaveBeenCalled();
   });
 });

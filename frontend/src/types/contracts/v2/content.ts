@@ -337,6 +337,10 @@ export interface ProductPrefs {
   publish_check_level?: 'standard' | 'strict' | 'soft' | null;
   /** 人话化（去 AI 味）默认开 */
   humanize_enabled?: boolean | null;
+  /** 全局 AI 唤起方式：Alt+Space 或只用悬浮球 */
+  inspiration_shortcut?: 'alt' | 'ball' | null;
+  /** 项目助手起草语气（只影响项目内成稿） */
+  draft_tone?: 'same' | 'short' | 'long' | null;
 }
 
 export interface UserSettings {

@@ -78,6 +78,30 @@ describe('TodayQueue', () => {
     );
   });
 
+  it('shows a busy placeholder instead of the empty state while the list is loading', async () => {
+    let resolveList!: (value: ContentProject[]) => void;
+    listProjectsMock.mockReturnValue(
+      new Promise<ContentProject[]>((resolve) => {
+        resolveList = resolve;
+      }),
+    );
+
+    render(<TodayQueue />);
+
+    const placeholder = screen.getByText('正在读取待决列表…');
+    expect(placeholder).toHaveAttribute('aria-busy', 'true');
+    expect(
+      screen.queryByText('今天没有等你决定的事。可以「只记下来」或去内容里看看。'),
+    ).not.toBeInTheDocument();
+
+    resolveList([]);
+
+    expect(
+      await screen.findByText('今天没有等你决定的事。可以「只记下来」或去内容里看看。'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('正在读取待决列表…')).not.toBeInTheDocument();
+  });
+
   it('lists only the projects that need the user, with the shared next-action copy', async () => {
     listProjectsMock.mockResolvedValue([
       makeProject({ id: 'p1', title: '阳台种菜三十天', next_action: 'record_publication' }),

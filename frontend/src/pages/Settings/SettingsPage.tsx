@@ -2,7 +2,8 @@
  * 设置（整页）：产品 / 全局 AI / 项目助手 / 记忆 / 隐私
  * 短项即改即存；长文本（agent.md）点保存。
  */
-import { useCallback, useEffect, useState, type ChangeEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Alert,
   Button,
@@ -70,6 +71,7 @@ function Row(props: {
 }
 
 export default function SettingsPage() {
+  const navigate = useNavigate();
   const [section, setSection] = useState<SectionId>('prod');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -82,15 +84,36 @@ export default function SettingsPage() {
   const [globalAgent, setGlobalAgent] = useState('');
   const [projectAgent, setProjectAgent] = useState('');
 
+  // 名称的「加载时值」：只有真的改名才发 PUT，避免每次 blur 都写一遍。
+  const gaiInitialName = useRef('');
+  const paiInitialName = useRef('');
+  // flash 定时器要能被下一次 say 与卸载清理，避免旧计时器提前清掉新提示。
+  const flashTimer = useRef<number | null>(null);
+
   const say = (msg: string) => {
     setFlash(msg);
-    window.setTimeout(() => setFlash(null), 1800);
+    if (flashTimer.current !== null) window.clearTimeout(flashTimer.current);
+    flashTimer.current = window.setTimeout(() => {
+      flashTimer.current = null;
+      setFlash(null);
+    }, 1800);
   };
+
+  useEffect(
+    () => () => {
+      if (flashTimer.current !== null) window.clearTimeout(flashTimer.current);
+    },
+    [],
+  );
 
   const applyToIdentity = (s: UserSettings) => {
     const agent = s.agent_identity || {};
-    setGaiName(agent.global_name ?? loadIdentities().global.name);
-    setPaiName(agent.project_name ?? loadIdentities().project.name);
+    const nextGaiName = agent.global_name ?? loadIdentities().global.name;
+    const nextPaiName = agent.project_name ?? loadIdentities().project.name;
+    setGaiName(nextGaiName);
+    gaiInitialName.current = nextGaiName;
+    setPaiName(nextPaiName);
+    paiInitialName.current = nextPaiName;
     setGlobalAgent(agent.global_agent_md ?? '');
     setProjectAgent(agent.project_agent_md ?? '');
     if (agent.global_name || agent.global_avatar) {
@@ -131,13 +154,17 @@ export default function SettingsPage() {
   const save = async (patch: {
     agent_identity?: Record<string, unknown>;
     product_prefs?: Record<string, unknown>;
+    weekly_publish_goal?: number;
   }) => {
-    if (!settings) return;
+    if (!settings) {
+      setError('设置尚未加载，请先重试');
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
       const next = await updateUserSettings({
-        weekly_publish_goal: settings.weekly_publish_goal,
+        weekly_publish_goal: patch.weekly_publish_goal ?? settings.weekly_publish_goal,
         content_strategy: settings.content_strategy,
         xiaohongshu_account_reference: settings.xiaohongshu_account_reference ?? undefined,
         consent: settings.consent,
@@ -154,6 +181,16 @@ export default function SettingsPage() {
     } finally {
       setSaving(false);
     }
+  };
+
+  /** 名称 blur：值没变就不发请求（改名才走保存）。 */
+  const saveName = (who: 'gai' | 'pai') => {
+    const value = who === 'gai' ? gaiName : paiName;
+    const initial = who === 'gai' ? gaiInitialName.current : paiInitialName.current;
+    if (value === initial) return;
+    void save({
+      agent_identity: who === 'gai' ? { global_name: value } : { project_name: value },
+    });
   };
 
   const onAvatar = (who: 'gai' | 'pai') => (e: ChangeEvent<HTMLInputElement>) => {
@@ -199,7 +236,21 @@ export default function SettingsPage() {
         ) : null}
       </div>
 
-      {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
+      {error ? (
+        <Alert
+          severity="error"
+          sx={{ mb: 2 }}
+          action={
+            !settings ? (
+              <Button color="inherit" size="small" onClick={() => void load()}>
+                重试
+              </Button>
+            ) : undefined
+          }
+        >
+          {error}
+        </Alert>
+      ) : null}
 
       {/* 原型：单 band + chips 跳段 + 连续行 */}
       <div className="lumen-band grow">
@@ -245,6 +296,7 @@ export default function SettingsPage() {
                     control={
                       <Sel
                         value={settings?.product_prefs?.default_content_kind ?? 'graphic_note'}
+                        ariaLabel="默认内容形态"
                         options={[
                           { value: 'graphic_note', label: '图文' },
                           { value: 'vlog_plan', label: '视频 / vlog' },
@@ -259,31 +311,12 @@ export default function SettingsPage() {
                     control={
                       <Sel
                         value={String(settings?.weekly_publish_goal ?? 2)}
-                        options={[
-                          { value: '1', label: '1–2 条' },
-                          { value: '3', label: '3–4 条' },
-                          { value: '0', label: '不定' },
-                        ]}
-                        onChange={(v) => {
-                          if (!settings) return;
-                          void (async () => {
-                            setSaving(true);
-                            try {
-                              const next = await updateUserSettings({
-                                weekly_publish_goal: Number(v) || 1,
-                                content_strategy: settings.content_strategy,
-                                consent: settings.consent,
-                                expected_version: settings.version,
-                              });
-                              setSettings(next);
-                              say('已保存');
-                            } catch (e) {
-                              setError(extractErrorMessage(e, '保存失败'));
-                            } finally {
-                              setSaving(false);
-                            }
-                          })();
-                        }}
+                        ariaLabel="每周目标"
+                        options={[1, 2, 3, 4, 5, 6, 7].map((n) => ({
+                          value: String(n),
+                          label: `每周 ${n} 条`,
+                        }))}
+                        onChange={(v) => void save({ weekly_publish_goal: Number(v) })}
                       />
                     }
                   />
@@ -293,6 +326,7 @@ export default function SettingsPage() {
                     control={
                       <Sel
                         value={settings?.product_prefs?.publish_check_level ?? 'standard'}
+                        ariaLabel="发前检查"
                         options={[
                           { value: 'standard', label: '标准' },
                           { value: 'strict', label: '严格' },
@@ -308,6 +342,7 @@ export default function SettingsPage() {
                     control={
                       <Sel
                         value={String(settings?.product_prefs?.retro_reminder_days ?? 3)}
+                        ariaLabel="对账提醒"
                         options={[
                           { value: '3', label: '3 天' },
                           { value: '7', label: '7 天' },
@@ -331,8 +366,9 @@ export default function SettingsPage() {
                         type="text"
                         value={gaiName}
                         maxLength={12}
+                        aria-label="全局助手名称"
                         onChange={(e) => setGaiName(e.target.value)}
-                        onBlur={() => void save({ agent_identity: { global_name: gaiName } })}
+                        onBlur={() => saveName('gai')}
                       />
                     }
                   />
@@ -364,6 +400,7 @@ export default function SettingsPage() {
                     multiline
                     minRows={3}
                     fullWidth
+                    inputProps={{ 'aria-label': '全局指令 agent.md' }}
                     value={globalAgent}
                     onChange={(e) => setGlobalAgent(e.target.value)}
                     sx={{ my: 1.5, mx: 2, width: 'calc(100% - 32px)' }}
@@ -382,12 +419,17 @@ export default function SettingsPage() {
                     hint="按住说话或快捷唤起全局 AI"
                     control={
                       <Sel
-                        value="alt"
+                        value={settings?.product_prefs?.inspiration_shortcut ?? 'alt'}
+                        ariaLabel="灵感快捷键"
                         options={[
                           { value: 'alt', label: 'Alt + Space' },
                           { value: 'ball', label: '仅悬浮球' },
                         ]}
-                        onChange={() => say('已保存')}
+                        onChange={(v) =>
+                          void save({
+                            product_prefs: { inspiration_shortcut: v as 'alt' | 'ball' },
+                          })
+                        }
                       />
                     }
                   />
@@ -414,8 +456,9 @@ export default function SettingsPage() {
                         type="text"
                         value={paiName}
                         maxLength={12}
+                        aria-label="项目助手名称"
                         onChange={(e) => setPaiName(e.target.value)}
-                        onBlur={() => void save({ agent_identity: { project_name: paiName } })}
+                        onBlur={() => saveName('pai')}
                       />
                     }
                   />
@@ -447,6 +490,7 @@ export default function SettingsPage() {
                     multiline
                     minRows={3}
                     fullWidth
+                    inputProps={{ 'aria-label': '项目指令 agent.md' }}
                     value={projectAgent}
                     onChange={(e) => setProjectAgent(e.target.value)}
                     sx={{ my: 1.5, mx: 2, width: 'calc(100% - 32px)' }}
@@ -477,13 +521,18 @@ export default function SettingsPage() {
                     hint="影响项目助手怎么写稿（全局 AI 不受影响）"
                     control={
                       <Sel
-                        value="same"
+                        value={settings?.product_prefs?.draft_tone ?? 'same'}
+                        ariaLabel="起草语气"
                         options={[
                           { value: 'same', label: '跟我平时一样' },
                           { value: 'short', label: '更短更利落' },
                           { value: 'long', label: '更详细' },
                         ]}
-                        onChange={() => say('已保存')}
+                        onChange={(v) =>
+                          void save({
+                            product_prefs: { draft_tone: v as 'same' | 'short' | 'long' },
+                          })
+                        }
                       />
                     }
                   />
@@ -498,6 +547,7 @@ export default function SettingsPage() {
                     control={
                       <Sel
                         value={settings?.product_prefs?.memory_write_mode ?? 'propose'}
+                        ariaLabel="写入方式"
                         options={[
                           { value: 'propose', label: '提案制（推荐）' },
                           { value: 'auto', label: '自动写入' },
@@ -511,7 +561,7 @@ export default function SettingsPage() {
                     label="路径画像"
                     hint="我想成为谁、发什么、红线"
                     control={
-                      <Button variant="outlined" size="small" href="/path">
+                      <Button variant="outlined" size="small" onClick={() => navigate('/path')}>
                         打开编辑
                       </Button>
                     }
@@ -520,7 +570,7 @@ export default function SettingsPage() {
                     label="判断记忆 / 公式"
                     hint="复盘「收下」后才生效"
                     control={
-                      <Button variant="outlined" size="small" href="/review">
+                      <Button variant="outlined" size="small" onClick={() => navigate('/review')}>
                         打开编辑
                       </Button>
                     }
@@ -536,6 +586,7 @@ export default function SettingsPage() {
                     control={
                       <Sel
                         value={settings?.product_prefs?.default_material_privacy ?? 'private'}
+                        ariaLabel="素材默认隐私"
                         options={[
                           { value: 'private', label: '私密' },
                           { value: 'public', label: '可公开' },

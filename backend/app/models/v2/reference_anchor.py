@@ -41,6 +41,9 @@ class ReferenceAnchorView(StrictModel):
     #: 用户否证过的结论。被否证的不再出现，但记录保留——否则用户会看到同一个
     #: 错误结论反复出现，每次都得再否一次。
     rejected: list[str] = Field(default_factory=list)
+    #: 用户确认过的结论（解读 value）。确认是"这条我认了"，不是"冻结重推"：
+    #: 参考集变化后仍可重推，已确认过的同名结论保持已确认态。
+    accepted: list[str] = Field(default_factory=list)
     capability: Literal["structured_llm", "deterministic_fallback", "user_edited"] = (
         "deterministic_fallback"
     )
@@ -62,6 +65,8 @@ class ReferenceAnchorUpdate(StrictModel):
 
     #: 否证掉的结论。累计保留——否则用户每次重推都要再否一次。
     rejected: list[str] = Field(default_factory=list, max_length=20)
+    #: 确认过的结论（解读 value）。与 rejected 一样累计保留；只加不删。
+    accepted: list[str] = Field(default_factory=list, max_length=20)
     #: 自己重写的内容。留空表示"只是否证了几条，继续让参考说话"。
     topics: list[str] | None = Field(default=None, max_length=5)
     structure_habits: list[str] | None = Field(default=None, max_length=5)

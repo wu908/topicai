@@ -53,6 +53,26 @@ describe('GlobalAIPanel', () => {
     expect(screen.getByText(/全局操控/)).toBeInTheDocument();
   });
 
+  it('keeps the closed panel out of the tab order with inert', () => {
+    render(<GlobalAIPanel />);
+    const panel = screen.getByLabelText('全局 AI 助手');
+
+    expect(panel).toHaveAttribute('inert');
+    openPanel();
+    expect(panel).not.toHaveAttribute('inert');
+  });
+
+  it('answers the attachment and rename buttons instead of doing nothing', () => {
+    render(<GlobalAIPanel />);
+    openPanel();
+
+    fireEvent.click(screen.getByRole('button', { name: /附件/ }));
+    expect(screen.getByText(/附件还在开发中/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '改名字' }));
+    expect(screen.getByText(/名称和头像请到左侧「设置 · 全局 AI」里改/)).toBeInTheDocument();
+  });
+
   it('toggles with Alt+Space and closes on Escape', () => {
     render(<GlobalAIPanel />);
     const panel = screen.getByLabelText('全局 AI 助手');

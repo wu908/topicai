@@ -32,6 +32,7 @@ const anchor: ReferenceAnchor = {
   structure_habits: [],
   audience: null,
   rejected: [],
+  accepted: [],
   capability: 'structured_llm',
   limitations: [],
   version: 2,

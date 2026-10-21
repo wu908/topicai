@@ -1172,6 +1172,14 @@ def apply(
                     "materials",
                     [("analysis_json", "TEXT")],
                 )
+            elif version == "059_reference_anchor_accepted":
+                # 用户确认过的解读要跨刷新/换设备保留；只加一列，旧行默认 []。
+                _ensure_columns(
+                    conn,
+                    "reference_anchors",
+                    [("accepted_json", "TEXT NOT NULL DEFAULT '[]'")],
+                )
+                conn.executescript(sql)
             elif version == "057_content_form":
                 # 内容形态（开放字段，Step 1 只写不读）。两张表都要补。
                 _ensure_columns(

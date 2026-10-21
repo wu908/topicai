@@ -57,6 +57,13 @@ describe('ProjectAssistantBar', () => {
     expect(screen.getByText(/项目助手 · 只处理「一个特别长的项目名字…」/)).toBeInTheDocument();
   });
 
+  it('keeps a short project name intact without a trailing ellipsis', () => {
+    render(<ProjectAssistantBar projectName="阳台种菜" />);
+
+    expect(screen.getByText('项目助手 · 只处理「阳台种菜」')).toBeInTheDocument();
+    expect(screen.queryByText(/阳台种菜…/)).not.toBeInTheDocument();
+  });
+
   it('renames the project assistant from the edit popover and persists it', async () => {
     render(<ProjectAssistantBar />);
 

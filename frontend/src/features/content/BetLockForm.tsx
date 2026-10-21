@@ -24,7 +24,11 @@ export default function BetLockForm(props: {
     const ws = props.workspace;
     const projectId = ws?.project?.id;
     const versionId = ws?.project?.current_version_id;
-    if (!projectId || !versionId || busy) return;
+    if (!projectId || !versionId) {
+      setErr('项目还没加载好，请刷新后再试。');
+      return;
+    }
+    if (busy) return;
     if (!bet.trim()) {
       setErr('请先写一句你的判断，例如「收藏会多于点赞」。');
       return;

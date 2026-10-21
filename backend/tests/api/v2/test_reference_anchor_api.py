@@ -76,6 +76,54 @@ async def test_the_reading_survives_a_reload_and_can_be_rewritten(client):
 
 
 @pytest.mark.asyncio
+async def test_confirmed_readings_are_stored_on_the_server(client):
+    """确认态必须跨刷新/换设备保留：服务端累计记录，而不是只留在本机。"""
+    imported = await client.post(
+        "/api/v2/reference-imports",
+        json={
+            "method": "manual",
+            "items": [
+                _reference("12 平的出租屋，我按动线重排了三次", ["租房", "收纳"]),
+                _reference("搬了四次家之后，我只留这些东西", ["租房", "收纳"]),
+            ],
+            "idempotency_key": "anchor-accepted-1",
+        },
+    )
+    assert imported.status_code == 201
+
+    first = (await client.get("/api/v2/reference-anchor")).json()["data"]
+    assert first["accepted"] == []
+
+    confirmed = await client.put(
+        "/api/v2/reference-anchor",
+        json={"accepted": ["收纳"], "expected_version": first["version"]},
+    )
+    assert confirmed.status_code == 200
+    data = confirmed.json()["data"]
+    assert data["accepted"] == ["收纳"]
+    assert data["version"] == first["version"] + 1
+    # 只确认不冻结：继续从参考里读，topics 仍在。
+    assert [item["value"] for item in data["topics"]] == ["收纳", "租房"]
+
+    # 再确认一条：累计保留；stale version 仍然 409。
+    more = await client.put(
+        "/api/v2/reference-anchor",
+        json={"accepted": ["租房"], "expected_version": data["version"]},
+    )
+    assert more.status_code == 200
+    assert more.json()["data"]["accepted"] == ["收纳", "租房"]
+
+    reloaded = (await client.get("/api/v2/reference-anchor")).json()["data"]
+    assert reloaded["accepted"] == ["收纳", "租房"]
+
+    stale = await client.put(
+        "/api/v2/reference-anchor",
+        json={"accepted": ["收纳"], "expected_version": data["version"]},
+    )
+    assert stale.status_code == 409
+
+
+@pytest.mark.asyncio
 async def test_tagless_references_still_return_a_reading_not_a_400(client):
     """F25 回归（用户验收测试 2026-09-19）。
 

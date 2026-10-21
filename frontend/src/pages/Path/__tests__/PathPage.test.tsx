@@ -1,8 +1,8 @@
 /**
  * PathPage：路径画像 / 对标 · 解读须确认 / 探索位。
  * 覆盖加载回填（path profile + settings 显示回退）、5 个画像字段落库、
- * expected_version 递增、保存失败不假成功、AI 修订提案、确认与否证解读、
- * 手写对标字段、探索位状态与导航。
+ * expected_version 递增、保存失败不假成功、AI 修订提案、确认（服务端 accepted）与
+ * 否证解读、手写对标字段、探索位状态与导航。
  * 只 mock 接口与路由，页面本身真实渲染（MemoryRouter）。
  */
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -92,6 +92,7 @@ function makeAnchor(overrides: Partial<ReferenceAnchor> = {}): ReferenceAnchor {
     structure_habits: [makeItem('开头先给结论', 3)],
     audience: null,
     rejected: [],
+    accepted: [],
     capability: 'structured_llm',
     limitations: [],
     version: 1,
@@ -513,17 +514,53 @@ describe('PathPage', () => {
     expect(screen.getByText(/读取：deterministic_fallback/)).toBeInTheDocument();
   });
 
-  it('confirms an interpretation locally', async () => {
+  it('confirms an interpretation through the anchor API', async () => {
     renderPage();
     await screen.findByText('小户型收纳改造 · 2 条里都有 · 样本较少');
 
     fireEvent.click(screen.getAllByRole('button', { name: '确认' })[0]);
 
-    expect(screen.getByText('已确认这条解读。')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(anchorApi.updateReferenceAnchor).toHaveBeenCalledWith({
+        accepted: ['小户型收纳改造'],
+        expected_version: 1,
+      }),
+    );
+    expect(await screen.findByText('已确认这条解读。')).toBeInTheDocument();
     expect(screen.getByText('已确认')).toBeInTheDocument();
     // 已确认的行不再显示「确认 / 不收」，另一行仍可继续确认。
     expect(screen.getAllByRole('button', { name: '确认' })).toHaveLength(1);
     expect(screen.getAllByRole('button', { name: '不收' })).toHaveLength(1);
+  });
+
+  it('keeps the confirmed interpretation after remounting from the server state', async () => {
+    const first = renderPage();
+    await screen.findByText('小户型收纳改造 · 2 条里都有 · 样本较少');
+    fireEvent.click(screen.getAllByRole('button', { name: '确认' })[0]);
+    expect(await screen.findByText('已确认')).toBeInTheDocument();
+    first.unmount();
+
+    // 模拟刷新/切页再回：确认态来自服务端返回的 accepted，而不是本机缓存。
+    anchorApi.getReferenceAnchor.mockResolvedValue(
+      makeAnchor({ accepted: ['小户型收纳改造'], version: 2 }),
+    );
+    renderPage();
+    await screen.findByText('小户型收纳改造 · 2 条里都有 · 样本较少');
+    expect(screen.getByText('已确认')).toBeInTheDocument();
+    // 只剩结构行可确认。
+    expect(screen.getAllByRole('button', { name: '确认' })).toHaveLength(1);
+  });
+
+  it('surfaces a confirmation failure without faking the confirmed state', async () => {
+    anchorApi.updateReferenceAnchor.mockRejectedValue(new Error('确认接口挂了'));
+    renderPage();
+    await screen.findByText('小户型收纳改造 · 2 条里都有 · 样本较少');
+
+    fireEvent.click(screen.getAllByRole('button', { name: '确认' })[0]);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('确认接口挂了');
+    expect(screen.queryByText('已确认')).toBeNull();
+    expect(screen.getAllByRole('button', { name: '确认' })).toHaveLength(2);
   });
 
   it('rejects an interpretation through the anchor API', async () => {
