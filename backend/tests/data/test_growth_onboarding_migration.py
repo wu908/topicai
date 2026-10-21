@@ -14,7 +14,7 @@ def test_growth_onboarding_migration_is_replay_safe(tmp_path):
     first = apply(db_path, DEFAULT_MIGRATIONS_DIR)
     second = apply(db_path, DEFAULT_MIGRATIONS_DIR)
 
-    assert first[-1].version == "058_material_analysis"
+    assert first[-1].version == "059_reference_anchor_accepted"
     assert second == []
     with sqlite3.connect(db_path) as conn:
         tables = {
@@ -71,6 +71,7 @@ def test_growth_onboarding_migration_recovers_after_ddl_before_version_record(tm
         "056_digest_reader_draft",
         "057_content_form",
         "058_material_analysis",
+        "059_reference_anchor_accepted",
     ]
     assert replay == []
 

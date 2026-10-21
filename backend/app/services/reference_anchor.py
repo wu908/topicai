@@ -136,6 +136,7 @@ class ReferenceAnchorService:
             ],
             audience=AnchorItem.model_validate(audience) if audience else None,
             rejected=json.loads(row["rejected_json"]),
+            accepted=json.loads(row.get("accepted_json") or "[]"),
             capability=row["capability"],
             limitations=json.loads(row["limitations_json"]),
             version=row["version"],
@@ -148,6 +149,7 @@ class ReferenceAnchorService:
         self, owner: str, references: list[dict[str, Any]], stored: dict[str, Any] | None
     ) -> ReferenceAnchorView:
         rejected = json.loads(stored["rejected_json"]) if stored else []
+        accepted = json.loads(stored["accepted_json"]) if stored else []
         handles = sorted(
             {row["source_handle"] for row in references if row.get("source_handle")}
         )
@@ -192,6 +194,7 @@ class ReferenceAnchorService:
             "source_handles_json": json.dumps(handles, ensure_ascii=False),
             "reference_note_count": len(references),
             "capability": capability,
+            "accepted_json": json.dumps(accepted, ensure_ascii=False),
             "limitations_json": json.dumps(limitations, ensure_ascii=False),
             "ai_trace_id": trace_id,
             "updated_at": timestamp,
@@ -371,7 +374,7 @@ class ReferenceAnchorService:
     async def update(
         self, owner: str, body: ReferenceAnchorUpdate
     ) -> ReferenceAnchorView:
-        """改锚点：只否证 vs 自己重写，两种意图后果不同（见契约注释）。"""
+        """改锚点：只否证 / 只确认 / 自己重写，三种意图后果不同（见契约注释）。"""
         stored = await self.db.fetch_one(
             "SELECT * FROM reference_anchors WHERE owner_user_id=:owner", {"owner": owner}
         )
@@ -381,6 +384,8 @@ class ReferenceAnchorService:
             raise VersionConflictException(stored["version"], body.expected_version)
 
         rejected = sorted(set(json.loads(stored["rejected_json"])) | set(body.rejected))
+        # 确认只累积记录，不冻结重推：参考集变化后仍可重读，同名结论保持确认态。
+        accepted = sorted(set(json.loads(stored["accepted_json"])) | set(body.accepted))
         current = self._view(stored)
         rewrote = any(
             value is not None
@@ -425,6 +430,7 @@ class ReferenceAnchorService:
                     else None
                 ),
                 "rejected_json": json.dumps(rejected, ensure_ascii=False),
+                "accepted_json": json.dumps(accepted, ensure_ascii=False),
                 "capability": capability,
                 "version": stored["version"] + 1,
                 "updated_at": timestamp,

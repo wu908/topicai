@@ -152,6 +152,7 @@ def test_project_state_event_migration_recovers_after_ddl_before_version_record(
         "056_digest_reader_draft",
         "057_content_form",
         "058_material_analysis",
+        "059_reference_anchor_accepted",
     ]
     assert replay == []
 
@@ -185,6 +186,7 @@ def test_release_contract_migration_recovers_after_partial_ddl(tmp_path):
         "056_digest_reader_draft",
         "057_content_form",
         "058_material_analysis",
+        "059_reference_anchor_accepted",
     ]
     assert replay == []
 
@@ -219,6 +221,7 @@ def test_release_audit_migration_recovers_after_partial_ddl(tmp_path):
         "056_digest_reader_draft",
         "057_content_form",
         "058_material_analysis",
+        "059_reference_anchor_accepted",
     ]
     assert replay == []
     with sqlite3.connect(db_path) as conn:
@@ -272,6 +275,7 @@ def test_capability_trust_migration_recovers_after_ddl_before_version_record(tmp
         "056_digest_reader_draft",
         "057_content_form",
         "058_material_analysis",
+        "059_reference_anchor_accepted",
     ]
     assert replay == []
 
@@ -313,6 +317,7 @@ def test_unavailable_result_migration_recovers_after_partial_ddl(tmp_path):
         "056_digest_reader_draft",
         "057_content_form",
         "058_material_analysis",
+        "059_reference_anchor_accepted",
     ]
     assert replay == []
     with sqlite3.connect(db_path) as conn:
@@ -372,6 +377,7 @@ def test_intent_action_migration_upgrades_from_019_and_replays(tmp_path):
         "056_digest_reader_draft",
         "057_content_form",
         "058_material_analysis",
+        "059_reference_anchor_accepted",
     ]
     assert replay == []
     with sqlite3.connect(db_path) as conn:
@@ -454,6 +460,7 @@ def test_action_lifecycle_migration_rebuilds_phase_15_constraints(tmp_path):
         "056_digest_reader_draft",
         "057_content_form",
         "058_material_analysis",
+        "059_reference_anchor_accepted",
     ]
     with sqlite3.connect(db_path) as conn:
         action_sql = conn.execute(
@@ -536,6 +543,7 @@ def test_source_verification_migration_preserves_series_opportunities(tmp_path):
         "056_digest_reader_draft",
         "057_content_form",
         "058_material_analysis",
+        "059_reference_anchor_accepted",
     ]
     with sqlite3.connect(db_path) as conn:
         opportunity = conn.execute(
@@ -1008,6 +1016,7 @@ def test_intent_lock_action_migration_upgrades_database_with_034_recorded(tmp_pa
         "056_digest_reader_draft",
         "057_content_form",
         "058_material_analysis",
+        "059_reference_anchor_accepted",
     ]
     with sqlite3.connect(db_path) as conn:
         action_sql = conn.execute(

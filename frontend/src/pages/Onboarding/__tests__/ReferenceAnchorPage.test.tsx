@@ -22,6 +22,7 @@ function anchor(overrides: Partial<ReferenceAnchor> = {}): ReferenceAnchor {
     structure_habits: [],
     audience: null,
     rejected: [],
+    accepted: [],
     capability: 'deterministic_fallback',
     limitations: [],
     version: 1,

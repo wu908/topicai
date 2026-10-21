@@ -49,33 +49,7 @@ const DEFAULT_PROFILE: ProfileField[] = [
   { key: 'tone', label: '语气', value: '', placeholder: '短句、可先结论、不端着' },
 ];
 
-/** 已确认解读的本机持久化 key；值为解读 value 的 JSON string[]。 */
-const ACCEPTED_STORAGE_KEY = 'topicai.path-accepted.v1';
-
-/**
- * 安全读取已确认集合：storage 不可用、坏 JSON、类型不对都回落空，绝不让路径页崩。
- * 仅本机持久化（见 confirmBenchmark 注释），换浏览器 / 清站点数据即丢。
- */
-function readAcceptedBenchmarks(): string[] {
-  try {
-    const raw = window.localStorage.getItem(ACCEPTED_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter((v): v is string => typeof v === 'string');
-  } catch {
-    return [];
-  }
-}
-
-/** 写失败（隐私模式 / 配额满）只影响持久化，不影响本次确认。 */
-function writeAcceptedBenchmarks(values: string[]): void {
-  try {
-    window.localStorage.setItem(ACCEPTED_STORAGE_KEY, JSON.stringify(values));
-  } catch {
-    // 写不进去就算了：确认态本次会话内仍有效。
-  }
-}
+/** 已确认解读的服务端持久化：随锚点读数一起返回 accepted（见 /reference-anchor）。 */
 
 type BenchRow = {
   key: string;
@@ -119,7 +93,7 @@ export default function PathPage() {
   const navigate = useNavigate();
   const [profile, setProfile] = useState<ProfileField[]>(DEFAULT_PROFILE);
   const [anchor, setAnchor] = useState<ReferenceAnchor | null>(null);
-  const [acceptedValues, setAcceptedValues] = useState<string[]>(readAcceptedBenchmarks);
+  const [acceptedValues, setAcceptedValues] = useState<string[]>([]);
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
@@ -166,6 +140,8 @@ export default function PathPage() {
     try {
       const a = await getReferenceAnchor();
       setAnchor(a);
+      // 确认态以服务端为准：跨刷新/换设备保留。
+      setAcceptedValues(a.accepted ?? []);
     } catch {
       // 无参考是正常态；面板自己显示空
       setAnchor(null);
@@ -233,18 +209,26 @@ export default function PathPage() {
   };
 
   /**
-   * 确认一条解读：同时更新 state 与 localStorage，刷新 / 切页后仍在（按 value 标识）。
-   * 边界：只做本机持久化，换浏览器或清站点数据即丢；后端 reference_anchors 没有 accepted
-   * 字段，加字段需 DB migration，本轮不做，因此不跨设备同步。
-   * rejected / 锚点重推后消失的 value 留在集合里无害，不必清理。
+   * 确认一条解读：写服务端 accepted 集合（跨刷新/换设备保留），以返回值为准更新。
+   * 只累积记录、不冻结重推；rejected / 锚点重推后消失的 value 留在集合里无害。
    */
-  const confirmBenchmark = (item: AnchorItem) => {
-    const next = acceptedValues.includes(item.value)
-      ? acceptedValues
-      : [...acceptedValues, item.value];
-    setAcceptedValues(next);
-    writeAcceptedBenchmarks(next);
-    setNotice('已确认这条解读。');
+  const confirmBenchmark = async (item: AnchorItem) => {
+    if (!anchor || acceptedValues.includes(item.value)) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const next = await updateReferenceAnchor({
+        accepted: [...acceptedValues, item.value],
+        expected_version: anchor.version,
+      });
+      setAnchor(next);
+      setAcceptedValues(next.accepted ?? []);
+      setNotice('已确认这条解读。');
+    } catch (e) {
+      setError(extractErrorMessage(e, '确认失败，请重试'));
+    } finally {
+      setBusy(false);
+    }
   };
 
   const rejectBenchmark = async (item: AnchorItem) => {
@@ -481,7 +465,7 @@ export default function PathPage() {
                         type="button"
                         className="lumen-btn sm"
                         disabled={busy}
-                        onClick={() => confirmBenchmark(row.item!)}
+                        onClick={() => void confirmBenchmark(row.item!)}
                       >
                         确认
                       </button>

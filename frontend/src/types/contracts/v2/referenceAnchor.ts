@@ -19,6 +19,8 @@ export interface ReferenceAnchor {
   structure_habits: AnchorItem[];
   audience: AnchorItem | null;
   rejected: string[];
+  /** 用户确认过的解读 value（服务端累计保存，跨刷新/换设备保留）。 */
+  accepted: string[];
   capability: AnchorCapability;
   limitations: string[];
   version: number;
@@ -35,6 +37,8 @@ export interface ReferenceNoteInput {
 export interface ReferenceAnchorUpdate {
   /** 否证掉的结论：不再出现，但系统继续从参考里读。 */
   rejected?: string[];
+  /** 确认过的结论：只累积记录，不冻结重推。 */
+  accepted?: string[];
   /** 自己重写的内容：填了就以此为准，之后不再自动重推。 */
   topics?: string[];
   structure_habits?: string[];
