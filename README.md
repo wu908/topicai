@@ -174,6 +174,9 @@ docker compose up --build -d
 
 前端 <http://localhost> · 后端 <http://localhost:8000>
 
+生产环境：<https://topicai.online>（`www` 同域；部署步骤、域名与证书/HSTS 配置见
+[`docs/deployment.md`](docs/deployment.md)）。
+
 ## 测试与质量检查
 
 ```powershell
