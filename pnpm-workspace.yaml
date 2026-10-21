@@ -1,6 +1,9 @@
 packages:
   - frontend
 
+minimumReleaseAgeExclude:
+  - vite@8.3.5
+
 onlyBuiltDependencies: '["esbuild"]'
 
 overrides:
