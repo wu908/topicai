@@ -26,8 +26,8 @@ docker compose backend 容器（topicai-backend，uvicorn :8000）
 ```
 
 - DNS：`topicai.online`、`www.topicai.online` 的 A 记录均指向服务器 `1.13.251.252`。
-- 端口：公网 `80/443`（宿主机 nginx）；`8081`（frontend 容器旧入口，仍可用）；`8000` 仅绑定
-  `127.0.0.1`；`22` SSH。
+- 端口：公网只开放 `80/443`（宿主机 nginx）；frontend 容器端口 `127.0.0.1:8081` 仅绑定回环
+  （宿主机 nginx 转发用，公网不可达）；`8000` 仅绑定 `127.0.0.1`；`22` SSH。
 - 服务器：`ssh topicai-server`（root），源码在 `/opt/topicai`，跟踪 `main`。
 
 ## 2. 标准部署（服务器上执行）
@@ -163,6 +163,6 @@ systemctl list-timers | grep certbot # 确认 timer 下次触发时间
   操作该站点或覆盖该 conf。
 - HSTS 目前只作用 apex 与 www；如以后增加子域，先确认全部支持 HTTPS 再加
   `includeSubDomains`/`preload`。
-- `8081` 原入口仍对外开放（含旧书签/验收脚本在用）；如需收紧，可从 compose 移除该端口映射，
-  仅保留 443。
+- `8081` 已收紧为仅回环（compose：`127.0.0.1:${FRONTEND_PORT:-80}:80`），公网只保留 80/443；
+  旧书签/验收脚本请改用 `https://topicai.online`。
 - 证书自动续期依赖 80 端口 ACME 路径可达；若以后 80 被拦截或重定向到别处，需改 DNS-01。

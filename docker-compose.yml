@@ -70,7 +70,9 @@ services:
         NPM_CONFIG_REGISTRY: ${NPM_CONFIG_REGISTRY:-https://registry.npmjs.org}
     container_name: topicai-frontend
     ports:
-      - "${FRONTEND_PORT:-80}:80"
+      # 只绑定回环：宿主机 nginx（80/443）反代到 127.0.0.1:${FRONTEND_PORT}；
+      # 不再把 8081 直接暴露到公网。
+      - "127.0.0.1:${FRONTEND_PORT:-80}:80"
     depends_on:
       backend:
         condition: service_healthy
