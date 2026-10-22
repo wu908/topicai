@@ -7,11 +7,27 @@ import { useEffect, useState, type ReactNode } from 'react';
 import BetLockForm from './BetLockForm';
 import type { CalibrationWorkspace, Material, PublishCheck } from '@/types/contracts/v2/content';
 import { StageBar } from './StageMeter';
+import { nextActionLabel } from './projectListModel';
 import {
   getLatestPublishCheck,
   runPublishCheck,
 } from '@/services/api/v2/projects';
 import { extractErrorMessage } from '@/utils/error';
+
+const INTENT_LABELS: Record<string, string> = {
+  solve: '教方法',
+  share: '讲经历',
+  record: '记过程',
+};
+
+const STATUS_LABELS: Record<string, string> = {
+  preparing: '正在准备候选',
+  ready_to_publish: '待发布',
+  published: '已发布',
+  awaiting_review: '等待观察窗口',
+  settled: '已沉淀',
+  archived: '已归档',
+};
 
 export type ArtifactTab = 'process' | 'draft' | 'publish' | 'video' | 'bet';
 
@@ -44,6 +60,8 @@ export default function ArtifactPane(props: {
   onBodyChange?: (v: string) => void;
   /** 失焦时才提交，避免每敲一个字就建一个版本。 */
   onBodyBlur?: (v: string) => void;
+  /** 还没有第一版稿时的说明（编辑区禁用）。 */
+  draftHint?: string;
   onConfirmCandidate?: () => void;
   actions?: ReactNode;
   workspace?: CalibrationWorkspace | null;
@@ -98,7 +116,10 @@ export default function ArtifactPane(props: {
   };
 
   // 视频包：素材缺口 = 项目要求但未挂上的素材名；已匹配按 kind 统计
-  const materials = props.materials ?? [];
+  // 只算关联到本条项目的素材；全库素材数不能冒充"已挂"。
+  const materials = (props.materials ?? []).filter((m) =>
+    m.usages?.some((u) => u.project_id === project?.id),
+  );
   const reqs = project?.material_requirements ?? [];
   const matchedKinds = materials.reduce<Record<string, number>>((acc, m) => {
     acc[m.kind] = (acc[m.kind] ?? 0) + 1;
@@ -134,11 +155,10 @@ export default function ArtifactPane(props: {
             <div className="art-title">过程 · 结果</div>
             {project ? <StageBar project={project} /> : null}
             <KV label="形态" value={project?.content_form || '图文'} />
-            <KV label="意图" value={project?.content_intent || '未定'} />
-            <KV label="状态" value={project?.status || '—'} />
+            <KV label="意图" value={project?.content_intent ? INTENT_LABELS[project.content_intent] ?? project.content_intent : '未定'} />
+            <KV label="状态" value={project?.status ? STATUS_LABELS[project.status] ?? project.status : '—'} />
             <KV label="版本" value={version ? `v${version.version_number}` : '草稿'} />
-            <KV label="下一步" value={next} />
-            <KV label="路径" value="效率实验 · 未偏离" />
+            <KV label="下一步" value={project ? nextActionLabel(project) : next} />
             <KV label="素材" value={materials.length ? `已挂 ${materials.length} 件` : '未挂素材'} />
             <div style={{ flex: 1, minHeight: 16 }} />
             <div style={{ display: 'flex', gap: 6 }}>
@@ -164,6 +184,9 @@ export default function ArtifactPane(props: {
               onBlur={(e) => props.onBodyBlur?.(e.target.value)}
               aria-label="稿正文"
             />
+            {props.draftHint ? (
+              <p style={{ margin: 0, fontSize: 12, color: 'var(--lumen-muted)' }}>{props.draftHint}</p>
+            ) : null}
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               <button
                 type="button"

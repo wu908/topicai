@@ -33,3 +33,12 @@ export function extractErrorMessage(err: unknown, fallback: string): string {
   }
   return fallback;
 }
+
+/** 模型/网络类错误给用户看的文案：不要把 "Failed to fetch" 直接抛到对话里。 */
+export function extractModelErrorMessage(err: unknown, fallback: string): string {
+  const message = extractErrorMessage(err, fallback);
+  if (/failed to fetch|networkerror|load failed|network request failed|econnrefused|etimedout|timeout/i.test(message)) {
+    return '模型暂时连不上，你的输入还在，可以稍后重试。';
+  }
+  return message;
+}

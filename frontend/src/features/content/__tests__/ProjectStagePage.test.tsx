@@ -345,7 +345,30 @@ describe('ProjectStagePage', () => {
         workspace={withAction({ human_gate_type: null, action_type: 'answer_key_question' })}
       />,
     );
-    expect(screen.getByText(/确认卡 · 公开范围/)).toBeInTheDocument();
+    expect(screen.getByText(/补充信息 · 还差一个真实细节/)).toBeInTheDocument();
+  });
+
+  it('asks for a real detail instead of offering 同意 for answer_key_question', async () => {
+    respondToActionMock.mockResolvedValueOnce({});
+    render(
+      <ProjectStagePage
+        workspace={withAction({ human_gate_type: null, human_gate: null, action_type: 'answer_key_question' })}
+      />,
+    );
+    const input = screen.getByLabelText('补充回答');
+    const submit = screen.getByRole('button', { name: '提交回答' });
+    expect(submit).toBeDisabled();
+    expect(screen.queryByRole('button', { name: '同意' })).toBeNull();
+
+    fireEvent.change(input, { target: { value: '我买过折叠收纳箱，收起来反而更占地方' } });
+    expect(submit).toBeEnabled();
+    fireEvent.click(submit);
+    await waitFor(() =>
+      expect(respondToActionMock).toHaveBeenCalledWith(
+        'a1',
+        expect.objectContaining({ response_payload: { answer: '我买过折叠收纳箱，收起来反而更占地方' } }),
+      ),
+    );
   });
 
   it('saves edited draft text only when the editor loses focus', async () => {

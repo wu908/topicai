@@ -1,4 +1,4 @@
-/**
+﻿/**
  * PathPage：路径画像 / 对标 · 解读须确认 / 探索位。
  * 覆盖加载回填（path profile + settings 显示回退）、5 个画像字段落库、
  * expected_version 递增、保存失败不假成功、AI 修订提案、确认（服务端 accepted）与
@@ -243,7 +243,7 @@ describe('PathPage', () => {
     expect(screen.getByText('小户型收纳改造 · 2 条里都有 · 样本较少')).toBeInTheDocument();
     expect(screen.getByText('开头先给结论 · 3 条里都有')).toBeInTheDocument();
     expect(screen.getByText('读不出，需你自己定')).toBeInTheDocument();
-    expect(screen.getByText(/每条解读都注明来自哪几个样本；不抄写原文 · 读取：structured_llm/)).toBeInTheDocument();
+    expect(screen.getByText(/每条解读都注明来自哪几个样本；不抄写原文 · 读取：模型读取/)).toBeInTheDocument();
 
     // 探索位三种状态：运行中 / 已选用（带归因） / 未选用。
     expect(screen.getByText('探索位：通勤录音')).toBeInTheDocument();
@@ -511,7 +511,7 @@ describe('PathPage', () => {
     ).toBeInTheDocument();
     // 空参考时不再渲染三行对标。
     expect(screen.queryByText('选题')).toBeNull();
-    expect(screen.getByText(/读取：deterministic_fallback/)).toBeInTheDocument();
+    expect(screen.getByText(/读取：本地规则推导/)).toBeInTheDocument();
   });
 
   it('confirms an interpretation through the anchor API', async () => {

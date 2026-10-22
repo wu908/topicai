@@ -12,7 +12,7 @@ import {
   respondToAction,
 } from '@/services/api/v2/projects';
 import type { CalibrationWorkspace } from '@/types/contracts/v2/content';
-import { extractErrorMessage } from '@/utils/error';
+import { extractErrorMessage, extractModelErrorMessage } from '@/utils/error';
 import { askCompanion } from '@/services/api/v2/companion';
 
 function makeKey(prefix: string) {
@@ -63,7 +63,7 @@ export default function WorkspaceAiDock(props: {
         push({
           id: makeKey('ai'),
           role: 'assistant',
-          text: extractErrorMessage(e, '问模型失败，请稍后重试。'),
+          text: extractModelErrorMessage(e, '问模型失败，请稍后重试。'),
           source: '未能连接模型',
         });
       });

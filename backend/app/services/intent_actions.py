@@ -329,7 +329,7 @@ class ActionResponseService:
         if body.decision == "accept" and action["action_type"] == "answer_key_question":
             answer = str(body.response_payload.get("answer", "")).strip()
             if len(answer) < 10:
-                raise ValueError("answer must contain at least 10 characters of first-party detail")
+                raise ValueError("请再多写一点你自己的真实细节（至少 10 个字），AI 才能继续。")
             evidence, _ = await EvidenceService(self.db).create_proposed(
                 owner_user_id,
                 EvidenceCreate(

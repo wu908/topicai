@@ -11,7 +11,7 @@ import {
   Typography,
 } from '@mui/material';
 
-export type ConfirmCardType = 'fact' | 'intent' | 'publish' | 'learning' | 'public_scope';
+export type ConfirmCardType = 'fact' | 'intent' | 'publish' | 'learning' | 'public_scope' | 'question';
 
 export interface ConfirmCardProps {
   type: ConfirmCardType;
@@ -21,7 +21,9 @@ export interface ConfirmCardProps {
   busy?: boolean;
   /** strip = 原型项目屏底部条带；card = 默认卡片 */
   variant?: 'card' | 'strip';
-  onAgree: () => void | Promise<void>;
+  onAgree?: () => void | Promise<void>;
+  /** question 卡：用户补充的事实/回答（至少 10 字）。 */
+  onAnswer?: (answer: string) => void | Promise<void>;
   onChange?: (text: string) => void | Promise<void>;
   onReject?: (reason: string) => void | Promise<void>;
   /** 否决后的出路（交互地图修订 D） */
@@ -34,6 +36,7 @@ const typeLabel: Record<ConfirmCardType, string> = {
   publish: '发布确认',
   public_scope: '公开范围',
   learning: '长期经验',
+  question: '补充信息',
 };
 
 export default function ConfirmCard(props: ConfirmCardProps) {
@@ -42,6 +45,7 @@ export default function ConfirmCard(props: ConfirmCardProps) {
   const [editText, setEditText] = useState(props.suggestion);
   const [rejectReason, setRejectReason] = useState('');
   const [done, setDone] = useState<null | 'ok' | 'chg' | 'no'>(null);
+  const [answer, setAnswer] = useState('');
   // 写入失败时必须留在可重试状态：不能因为点了按钮就显示"已确认"。
   const [failed, setFailed] = useState<string | null>(null);
 
@@ -70,7 +74,10 @@ export default function ConfirmCard(props: ConfirmCardProps) {
         }
       >
         <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-          {done === 'ok' && '已按建议确认。可以继续下一步。'}
+          {done === 'ok' &&
+            (props.type === 'question'
+              ? '已补充，AI 正在准备候选内容。'
+              : '已按建议确认。可以继续下一步。')}
           {done === 'chg' && '已按你的修改确认。'}
           {done === 'no' && '已否决。选一个出路，或稍后在「今日」里继续。'}
         </Typography>
@@ -87,6 +94,98 @@ export default function ConfirmCard(props: ConfirmCardProps) {
     );
   }
 
+  if (props.type === 'question') {
+    const tooShort = answer.trim().length < 10;
+    const submit = () => {
+      setFailed(null);
+      void Promise.resolve()
+        .then(() => props.onAnswer?.(answer.trim()))
+        .then(() => setDone('ok'))
+        .catch(fail);
+    };
+    if (isStrip) {
+      return (
+        <>
+          <div className="lab">
+            <i aria-hidden="true" />
+            补充信息 · 还差一个真实细节
+          </div>
+          <div className="hint">
+            AI 想问：{props.title}
+            {props.reason ? `（为什么问：${props.reason}）` : ''}
+          </div>
+          {failed ? (
+            <div className="hint" style={{ color: '#b4574e' }}>
+              {failed}
+            </div>
+          ) : null}
+          <div className="acts" style={{ width: '100%' }}>
+            <input
+              className="lumen-input"
+              style={{ flex: 1, minWidth: 0 }}
+              value={answer}
+              placeholder="写一句你自己的真实细节（至少 10 个字）"
+              aria-label="补充回答"
+              disabled={props.busy}
+              onChange={(e) => setAnswer(e.target.value)}
+            />
+            <button type="button" className="lumen-btn sm" disabled={props.busy || tooShort} onClick={submit}>
+              提交回答
+            </button>
+          </div>
+        </>
+      );
+    }
+    return (
+      <Box
+        sx={{
+          border: '1px solid',
+          borderColor: 'rgba(143,190,232,0.35)',
+          bgcolor: 'rgba(143,190,232,0.12)',
+          borderRadius: 2,
+          p: 1.75,
+        }}
+      >
+        <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600 }}>
+          补充信息 · 还差一个真实细节
+        </Typography>
+        <Typography variant="subtitle2" sx={{ mt: 0.5, mb: 0.5 }}>
+          {props.title}
+        </Typography>
+        {props.reason ? (
+          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+            为什么问：{props.reason}
+          </Typography>
+        ) : null}
+        <TextField
+          size="small"
+          multiline
+          minRows={2}
+          fullWidth
+          sx={{ mt: 1 }}
+          value={answer}
+          placeholder="写一句你自己的真实细节（至少 10 个字）"
+          aria-label="补充回答"
+          disabled={props.busy}
+          onChange={(e) => setAnswer(e.target.value)}
+        />
+        {failed ? (
+          <Typography variant="body2" role="status" sx={{ color: 'error.main', mt: 0.75 }}>
+            {failed}
+          </Typography>
+        ) : null}
+        <Stack direction="row" spacing={1} sx={{ mt: 1, alignItems: 'center' }}>
+          <Button size="small" variant="contained" disabled={props.busy || tooShort} onClick={submit}>
+            提交回答
+          </Button>
+          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+            至少 10 个字，写你自己的真实细节
+          </Typography>
+        </Stack>
+      </Box>
+    );
+  }
+
   if (isStrip) {
     return (
       <>
@@ -95,7 +194,8 @@ export default function ConfirmCard(props: ConfirmCardProps) {
           确认卡 · {typeLabel[props.type] || '确认'}
         </div>
         <div className="hint">
-          {props.title}。建议：{props.suggestion}
+          {props.title}
+          {props.suggestion && props.suggestion !== props.title ? `。建议：${props.suggestion}` : ''}
           {props.reason ? `。依据：${props.reason}` : ''}
         </div>
         {failed ? (
@@ -112,7 +212,7 @@ export default function ConfirmCard(props: ConfirmCardProps) {
               onClick={() => {
                 setFailed(null);
                 void Promise.resolve()
-                  .then(() => props.onAgree())
+                  .then(() => props.onAgree?.())
                   .then(() => setDone('ok'))
                   .catch(fail);
               }}
@@ -205,8 +305,8 @@ export default function ConfirmCard(props: ConfirmCardProps) {
         {props.title}
       </Typography>
       <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-        AI 建议：{props.suggestion}
-        {props.reason ? `（依据：${props.reason}）` : ''}
+        {props.suggestion !== props.title ? `AI 建议：${props.suggestion}` : ''}
+        {props.reason ? `${props.suggestion !== props.title ? '（依据：' : '依据：'}${props.reason}）` : ''}
       </Typography>
       {failed ? (
         <Typography variant="body2" role="status" sx={{ color: 'error.main', mt: 0.75 }}>
@@ -219,7 +319,7 @@ export default function ConfirmCard(props: ConfirmCardProps) {
           <Button size="small" variant="contained" disabled={props.busy} onClick={() => {
             setFailed(null);
             void Promise.resolve()
-              .then(() => props.onAgree())
+              .then(() => props.onAgree?.())
               .then(() => setDone('ok'))
               .catch(fail);
           }}>
