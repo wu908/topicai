@@ -44,12 +44,12 @@
 ## 5. 回滚
 
 - revert 本变更 commit；无数据/接口影响。
+
 ## 6. 证据
 
 - 目标测试：`ProjectStagePage.test.tsx` + `ArtifactPane.test.tsx` **32 tests passed**
 - 视觉（Playwright 本机）：
   - 1440×900、390×844 各 1 张；`[aria-current="step"]` **1 个**
   - 标签：想清楚 / 找素材 / 写初稿 / 发前检查 / 观察
-  - 「现在做：先写下真实经历」
+  - 「现在做：先把这篇的目的定下来」（优先取 workspace.orchestrated_action.title）
 - 文件：`ProjectFlowBar.tsx`、`ProjectStagePage.tsx`、`ProjectChat.tsx`、`ArtifactPane.tsx`、`ContentPage.css`
-- 回滚：revert 本变更；无数据/接口影响

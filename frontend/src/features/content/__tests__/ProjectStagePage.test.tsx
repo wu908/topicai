@@ -145,8 +145,11 @@ describe('ProjectStagePage', () => {
     // 项目屏只保留一条人话阶段条；当前阶段「写初稿」（第 3 步）。
     expect(document.querySelectorAll('[aria-current="step"]')).toHaveLength(1);
     expect(screen.getByText('想清楚')).toBeInTheDocument();
+    expect(screen.getByText('找素材')).toBeInTheDocument();
+    expect(screen.getByText('写初稿')).toHaveAttribute('aria-current', 'step');
+    expect(screen.getByText('发前检查')).toBeInTheDocument();
     expect(screen.getByText('观察')).toBeInTheDocument();
-    expect(screen.getByText(/现在做：/)).toBeInTheDocument();
+    expect(screen.getByText('现在做：确认这条内容的意图')).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: '过程' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByText('踩坑复盘')).toBeInTheDocument();
     // 空对话时给出项目助手的第一句引导。

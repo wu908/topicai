@@ -291,7 +291,14 @@ export default function ProjectStagePage(props: {
           busy={busy}
           onSend={handleSend}
           projectName={project?.title}
-          stages={project ? <ProjectFlowBar project={project} /> : null}
+          stages={
+            project ? (
+              <ProjectFlowBar
+                project={project}
+                nowLabel={props.workspace?.orchestrated_action?.title}
+              />
+            ) : null
+          }
         />
         <ArtifactPane
           title={version?.title || project?.title || ''}
