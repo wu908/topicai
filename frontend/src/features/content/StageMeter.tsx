@@ -27,7 +27,7 @@ function StepLabels({ project }: { project: ContentProject }) {
   );
 }
 
-/** 旧技术阶段条：仅 ProjectDetailPane 使用；项目屏已改用 ProjectFlowBar。 */
+/** 旧技术阶段条：仅 ProjectDetailPane / 旧 ProjectStage 壳使用；项目屏已改用 ProjectFlowBar。 */
 export default function StageMeter({ project }: { project: ContentProject }) {
   return <StepLabels project={project} />;
 }

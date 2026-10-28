@@ -131,6 +131,14 @@ export default function ArtifactPane(props: {
           .map(([k, n]) => `${k} ×${n}`)
           .join(' · ');
 
+  const activeAction = props.workspace?.orchestrated_action;
+  const nextText =
+    activeAction && ['proposed', 'accepted', 'deferred'].includes(activeAction.status)
+      ? activeAction.title
+      : project
+        ? nextActionLabel(project)
+        : next;
+
   return (
     <div className="pane">
       <div className="art-tabs" role="tablist" aria-label="产物">
@@ -156,7 +164,7 @@ export default function ArtifactPane(props: {
             <KV label="意图" value={project?.content_intent ? INTENT_LABELS[project.content_intent] ?? project.content_intent : '未定'} />
             <KV label="状态" value={project?.status ? STATUS_LABELS[project.status] ?? project.status : '—'} />
             <KV label="版本" value={version ? `v${version.version_number}` : '草稿'} />
-            <KV label="下一步" value={project ? nextActionLabel(project) : next} />
+            <KV label="下一步" value={nextText} />
             <KV label="素材" value={materials.length ? `已挂 ${materials.length} 件` : '未挂素材'} />
             <div style={{ flex: 1, minHeight: 16 }} />
             <div style={{ display: 'flex', gap: 6 }}>

@@ -270,6 +270,12 @@ export default function ProjectStagePage(props: {
     }
   };
 
+  const activeAction = props.workspace?.orchestrated_action;
+  const actionNowLabel =
+    activeAction && ['proposed', 'accepted', 'deferred'].includes(activeAction.status)
+      ? activeAction.title
+      : undefined;
+
   return (
     <div>
       <div className="lumen-topbar" style={{ padding: '10px 24px 8px' }}>
@@ -295,7 +301,7 @@ export default function ProjectStagePage(props: {
             project ? (
               <ProjectFlowBar
                 project={project}
-                nowLabel={props.workspace?.orchestrated_action?.title}
+                nowLabel={actionNowLabel}
               />
             ) : null
           }

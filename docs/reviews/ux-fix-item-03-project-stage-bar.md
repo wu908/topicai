@@ -1,7 +1,7 @@
 # UX-03 · 项目屏单条人话阶段条（D1）
 
 - 日期：2026-10-28
-- 状态：**D1 实现完成；RG2 待审**
+- 状态：**D1 实现完成；RG2 已审（delta approve）；待 RG3**
 - 方向：审计 Q2 · **A：单条人话流程条**（用户 2026-10-28 同意）
 - 档位：**D1**（多文件、现有架构内、可逆；无接口/数据/权限变化）
 
@@ -53,3 +53,6 @@
   - 标签：想清楚 / 找素材 / 写初稿 / 发前检查 / 观察
   - 「现在做：先把这篇的目的定下来」（优先取 workspace.orchestrated_action.title）
 - 文件：`ProjectFlowBar.tsx`、`ProjectStagePage.tsx`、`ProjectChat.tsx`、`ArtifactPane.tsx`、`ContentPage.css`
+- 后续修正：`nowLabel` 只在 `proposed/accepted/deferred` 时使用；产物「下一步」同源，避免两处 next 文案冲突；cancelled action 回退测试。
+- 目标测试（含 ProjectDetailPane）：**38 passed**
+- 已知非阻塞：`stageOf` 3 → 写初稿 与 `record_publication` 的语义映射仍是产品决策（F2）；`data-testid="stage-meter"` 名称沿用。

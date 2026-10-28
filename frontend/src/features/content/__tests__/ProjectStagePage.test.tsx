@@ -159,6 +159,13 @@ describe('ProjectStagePage', () => {
     expect(onChanged).toHaveBeenCalledTimes(1);
   });
 
+  it('does not show a cancelled action as the current next step', () => {
+    render(<ProjectStagePage workspace={withAction({ status: 'cancelled' })} />);
+
+    expect(screen.queryByText('现在做：确认这条内容的意图')).not.toBeInTheDocument();
+    expect(screen.getByText('现在做：记录已经发布')).toBeInTheDocument();
+  });
+
   it('renders a placeholder project when the workspace is still empty', () => {
     render(<ProjectStagePage workspace={null} />);
 
