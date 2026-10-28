@@ -212,6 +212,10 @@ describe('rowStepLabel / rowActionLabel（列表人话步骤 + 按钮）', () =>
       ['scope_learning', '查看'],
       ['review_candidate', '继续'],
       ['answer_key_question', '继续'],
+      ['create_project', '继续'],
+      ['confirm_intent', '继续'],
+      ['lock_intent', '继续'],
+      ['confirm_publish_scope', '继续'],
     ];
     for (const [action_type, label] of cases) {
       const p = project({ next_action: undefined, orchestrated_action: orchestrated(action_type) });
@@ -222,6 +226,14 @@ describe('rowStepLabel / rowActionLabel（列表人话步骤 + 按钮）', () =>
       orchestrated_action: orchestrated('not_a_real_action' as IntentActionType),
     });
     expect(rowActionLabel(unknown)).toBe('继续');
+  });
+
+  it('unknown next_action falls through to a known orchestrated action_type', () => {
+    const p = project({
+      next_action: 'not_a_real_next_action' as NextAction,
+      orchestrated_action: orchestrated('record_publication'),
+    });
+    expect(rowActionLabel(p)).toBe('去发布');
   });
 
   it('orchestrated_action without next_action uses 继续, never title as button', () => {

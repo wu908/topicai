@@ -4,8 +4,9 @@
 - **独立审查结果**：commit `2fb050e`，**1 blocking + 5 major + 7 minor**；测试/类型/lint/build 全绿，但业务映射/验收有缺口。
 - 本报告：针对独立审查的修复与复验。
 - 修复 commit：`3c84a89`（`fix(content): address RG2 review findings`）；收尾 `922a5b2`。
-- **第二轮独立复审**：发现 1 major（`orchestrated_action.action_type` 按钮映射缺失）；修复 commit 见下。
-- 结论：**Conditional**（第一轮 B1+5 major 已修；第二轮 major 已修；待第二轮复审确认）
+- **第二轮独立复审**：发现 1 major（`orchestrated_action.action_type` 按钮映射缺失）；已修。
+- **第三轮独立复审**：**approve**；无 blocking/major；仅 3 条 minor（测试覆盖/文档限定/门记录），已修。
+- 结论：**RG2 通过**（B1 + 5 major + 第二轮 major 已修；视觉/键盘/覆盖率通过；第三轮复审 approve）
 
 ---
 
@@ -61,7 +62,7 @@
 
 ## 五、判定
 
-**Conditional**：B1 + 第一轮 5 major 已修；第二轮独立复审发现 1 major（`orchestrated_action.action_type` 映射），已修并补测试；待第二轮复审确认后标 approve。
+**RG2 通过**：B1 + 第一轮 5 major + 第二轮 action_type major 已修；第三轮独立复审 **approve**；390px 视觉、键盘、覆盖率门通过。
 
 ## 六、剩余非阻塞
 
@@ -81,3 +82,14 @@
 - 测试：`projectListModel.test.ts` 覆盖 9 个已知类型 + 未知类型；18 tests passed。
 - 设计 §11.1 已补映射表。
 - 测试：4 files / 31 tests passed；`tsc -b`、ESLint、Vite build 通过。
+
+## 八、第三轮独立复审（2026-10-28）
+
+- 结论：**approve**；无 blocking/major；3 minor + 2 观察。
+- 确认 69acadf 的 owActionTypeLabels 与 §11.1 逐字一致；settled > next_action > orchestrated 映射 > 去处理 的优先级未变；前端只有这一处映射源。
+- 修复 minor：
+  - m1：测试补 create_project / confirm_intent / lock_intent / confirm_publish_scope 4 个默认“继续”，并补“未知 next_action + 已知 orchestrated”回退测试；目标 4 文件 **32 tests passed**。
+  - m2：§11.1 的“next_action 缺失/未知”行限定为“且无 orchestrated_action”；补 orchestrated-only 语义错位说明。
+  - m3：pilot-log r5 的 version 从 pending 回填 69acadf，并加 r6 approved。
+- 视觉/键盘/覆盖率沿用 r4 证据，无需重跑。
+- **最终：RG2 通过。**
