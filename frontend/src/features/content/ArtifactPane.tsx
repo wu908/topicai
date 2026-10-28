@@ -6,7 +6,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import BetLockForm from './BetLockForm';
 import type { CalibrationWorkspace, Material, PublishCheck } from '@/types/contracts/v2/content';
-import { StageBar } from './StageMeter';
 import { nextActionLabel } from './projectListModel';
 import {
   getLatestPublishCheck,
@@ -153,7 +152,6 @@ export default function ArtifactPane(props: {
         {tab === 'process' && (
           <>
             <div className="art-title">过程 · 结果</div>
-            {project ? <StageBar project={project} /> : null}
             <KV label="形态" value={project?.content_form || '图文'} />
             <KV label="意图" value={project?.content_intent ? INTENT_LABELS[project.content_intent] ?? project.content_intent : '未定'} />
             <KV label="状态" value={project?.status ? STATUS_LABELS[project.status] ?? project.status : '—'} />

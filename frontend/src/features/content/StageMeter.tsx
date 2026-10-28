@@ -31,18 +31,3 @@ function StepLabels({ project }: { project: ContentProject }) {
 export default function StageMeter({ project }: { project: ContentProject }) {
   return <StepLabels project={project} />;
 }
-
-/** 带外层 .stages（供 ArtifactPane 等独立使用） */
-export function StageBar({ project }: { project: ContentProject }) {
-  return (
-    <div
-      className="stages"
-      data-testid="stage-meter"
-      data-stage={stageOf(project)}
-      role="list"
-      aria-label="内容进度"
-    >
-      <StepLabels project={project} />
-    </div>
-  );
-}

@@ -159,7 +159,7 @@ describe('ArtifactPane', () => {
     expect(screen.getByRole('button', { name: '运行发前检查' })).toBeDisabled();
   });
 
-  it('shows the project stage bar and attached material count on the process tab', () => {
+  it('shows attached material count on the process tab without a second stage bar', () => {
     const materials: Material[] = [
       {
         id: 'm1',
@@ -177,8 +177,7 @@ describe('ArtifactPane', () => {
     ];
     render(<ArtifactPane title="第一版" body="正文" workspace={workspace} materials={materials} />);
 
-    const meter = screen.getByTestId('stage-meter');
-    expect(meter).toHaveAttribute('data-stage', '3');
+    expect(screen.queryByTestId('stage-meter')).toBeNull();
     expect(screen.getByText('踩坑复盘')).toBeInTheDocument();
     expect(screen.getByText('待发布')).toBeInTheDocument();
     expect(screen.getByText('v1')).toBeInTheDocument();

@@ -15,7 +15,7 @@ import {
 import type { CalibrationWorkspace, Material } from '@/types/contracts/v2/content';
 import { extractErrorMessage, extractModelErrorMessage } from '@/utils/error';
 import { askCompanion } from '@/services/api/v2/companion';
-import StageMeter from './StageMeter';
+import ProjectFlowBar from './ProjectFlowBar';
 
 function makeKey(prefix: string) {
   return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
@@ -291,7 +291,7 @@ export default function ProjectStagePage(props: {
           busy={busy}
           onSend={handleSend}
           projectName={project?.title}
-          stages={project ? <StageMeter project={project} /> : null}
+          stages={project ? <ProjectFlowBar project={project} /> : null}
         />
         <ArtifactPane
           title={version?.title || project?.title || ''}

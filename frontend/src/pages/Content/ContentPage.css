@@ -1586,6 +1586,21 @@
   box-shadow: 0 6px 18px rgba(70, 95, 130, 0.12), inset 0 1px 0 #fff;
   font-weight: 700;
 }
+.project-flow-bar {
+  flex-wrap: wrap;
+}
+.project-flow-bar .stage-now {
+  flex: 1 0 100%;
+  padding: 2px 4px 0;
+  text-align: right;
+  font-size: 11.5px;
+  color: var(--lumen-muted, #7e8898);
+}
+@media (max-width: 600px) {
+  .project-flow-bar .stage-now {
+    text-align: left;
+  }
+}
 /* ============================================================
    F11 list row / detail pane (ProjectListRow / ProjectDetailPane)
    Class names are .project-row* / .project-detail*. Do not reuse
