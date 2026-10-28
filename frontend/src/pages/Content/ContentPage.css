@@ -1742,3 +1742,51 @@
 @media (max-width:839px){
   .project-detail.is-empty{display:none}
 }
+
+/* ── 内容列表分组（2026-10） ── */
+.content-group {
+  margin: 8px 0 0;
+}
+.content-group-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 16px 4px;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  color: var(--lumen-muted);
+}
+.content-group-title span {
+  font-weight: 500;
+  opacity: 0.75;
+}
+
+.content-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  -webkit-overflow-scrolling: touch;
+}
+.content-chips .lumen-chip {
+  flex-shrink: 0;
+}
+.content-group-toggle,
+.content-empty-action {
+  border: 0;
+  background: transparent;
+  color: var(--lumen-ink);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 8px 16px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.content-empty-action {
+  padding: 4px 6px;
+}

@@ -1,17 +1,11 @@
 /**
- * 列表行（content-line-prototype.html · 内容行）：
- * tag(阶段 n/5) + 标题 + meta(下一步 · 时间) + 右 chip。
- * 「下一步」与工作台同源（G4）：唯一来源 projectListModel.nextActionLabel。
+ * 列表行：左人话步骤 + 标题/下一步 + 行尾动作按钮。
+ * 行容器不绑定点击；行主体与动作是两个原生 button，避免嵌套交互与双导航。
+ * 「下一步」句子仍走 projectListModel.nextActionLabel；按钮走 rowActionLabel。
  */
 import type { ContentProject } from '@/types/contracts/v2/content';
-import {
-  intentLabel,
-  needsMe as projectNeedsMe,
-  nextActionLabel,
-  progressOf,
-  stageOf,
-  stageLabels,
-} from './projectListModel';
+import { trackContentListAction, trackContentListOpen } from './contentListAnalytics';
+import { nextActionLabel, rowActionLabel, rowStepLabel } from './projectListModel';
 
 function formatTime(iso: string): string {
   const date = new Date(iso);
@@ -26,19 +20,6 @@ function formatTime(iso: string): string {
   return date.toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' });
 }
 
-function rowTag(project: ContentProject): string {
-  const stage = stageOf(project);
-  const label = stageLabels[stage - 1];
-  return `${label} ${progressOf(project)}`;
-}
-
-function rowChip(project: ContentProject): { label: string; on: boolean } {
-  if (projectNeedsMe(project)) return { label: '需要我', on: true };
-  if (project.status === 'settled') return { label: '已沉淀', on: false };
-  if (project.status === 'published') return { label: '已发', on: false };
-  return { label: intentLabel(project), on: false };
-}
-
 export default function ProjectListRow({
   project,
   selected,
@@ -48,26 +29,44 @@ export default function ProjectListRow({
   selected: boolean;
   onSelect: (id: string) => void;
 }) {
-  const chip = rowChip(project);
+  const action = rowActionLabel(project);
   return (
     <div
       className={`lumen-row${selected ? ' is-selected' : ''}`}
       data-testid="project-row"
       data-project-id={project.id}
       aria-current={selected ? 'true' : undefined}
-      style={{ cursor: 'pointer' }}
-      onClick={() => onSelect(project.id)}
     >
-      <div className="lumen-tag">{rowTag(project)}</div>
-      <div className="body">
-        <div className="title">{project.title}</div>
-        <div className="meta">
-          <span data-testid="project-next-action">{nextActionLabel(project)}</span>
-          {' · '}
-          {formatTime(project.updated_at)}
-        </div>
-      </div>
-      <span className={`lumen-chip${chip.on ? ' on' : ''}`}>{chip.label}</span>
+      <button
+        type="button"
+        className="row-main"
+        onClick={() => {
+          trackContentListOpen(project, 'title');
+          onSelect(project.id);
+        }}
+        aria-label={`打开：${project.title}`}
+      >
+        <span className="lumen-tag">{rowStepLabel(project)}</span>
+        <span className="body">
+          <span className="title">{project.title}</span>
+          <span className="meta">
+            <span data-testid="project-next-action">{nextActionLabel(project)}</span>
+            {' · '}
+            {formatTime(project.updated_at)}
+          </span>
+        </span>
+      </button>
+      <button
+        type="button"
+        className="row-action"
+        onClick={() => {
+          trackContentListAction(project);
+          onSelect(project.id);
+        }}
+        aria-label={`${action}：${project.title}`}
+      >
+        {action}
+      </button>
     </div>
   );
 }

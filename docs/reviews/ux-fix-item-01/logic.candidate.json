@@ -1,0 +1,114 @@
+{
+  "schema_version": 2,
+  "diagram_type": "lifecycle",
+  "meta": {
+    "title": "内容列表：项目分组与行内动作",
+    "subtitle": "同一套项目状态，决定列表里的分组、步骤标签和行尾按钮",
+    "locale": "zh-CN",
+    "output": ".archify/lifecycle-content-list-20261022-140345/content-list-lifecycle.html",
+    "quality_profile": "showcase",
+    "animation": "trace"
+  },
+  "lanes": [
+    { "id": "main", "label": "项目当前状态" },
+    { "id": "terminal", "label": "归档" }
+  ],
+  "states": [
+    {
+      "id": "drafting",
+      "type": "start",
+      "label": "想发的",
+      "sublabel": "定方向 · 找素材 · 写初稿",
+      "lane": "main",
+      "col": 0,
+      "step": "01",
+      "tag": "组 1"
+    },
+    {
+      "id": "checking",
+      "type": "decision",
+      "label": "发前检查",
+      "sublabel": "通过后才能发布",
+      "lane": "main",
+      "col": 1,
+      "step": "02",
+      "tag": "组 1"
+    },
+    {
+      "id": "publishing",
+      "type": "active",
+      "label": "去发布",
+      "sublabel": "手动发布并登记",
+      "lane": "main",
+      "col": 2,
+      "step": "03",
+      "tag": "组 1 → 组 2"
+    },
+    {
+      "id": "observing",
+      "type": "waiting",
+      "label": "等复盘的",
+      "sublabel": "观察窗口 · 补实际数据",
+      "lane": "main",
+      "col": 3,
+      "step": "04",
+      "tag": "组 2"
+    },
+    {
+      "id": "reviewing",
+      "type": "decision",
+      "label": "可复盘",
+      "sublabel": "对照发布前的判断",
+      "lane": "main",
+      "col": 4,
+      "step": "05",
+      "tag": "组 2"
+    },
+    {
+      "id": "settled",
+      "type": "success",
+      "label": "已沉淀",
+      "sublabel": "写进公式或结束",
+      "lane": "terminal",
+      "col": 4,
+      "step": "06",
+      "tag": "组 3"
+    }
+  ],
+  "transitions": [
+    { "from": "drafting", "to": "checking", "label": "稿写好" },
+    { "from": "checking", "to": "publishing", "label": "检查通过" },
+    { "from": "publishing", "to": "observing", "label": "已发布" },
+    { "from": "observing", "to": "reviewing", "label": "数据回来" },
+    { "from": "reviewing", "to": "settled", "label": "复盘完成" }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "分组规则（列表唯一来源）",
+      "items": [
+        "想发的 = needsMe：未发布、非观察中、非已沉淀",
+        "等复盘的 = isObserving：已发布、等待观察窗口",
+        "已沉淀 = settled：复盘完成并归档"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "行尾按钮",
+      "items": [
+        "想发的：继续（阶段 1–3）/ 去发布（record_publication）",
+        "等复盘的：回填数据 / 去复盘 / 查看",
+        "已沉淀：查看"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "列表默认行为",
+      "items": [
+        "默认顺序：想发的 → 等复盘的 → 已沉淀",
+        "组内按 updated_at 倒序；chips 可筛选单组",
+        "搜索标题/形态/下一步；无结果给清除入口"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+change_id,tier,gate,artifact_hash,started_at,decided_at,decision,blocking,major,minor,accepted_risk,bypass,false_positive,false_negative,notes
+UX-01,D1,RG0,95990AC8F5B57552,2026-10-27 19:20:45,2026-10-27 19:20:45,conditional,3,2,2,0,0,unknown,unknown,首审；工件状态矛盾/成功指标不可测/决策缺失
+UX-01,D1,RG0-r2,DC7C71760EF09F9E,2026-10-28 12:59:13,2026-10-28 12:59:13,pass,0,0,0,0,0,unknown,unknown,高保真确认；旧 blockers 关闭
+UX-01,D1,RG1,DC7C71760EF09F9E,2026-10-28 12:59:30,2026-10-28 12:59:30,advisory-conditional,0,4,0,0,0,unknown,unknown,D1 咨询；4 项 must-fix：映射/交互/分组/测试埋点
+UX-01,D1,RG1-r2,A158280DD9830FC9,2026-10-28 13:00:00,2026-10-28 13:00:00,advisory-closed,0,0,0,0,0,unknown,unknown,技术设计 §11 补齐；4 项 RG1 条件关闭；待 D1 实现
+UX-01,D1,RG2,2fb050e,2026-10-28 13:24:00,2026-10-28 13:30:00,conditional,1,5,7,0,0,unknown,unknown,独立审查 1 blocking+5 major+7 minor；已按 r2 修复
+UX-01,D1,RG2-r2,5C28CCB213F6E0A9,2026-10-28 13:42:00,2026-10-28 13:42:00,conditional,0,0,0,0,0,unknown,unknown,修复 B1+5 major；待独立复审/390px 视觉
+UX-01,D1,RG2-r3,3c84a89,2026-10-28 13:52:00,2026-10-28 13:52:00,conditional,0,0,1,0,0,unknown,unknown,独立复审无 blocking/major；仅 m7 换行已修；待 390px 视觉/覆盖率
+UX-01,D1,RG2-r4,922a5b2,2026-10-28 14:06:00,2026-10-28 14:06:00,approved,0,0,0,0,0,unknown,unknown,独立复审无 blocking/major；390px 视觉/键盘/覆盖率通过；axe/CI 非阻塞；RG2 通过
+UX-01,D1,RG2-r5,69acadf,2026-10-28 14:08:00,2026-10-28 14:08:00,conditional,0,1,0,0,0,unknown,unknown,第二轮独立复审发现 action_type 映射 major；已修+测试，待复审；r4 approved 被本轮覆盖
+UX-01,D1,RG2-r6,69acadf,2026-10-28 14:12:00,2026-10-28 14:12:00,approved,0,0,3,0,0,unknown,unknown,第三轮独立复审 approve；action_type 映射通过；补 6 个默认类型测试；390px/键盘/覆盖率沿用 r4；仅 minor
+UX-01,D1,RG3,1b7ae01,2026-10-28 14:22:00,2026-10-28 14:48:00,approved,0,0,0,0,0,unknown,unknown,用户 2026-10-28 签字：可以发布；482 tests/覆盖率/视觉/键盘/构建通过；待合并/推送
