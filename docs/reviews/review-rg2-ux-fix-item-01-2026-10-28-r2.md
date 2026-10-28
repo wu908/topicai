@@ -80,4 +80,4 @@
   - `review_candidate` / `answer_key_question` / `create_project` / `confirm_intent` / `lock_intent` / `confirm_publish_scope` / 未知 → 继续
 - 测试：`projectListModel.test.ts` 覆盖 9 个已知类型 + 未知类型；18 tests passed。
 - 设计 §11.1 已补映射表。
-- 类型/ESLint 通过。
+- 测试：4 files / 31 tests passed；`tsc -b`、ESLint、Vite build 通过。
