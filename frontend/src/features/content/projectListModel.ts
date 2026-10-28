@@ -1,10 +1,12 @@
 /**
  * 纯函数：ContentProject[] → 分组 / 视图切片 / 搜索 / 阶段进度。
  * 「下一步」文案的唯一来源（G4）：列表行与工作台都必须走 nextActionLabel。
+ * 列表按钮/人话步骤使用 rowActionLabel / rowStepLabel，不要复用句子文案。
  */
 import type { ContentIntent, ContentProject, NextAction } from '@/types/contracts/v2/content';
 
 export type ProjectView = 'all' | 'needs_me' | 'observing' | 'done';
+export type ProjectGroup = 'wanted' | 'observing' | 'settled';
 
 export const nextActionLabels: Record<NextAction, string> = {
   create_version: '先写下真实经历',
@@ -19,8 +21,36 @@ export const nextActionLabels: Record<NextAction, string> = {
   review_calibration_issue: '修正数据问题',
 };
 
+/** 列表左标签：人话步骤（不显示“意图 n/5”）。 */
+const rowStepLabels: Record<NextAction, string> = {
+  create_version: '写初稿',
+  lock_hypothesis: '发前检查',
+  record_publication: '去发布',
+  add_snapshot: '等数据',
+  add_comparable_snapshot: '等数据',
+  run_blind_review: '可复盘',
+  create_observation: '可复盘',
+  manage_observations: '可复盘',
+  await_observation_window: '等数据',
+  review_calibration_issue: '可复盘',
+};
+
+/** 列表行尾按钮：按下一步动作给具体动词。 */
+const rowActionLabels: Record<NextAction, string> = {
+  create_version: '继续',
+  lock_hypothesis: '继续',
+  record_publication: '去发布',
+  add_snapshot: '回填数据',
+  add_comparable_snapshot: '回填数据',
+  run_blind_review: '去复盘',
+  create_observation: '去复盘',
+  manage_observations: '去复盘',
+  await_observation_window: '查看',
+  review_calibration_issue: '修正数据',
+};
+
 /**
- * 列表与工作台共用的唯一映射（F12 / G4）。
+ * 详情/副行的「下一步」句子；列表按钮不能用它。
  * 编排动作更具体（如「确认候选内容是否准确表达了你」），与工作台
  * `nextStepGuide` 同优先级：有 orchestrated_action 就用它，否则用阶段映射。
  */
@@ -30,9 +60,33 @@ export function nextActionLabel(project: ContentProject): string {
   return nextActionLabels.create_version;
 }
 
+/** 列表左标签：人话步骤；未知/缺失 → 待处理。 */
+export function rowStepLabel(project: ContentProject): string {
+  if (project.next_action && rowStepLabels[project.next_action]) {
+    return rowStepLabels[project.next_action];
+  }
+  return '待处理';
+}
+
+/** 列表行尾按钮：动作动词；未知/缺失 → 去处理。 */
+export function rowActionLabel(project: ContentProject): string {
+  if (project.next_action && rowActionLabels[project.next_action]) {
+    return rowActionLabels[project.next_action];
+  }
+  if (project.orchestrated_action) return '继续';
+  return '去处理';
+}
+
 /** 「需要我」判定的唯一来源（列表行与视图过滤共用）。 */
 export function needsMe(project: ContentProject): boolean {
   return !isDone(project) && !isObserving(project);
+}
+
+/** 列表三组：想发的 / 等复盘的 / 已沉淀。 */
+export function rowGroup(project: ContentProject): ProjectGroup {
+  if (isDone(project)) return 'settled';
+  if (isObserving(project)) return 'observing';
+  return 'wanted';
 }
 
 /** 五段生命周期：①意图 ②证据 ③候选 ④检查 ⑤观察。 */
@@ -88,28 +142,51 @@ function isObserving(project: ContentProject): boolean {
   );
 }
 
-export function groupByOwner(projects: ContentProject[]): {
-  needs_me: ContentProject[];
-  waiting: ContentProject[];
+/** 稳定排序：更新时间倒序；同时间按 id 字典序。 */
+export function sortProjects(projects: ContentProject[]): ContentProject[] {
+  return [...projects].sort((a, b) => {
+    const byTime = Date.parse(b.updated_at) - Date.parse(a.updated_at);
+    if (Number.isFinite(byTime) && byTime !== 0) return byTime;
+    return a.id.localeCompare(b.id);
+  });
+}
+
+/** 三组；每条只进一组；组内倒序。 */
+export function groupProjects(projects: ContentProject[]): {
+  wanted: ContentProject[];
   observing: ContentProject[];
-  done: ContentProject[];
+  settled: ContentProject[];
 } {
+  const wanted: ContentProject[] = [];
+  const observing: ContentProject[] = [];
+  const settled: ContentProject[] = [];
+  for (const project of projects) {
+    switch (rowGroup(project)) {
+      case 'settled':
+        settled.push(project);
+        break;
+      case 'observing':
+        observing.push(project);
+        break;
+      default:
+        wanted.push(project);
+    }
+  }
   return {
-    needs_me: projects.filter(needsMe),
-    waiting: projects.filter((p) => !isDone(p) && !isObserving(p) && p.next_action === undefined),
-    observing: projects.filter(isObserving),
-    done: projects.filter(isDone),
+    wanted: sortProjects(wanted),
+    observing: sortProjects(observing),
+    settled: sortProjects(settled),
   };
 }
 
 export function viewProjects(projects: ContentProject[], view: ProjectView): ContentProject[] {
   switch (view) {
     case 'needs_me':
-      return projects.filter(needsMe);
+      return projects.filter((p) => rowGroup(p) === 'wanted');
     case 'observing':
-      return projects.filter(isObserving);
+      return projects.filter((p) => rowGroup(p) === 'observing');
     case 'done':
-      return projects.filter(isDone);
+      return projects.filter((p) => rowGroup(p) === 'settled');
     case 'all':
     default:
       return projects;
@@ -120,7 +197,16 @@ export function searchProjects(projects: ContentProject[], query: string): Conte
   const q = query.trim().toLowerCase();
   if (!q) return projects;
   return projects.filter((p) => {
-    const hay = [p.title, intentLabel(p), p.content_form ?? ''].join(' ').toLowerCase();
+    const hay = [
+      p.title,
+      intentLabel(p),
+      p.content_form ?? '',
+      nextActionLabel(p),
+      rowStepLabel(p),
+      rowActionLabel(p),
+    ]
+      .join(' ')
+      .toLowerCase();
     return hay.includes(q);
   });
 }

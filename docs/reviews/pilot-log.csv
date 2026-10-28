@@ -1,0 +1,5 @@
+change_id,tier,gate,artifact_hash,started_at,decided_at,decision,blocking,major,minor,accepted_risk,bypass,false_positive,false_negative,notes
+UX-01,D1,RG0,95990AC8F5B57552,2026-10-27 19:20:45,2026-10-27 19:20:45,conditional,3,2,2,0,0,unknown,unknown,首审；工件状态矛盾/成功指标不可测/决策缺失
+UX-01,D1,RG0-r2,DC7C71760EF09F9E,2026-10-28 12:59:13,2026-10-28 12:59:13,pass,0,0,0,0,0,unknown,unknown,高保真确认；旧 blockers 关闭
+UX-01,D1,RG1,DC7C71760EF09F9E,2026-10-28 12:59:30,2026-10-28 12:59:30,advisory-conditional,0,4,0,0,0,unknown,unknown,D1 咨询；4 项 must-fix：映射/交互/分组/测试埋点
+UX-01,D1,RG1-r2,A158280DD9830FC9,2026-10-28 13:00:00,2026-10-28 13:00:00,advisory-closed,0,0,0,0,0,unknown,unknown,技术设计 §11 补齐；4 项 RG1 条件关闭；待 D1 实现

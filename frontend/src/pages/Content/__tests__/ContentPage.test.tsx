@@ -172,4 +172,15 @@ describe('ContentPage', () => {
     expect(await screen.findByText('真实经验项目')).toBeInTheDocument();
     expect(screen.getByText('内容')).toBeInTheDocument();
   });
+
+  it('renders grouped list with human step, next action and one total stat', async () => {
+    api.listProjects.mockResolvedValue({ items: [project], total: 1 });
+    renderPage('/content');
+
+    expect(await screen.findByTestId('group-wanted')).toBeInTheDocument();
+    expect(screen.getByText('想发的')).toBeInTheDocument();
+    expect(screen.getByTestId('group-wanted')).toHaveTextContent('写初稿');
+    expect(screen.getByRole('button', { name: '继续：真实经验项目' })).toBeInTheDocument();
+    expect(screen.getByText(/共 1 条 · 1 条待你推进/)).toBeInTheDocument();
+  });
 });

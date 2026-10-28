@@ -1742,3 +1742,23 @@
 @media (max-width:839px){
   .project-detail.is-empty{display:none}
 }
+
+/* ── 内容列表分组（2026-10） ── */
+.content-group {
+  margin: 8px 0 0;
+}
+.content-group-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 16px 4px;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  color: var(--lumen-muted);
+}
+.content-group-title span {
+  font-weight: 500;
+  opacity: 0.75;
+}

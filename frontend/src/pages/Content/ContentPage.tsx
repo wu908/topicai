@@ -40,11 +40,14 @@ import type {
 import ProjectStartPanel from '@/features/content/ProjectStartPanel';
 import ProjectStagePage from '@/features/content/ProjectStagePage';
 import ProjectListRow from '@/features/content/ProjectListRow';
-import { nextActionLabels, searchProjects, viewProjects, type ProjectView } from '@/features/content/projectListModel';
+import { trackContentListView, type ContentListGroup } from '@/features/content/contentListAnalytics';
+import {
+  groupProjects,
+  searchProjects,
+  viewProjects,
+  type ProjectView,
+} from '@/features/content/projectListModel';
 import './ContentPage.css';
-
-// G4: next-action copy is owned by projectListModel; list and workspace share it.
-void nextActionLabels;
 
 const makeKey = (prefix: string) =>
   `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
@@ -94,6 +97,19 @@ export default function ContentPage() {
   const [view, setView] = useState<ProjectView>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const visibleProjects = searchProjects(viewProjects(projects, view), searchQuery);
+  const groupedProjects = groupProjects(visibleProjects);
+  const projectGroups = [
+    { key: 'wanted', title: '想发的', items: groupedProjects.wanted },
+    { key: 'observing', title: '等复盘的', items: groupedProjects.observing },
+    { key: 'settled', title: '已沉淀', items: groupedProjects.settled },
+  ].filter((group) => group.items.length > 0);
+
+  useEffect(() => {
+    if (projectId) return;
+    const group: ContentListGroup =
+      view === 'needs_me' ? 'wanted' : view === 'done' ? 'settled' : view;
+    trackContentListView(group, visibleProjects.length);
+  }, [projectId, view, searchQuery, visibleProjects.length]);
 
   // 幂等键稳定化（与 Materials/Starter/Opportunities 页面同一模式）：
   // 同一签名在一次尝试内复用同一个键，瞬时失败重试时服务端可去重；
@@ -257,12 +273,11 @@ export default function ContentPage() {
           <div>
             <h1 className="content-page-title">内容</h1>
             <p className="content-page-subtitle">
-              全部 {counts.all} · 需要我 {counts.needs_me} · 观察中 {counts.observing} · 已沉淀{' '}
-              {counts.done}
+              共 {counts.all} 条 · {counts.needs_me} 条待你推进
             </p>
           </div>
           <Button variant="contained" onClick={() => setShowCreate(true)}>
-            快速开始
+            开始一条
           </Button>
         </header>
         {/* 审计修复 2026-08-16 UX-L9：列表视图错误补充重试入口。 */}
@@ -295,10 +310,9 @@ export default function ContentPage() {
             }}
           />
         ) : (
-          /* 原型：通栏列表，行点击 → 项目屏 */
           <div className="lumen-band grow" data-testid="project-list">
             <div className="lumen-band-h">
-              <h2>全部内容</h2>
+              <h2>内容列表</h2>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 {(['all', 'needs_me', 'observing', 'done'] as const).map((v) => (
                   <button
@@ -308,7 +322,7 @@ export default function ContentPage() {
                     onClick={() => setView(v)}
                     data-testid={`view-${v}`}
                   >
-                    {{ all: '全部', needs_me: '需要我', observing: '观察中', done: '已沉淀' }[v]}{' '}
+                    {{ all: '全部', needs_me: '想发的', observing: '等复盘的', done: '已沉淀' }[v]}{' '}
                     {counts[v]}
                   </button>
                 ))}
@@ -318,29 +332,38 @@ export default function ContentPage() {
               <TextField
                 size="small"
                 fullWidth
-                placeholder="搜标题或形态"
-                aria-label="搜标题或形态"
+                placeholder="搜标题/形态/下一步"
+                aria-label="搜标题/形态/下一步"
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
               />
             </div>
-            {visibleProjects.map((project) => (
-              <ProjectListRow
-                key={project.id}
-                project={project}
-                selected={selectedId === project.id}
-                onSelect={(id) => {
-                  setSelectedId(id);
-                  navigate(`/content/${id}`);
-                }}
-              />
+            {projectGroups.map((group) => (
+              <section
+                className="content-group"
+                key={group.key}
+                data-testid={`group-${group.key}`}
+              >
+                <h3 className="content-group-title">
+                  {group.title} <span>{group.items.length}</span>
+                </h3>
+                {group.items.map((project) => (
+                  <ProjectListRow
+                    key={project.id}
+                    project={project}
+                    selected={selectedId === project.id}
+                    onSelect={(id) => {
+                      setSelectedId(id);
+                      navigate(`/content/${id}`);
+                    }}
+                  />
+                ))}
+              </section>
             ))}
             {visibleProjects.length === 0 ? (
-              <div className="lumen-fill">这个视图下还没有项目。</div>
+              <div className="lumen-fill">没有匹配的内容，试试清除搜索或切换分组。</div>
             ) : (
-              <div className="lumen-fill">
-                共 {visibleProjects.length} 条 · 搜索标题或形态
-              </div>
+              <div className="lumen-fill">共 {visibleProjects.length} 条</div>
             )}
           </div>
         )}
