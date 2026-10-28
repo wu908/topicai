@@ -4,7 +4,7 @@
 - 分支：`pilot2-settings-dead-buttons`
 - 基点：`9446204`（origin/main）
 - 代码 HEAD：`24ae900`
-- 状态：**Ready for RG3 human sign-off（待发布负责人签字）**
+- 状态：**RG3 approved（用户 2026-10-28 签字：可以发布）**；合并/推送后生效
 - 变更性质：前端禁用态 + 文案；**无后端、接口、schema、迁移、依赖变更**
 
 ## 1. 发布范围
@@ -52,7 +52,8 @@
 | 独立 review | ✅ approve |
 | 后端/数据风险 | ✅ 无 |
 | 回滚可执行 | ✅ 单 commit |
-| **发布负责人** | **待签字：可以合并 / 可以发布 / 暂不** |
+| **发布负责人** | **✅ 用户 2026-10-28 签字：可以发布** |
+| 发布方式 | 分支 `pilot2-settings-dead-buttons` → `main`（PR / merge） |
 
 ## 6. 试点记录
 
