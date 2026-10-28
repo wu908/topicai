@@ -3,8 +3,8 @@
 - 原审查：`review-rg2-ux-fix-item-01-2026-10-28.md`（Lead 自审，未发现 blocking）
 - **独立审查结果**：commit `2fb050e`，**1 blocking + 5 major + 7 minor**；测试/类型/lint/build 全绿，但业务映射/验收有缺口。
 - 本报告：针对独立审查的修复与复验。
-- 修复 commit：`3c84a89`（`fix(content): address RG2 review findings`）。
-- 结论：**Conditional（B1 + 5 major 已修；待独立复审 + 390px 视觉）**
+- 修复 commit：`3c84a89`（`fix(content): address RG2 review findings`）；收尾 `922a5b2`。
+- 结论：**RG2 通过**（独立复审无 blocking/major；390px 视觉、键盘、覆盖率门已补；axe 未跑，非阻塞）
 
 ---
 
@@ -44,30 +44,26 @@
 
 > 测试命令的 PowerShell exit 1 来自 Vite stderr warning；Vitest 汇总 0 failed。
 
-## 四、仍未验证
+## 四、补充验证（本轮）
 
-- **独立复审**：需要 fresh reviewer 再看 `2fb050e..HEAD` 的修复 diff；本报告是 Lead 修复记录，不是独立结论。
-- **390px 视觉**：chips 横向滚动、标题 2 行、72px 按钮未跑浏览器/截图/axe。
-- **键盘/读屏**：原生 button 行为是推断，未跑 Enter/Space/Tab/axe。
-- **覆盖率门**：未跑 `pnpm test` 的 lines 80/functions 66/branches 66/statements 76。
-- **后端/HTTP**：settled→next_action 仍基于 SQL + 模型探针，不是真实 DB/API。
+| 项 | 结果 |
+|---|---|
+| **390px 视觉** | `visual-rg2-content-390.png`；chips `flex-wrap:nowrap`，`scrollWidth=286 > clientWidth=259`（横向滚动）；标题 `white-space:normal`、`-webkit-line-clamp:2`、高度 48px；action **72×44** |
+| **桌面视觉** | `visual-rg2-content-1440.png`；标题单行 ellipsis；action 72×44 |
+| **键盘** | `row-main` 焦点 + Enter → `/content/{id}`；`row-action` 焦点 + Space → `/content/{id}` |
+| **覆盖率** | 64 files / 480 tests passed；All files：lines 82.34 / functions 73.64 / branches 76.39 / statements 84.18，均高于 80 / 66 / 66 / 76 |
+| **独立复审** | 无 blocking、无 major；仅 m7 换行，已修 |
+| **类型/lint/build** | `tsc -b`、ESLint、Vite build 全通过 |
+
+> 覆盖率命令包装显示 exit 1 来自 Vite `configLoader: 'native'` stderr；Vitest 汇总 0 failed，且无 threshold error。
+> 截图：[390px](visual-rg2-content-390.png) · [1440px](visual-rg2-content-1440.png)
 
 ## 五、判定
 
-**Conditional**：B1 与 5 major 已修，测试/类型/lint/build 通过；但独立复审和 390px 视觉未完成。通过后更新 pilot-log 为 RG2 approve。
+**RG2 通过**：B1 + 5 major 已修；独立复审无 blocking/major；390px 视觉、键盘、覆盖率门均通过。
 
----
+## 六、剩余非阻塞
 
-## 六、独立复审（2026-10-28）
-
-- 独立 reviewer 复审 `2fb050e..HEAD`：**conditional，无 blocking，无 major**。
-- 确认 B1、M1–M5、m1–m4/m6 已反映在代码：
-  - settled 标签优先（`projectListModel.ts`）
-  - 空组保留组头（`ContentPage.tsx`）
-  - settled >5 折叠（`ContentPage.tsx`）
-  - mobile/analytics 修复（`lumen-ui.css`、`contentListAnalytics.ts`）
-- **m7 仍在**：`ContentPage.css` 末尾无换行；本轮已补。
-- 复审测试：4 files / 30 tests passed；`tsc -b` 通过。
-- 未覆盖：390px 视觉/键盘/axe；覆盖率阈值。
-
-**结论**：独立复审无 blocking/major；m7 已修；仍待 390px 视觉与覆盖率门，暂不标 approve。
+- **axe/读屏**：未跑 axe 全量扫描；native button + aria-label 已覆盖基础可访问性。
+- **CI 真实 exit**：本地覆盖率命令被 PowerShell 当 stderr 报 exit 1；需在 CI 确认原生 exit。
+- **后端/HTTP**：settled→next_action 仍基于 SQL + 模型探针，不是真实 DB/API 集成测试。
