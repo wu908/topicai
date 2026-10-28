@@ -174,8 +174,20 @@ describe('SettingsPage', () => {
     const memButtons = within(sectionWrapper('mem')).getAllByRole('button', { name: '打开编辑' });
     expect(memButtons).toHaveLength(2);
     memButtons.forEach((button) => expect(button).not.toHaveAttribute('href'));
-    expect(within(sectionWrapper('priv')).getByRole('button', { name: '导出…' })).toBeInTheDocument();
-    expect(within(sectionWrapper('priv')).getByRole('button', { name: '申请删除…' })).toBeInTheDocument();
+    expect(within(sectionWrapper('priv')).getByRole('button', { name: /导出…/ })).toBeDisabled();
+    expect(within(sectionWrapper('priv')).getByRole('button', { name: /申请删除…/ })).toBeDisabled();
+  });
+
+  it('marks the four unimplemented settings actions as disabled and coming soon', async () => {
+    renderPage();
+    await screen.findByText('默认内容形态');
+
+    for (const name of [/配置模型…/, /管理权限…/, /导出…/, /申请删除…/]) {
+      const button = screen.getByRole('button', { name });
+      expect(button).toBeDisabled();
+      expect(button).toHaveAttribute('title', '即将上线');
+      expect(button).toHaveTextContent('即将上线');
+    }
   });
 
   it('labels every select and both assistant name inputs for assistive tech', async () => {
