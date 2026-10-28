@@ -55,3 +55,19 @@
 ## 五、判定
 
 **Conditional**：B1 与 5 major 已修，测试/类型/lint/build 通过；但独立复审和 390px 视觉未完成。通过后更新 pilot-log 为 RG2 approve。
+
+---
+
+## 六、独立复审（2026-10-28）
+
+- 独立 reviewer 复审 `2fb050e..HEAD`：**conditional，无 blocking，无 major**。
+- 确认 B1、M1–M5、m1–m4/m6 已反映在代码：
+  - settled 标签优先（`projectListModel.ts`）
+  - 空组保留组头（`ContentPage.tsx`）
+  - settled >5 折叠（`ContentPage.tsx`）
+  - mobile/analytics 修复（`lumen-ui.css`、`contentListAnalytics.ts`）
+- **m7 仍在**：`ContentPage.css` 末尾无换行；本轮已补。
+- 复审测试：4 files / 30 tests passed；`tsc -b` 通过。
+- 未覆盖：390px 视觉/键盘/axe；覆盖率阈值。
+
+**结论**：独立复审无 blocking/major；m7 已修；仍待 390px 视觉与覆盖率门，暂不标 approve。
