@@ -1,7 +1,7 @@
 # UX-03 · 项目屏单条人话阶段条（D1）
 
 - 日期：2026-10-28
-- 状态：**D1 实现完成；RG2 delta approve；待 RG3**
+- 状态：**D1 实现完成；RG2 approve（含 delta）；待 RG3**
 - 方向：审计 Q2 · **A：单条人话流程条**（用户 2026-10-28 同意）
 - 档位：**D1**（多文件、现有架构内、可逆；无接口/数据/权限变化）
 
@@ -47,7 +47,7 @@
 
 ## 6. 证据
 
-- 目标测试：`ProjectStagePage.test.tsx` + `ArtifactPane.test.tsx` **39 tests passed**
+- 目标测试：`ProjectStagePage` 18 + `ArtifactPane` 16 + `ProjectDetailPane` 5 = **39 tests passed**
 - 视觉（Playwright 本机）：
   - 1440×900、390×844 各 1 张；`[aria-current="step"]` **1 个**
   - 标签：想清楚 / 找素材 / 写初稿 / 发前检查 / 观察
@@ -57,3 +57,5 @@
 - 目标测试（含 ProjectDetailPane / ArtifactPane action KV）：**39 passed**
 - `activeActionTitle` 统一 bar/KV 的 active 判定与空 title 回退。
 - 已知非阻塞：`stageOf` 3 → 写初稿 与 `record_publication` 的语义映射仍是产品决策（F2）；`data-testid="stage-meter"` 名称沿用。
+- 全量测试：**64 files / 486 tests passed**；覆盖率 lines 82.39 / functions 73.81 / branches 76.42 / statements 84.23
+- `nextActionLabel`/`activeActionTitle` 单测：20 tests（model）、ArtifactPane action KV 已覆盖；已知 F2 仍为产品决策。

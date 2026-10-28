@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ContentProject, IntentActionType, NextAction } from '@/types/contracts/v2/content';
 import {
+  activeActionTitle,
   groupProjects,
   nextActionLabel,
   nextActionLabels,
@@ -83,6 +84,20 @@ function orchestrated(action_type: IntentActionType): NonNullable<ContentProject
     last_event: null,
   };
 }
+
+describe('activeActionTitle', () => {
+  it('only returns executable actions with a non-empty title', () => {
+    const base = orchestrated('review_candidate');
+    for (const status of ['proposed', 'accepted', 'deferred'] as const) {
+      expect(activeActionTitle({ ...base, status })).toBe('确认候选内容');
+    }
+    for (const status of ['completed', 'cancelled', 'superseded', 'failed', 'expired'] as const) {
+      expect(activeActionTitle({ ...base, status })).toBeUndefined();
+    }
+    expect(activeActionTitle({ ...base, title: '   ' })).toBeUndefined();
+    expect(activeActionTitle(undefined)).toBeUndefined();
+  });
+});
 
 describe('nextActionLabels（G4 同源）', () => {
   it('covers every NextAction key so list and workspace cannot drift', () => {
