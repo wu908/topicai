@@ -262,6 +262,7 @@
 
 | next_action | 人话步骤 | 按钮 | 分组 | 备注 |
 |---|---|---|---|---|
+| **任意 `status=settled`** | **已沉淀** | **查看** | 已沉淀 | **优先于 next_action**（§3.4） |
 | `create_version` | 写初稿 | 继续 | 想发的 | 现有 `stageOf` 为 1；旧数据无 next_action 时也落这里 |
 | `lock_hypothesis` | 发前检查 | 继续 | 想发的 | 锁定发布意图 |
 | `record_publication` | 去发布 | 去发布 | 想发的 | 稿好了去发 |
@@ -317,25 +318,26 @@
   - `needsMe = !settled && !observing`；`next_action` 缺失/未知 → `wanted`。
   - 组内按 `updated_at` 倒序；同时间用 `id` 稳定排序。
 - 搜索：haystack 增加 `nextActionLabel`、`rowStepLabel`、`rowActionLabel`（title/形态/下一步都命中）。
-- 空结果：保留产品 4 节文案；搜索无结果给清除按钮。
-- 测试：`undefined/未知 next_action`、`settled+observing` 冲突、同时间排序、搜索“继续/回填”命中。
+- 空结果：保留产品 4 节文案；搜索无结果给「没有匹配「关键词」」+ 清除按钮；筛选无结果给「这一组暂时没有内容，去『想发的』看看」+ 切组按钮；选中空组也保留组头。
+- 折叠：已沉淀 >5 条默认显示 5 条 +「查看全部 N 条」/「收起」。
+- 测试：`undefined/未知 next_action`、`settled+observing` 冲突、同时间排序、搜索“继续/回填”命中、settled 真实 next_action 文案。
 
 ### 11.4 测试与埋点
 
 **测试文件与命令**（按项目现有脚本）：
 - `frontend/src/features/content/__tests__/projectListModel.test.ts`：更新旧 `groupByOwner`/`waiting` 断言；新增 `rowStepLabel`/`rowActionLabel` 全 10 个 key + orchestrated + unknown；`groupProjects` 优先级/排序/搜索。
 - `frontend/src/features/content/__tests__/ProjectListRow.test.tsx`（**新建**）：两个 button 角色、可访问名、无嵌套 button、键盘 Enter/Space、无重复导航。
-- `frontend/src/pages/Content/__tests__/ContentPage.test.tsx`：组头/统计只一次/chips 数量/搜索无结果/动作按钮导航/移动端类名（可快照）。
+- `frontend/src/pages/Content/__tests__/ContentPage.test.tsx`：组头/统计只一次/chips 数量/搜索空态+清除/筛选空态+切组/已沉淀折叠/动作按钮导航/移动端类名（可快照）。
 - 命令：`pnpm --dir frontend test`、`pnpm --dir frontend lint`、`pnpm --dir frontend build`（若项目脚本不同，以 `frontend/package.json` 为准）。
 
 **埋点**（用于产品 2.1 辅助指标）：
 | 事件 | 触发 | 参数 |
 |---|---|---|
-| `content_list_view` | 列表渲染/切换组 | `group`, `count` |
-| `content_list_project_open` | 点击行主体/标题 | `project_id`, `group`, `via=title` |
+| `content_list_view` | 列表真正渲染且非 loading/empty；切换组 | `group`, `count` |
+| `content_list_project_open` | 点击行主体/标题（via=title） | `project_id`, `group`, `via=title` |
 | `content_list_action_click` | 点击行尾按钮 | `project_id`, `group`, `action`, `next_action` |
 - 转化率 = `content_list_project_open / content_list_view`（按 group/窗口）；按钮点击率 = `action_click / view`。
-- 不采集标题/正文等 PII；只 ID/枚举/计数。
+- 搜索不重复发 view；行尾按钮只发 action，不再额外发 open；不采集标题/正文等 PII。
 
 ### 11.5 实现顺序
 
@@ -345,9 +347,9 @@
 4. CSS：桌面/移动、44px、chips 横向滚动、focus 样式。
 5. 埋点；跑 lint/test/build；提交 RG2。
 
-### 11.6 未决点（实现前产品确认 1 处）
+### 11.6 决策记录（产品确认）
 
-- `create_version` 的左标签用“写初稿”（本设计默认）还是“定方向”？现有 `stageOf` 为 1（意图），但用户此时已有项目、下一步是写初稿；建议“写初稿”。若产品坚持“定方向”，改 11.1 一行即可，不影响结构。
+- `create_version` 左标签：**2026-10-28 暂按“写初稿”实现**（现有 `stageOf` 为 1；确认过的 hifi 样本同时出现“定方向”/“写初稿”，不是唯一映射）。产品若改“定方向”，只改 `rowStepLabels.create_version` 一行，不影响结构。
 
 ## 12. 修订记录
 
@@ -356,3 +358,4 @@
 - **2026-10-28 RG0 通过**：产品负责人确认高保真门；RG0 通过，进入 RG1。
 - **2026-10-28 RG1 技术设计**：补 11.1 动作/步骤/按钮映射、11.2 行结构/可访问性、11.3 分组/排序/搜索、11.4 测试与埋点、11.5 实现顺序；未改代码。
 - **2026-10-28 D1 实现**：commit `2fb050e`；model/row/page/CSS/埋点/测试完成；待 RG2。
+- **2026-10-28 RG2 独立审查修复**：settled 标签优先、空态/折叠/移动端、埋点 group/view、CSS 作用域；见复审报告。

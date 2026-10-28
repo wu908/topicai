@@ -61,7 +61,6 @@ export default function ProjectListRow({
         className="row-action"
         onClick={() => {
           trackContentListAction(project);
-          trackContentListOpen(project, 'action');
           onSelect(project.id);
         }}
         aria-label={`${action}：${project.title}`}

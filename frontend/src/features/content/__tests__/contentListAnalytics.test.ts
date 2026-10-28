@@ -31,7 +31,11 @@ describe('contentListAnalytics（无 PII）', () => {
       'content_list_action_click',
     ]);
     expect(events[1].payload).toMatchObject({ project_id: 'p1', via: 'title' });
-    expect(events[2].payload).toMatchObject({ project_id: 'p1', action: '继续' });
+    expect(events[2].payload).toMatchObject({
+      project_id: 'p1',
+      group: 'wanted',
+      action: '继续',
+    });
     expect(JSON.stringify(events)).not.toContain('不应上报的标题');
   });
 });

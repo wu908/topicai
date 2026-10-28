@@ -961,6 +961,7 @@
 /* ── 列表行：主体按钮 + 行尾动作（2026-10 内容页） ── */
 .lumen-row {
   cursor: default;
+  padding: 0;
 }
 .lumen-row .row-main {
   display: flex;
@@ -968,7 +969,7 @@
   gap: 12px;
   flex: 1;
   min-width: 0;
-  padding: 0;
+  padding: 11px 0 11px 16px;
   border: 0;
   background: transparent;
   color: inherit;
@@ -1003,6 +1004,7 @@
   font-weight: 650;
   cursor: pointer;
   flex-shrink: 0;
+  margin-right: 16px;
 }
 .lumen-row .row-action:hover {
   filter: brightness(1.08);
@@ -1010,17 +1012,26 @@
 @media (max-width: 600px) {
   .lumen-row {
     gap: 8px;
-    padding: 10px 8px;
+    padding: 0 8px;
   }
   .lumen-row .row-main {
     gap: 8px;
+    padding: 10px 0;
   }
-  .lumen-tag {
+  .lumen-row .row-main .title {
+    white-space: normal;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+  .lumen-row .lumen-tag {
     width: 44px;
     font-size: 10px;
   }
   .lumen-row .row-action {
-    min-width: 64px;
+    min-width: 72px;
     padding: 8px 10px;
+    margin-right: 0;
   }
 }

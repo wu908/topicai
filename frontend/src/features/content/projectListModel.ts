@@ -60,16 +60,21 @@ export function nextActionLabel(project: ContentProject): string {
   return nextActionLabels.create_version;
 }
 
-/** 列表左标签：人话步骤；未知/缺失 → 待处理。 */
+/** 列表左标签：人话步骤；已沉淀优先，未知/缺失 → 待处理。 */
 export function rowStepLabel(project: ContentProject): string {
+  if (rowGroup(project) === 'settled') return '已沉淀';
   if (project.next_action && rowStepLabels[project.next_action]) {
     return rowStepLabels[project.next_action];
+  }
+  if (project.orchestrated_action) {
+    return ['定方向', '找素材', '写初稿', '发前检查', '可复盘'][stageOf(project) - 1] ?? '待处理';
   }
   return '待处理';
 }
 
-/** 列表行尾按钮：动作动词；未知/缺失 → 去处理。 */
+/** 列表行尾按钮：动作动词；已沉淀优先 → 查看。 */
 export function rowActionLabel(project: ContentProject): string {
+  if (rowGroup(project) === 'settled') return '查看';
   if (project.next_action && rowActionLabels[project.next_action]) {
     return rowActionLabels[project.next_action];
   }

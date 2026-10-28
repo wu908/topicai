@@ -1762,3 +1762,31 @@
   font-weight: 500;
   opacity: 0.75;
 }
+
+.content-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  -webkit-overflow-scrolling: touch;
+}
+.content-chips .lumen-chip {
+  flex-shrink: 0;
+}
+.content-group-toggle,
+.content-empty-action {
+  border: 0;
+  background: transparent;
+  color: var(--lumen-ink);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 8px 16px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.content-empty-action {
+  padding: 4px 6px;
+}

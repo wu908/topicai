@@ -2,7 +2,7 @@
  * ContentPage：列表 + 项目屏（ProjectStagePage）对齐原型。
  * 旧工作台表单流已由确认卡/产物取代，对应旧断言已删并记录。
  */
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -182,5 +182,63 @@ describe('ContentPage', () => {
     expect(screen.getByTestId('group-wanted')).toHaveTextContent('写初稿');
     expect(screen.getByRole('button', { name: '继续：真实经验项目' })).toBeInTheDocument();
     expect(screen.getByText(/共 1 条 · 1 条待你推进/)).toBeInTheDocument();
+  });
+
+  it('settled rows use 已沉淀 / 查看 and never show 可复盘 / 去复盘', async () => {
+    const settled = {
+      ...project,
+      id: 'p2',
+      title: '已沉淀项目',
+      status: 'settled' as const,
+      next_action: 'manage_observations' as const,
+    };
+    api.listProjects.mockResolvedValue({ items: [settled], total: 1 });
+    renderPage('/content');
+
+    expect(await screen.findByTestId('group-settled')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '查看：已沉淀项目' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '去复盘：已沉淀项目' })).not.toBeInTheDocument();
+  });
+
+  it('search empty state shows query + clear button', async () => {
+    api.listProjects.mockResolvedValue({ items: [project], total: 1 });
+    renderPage('/content');
+    await screen.findByText('真实经验项目');
+
+    fireEvent.change(screen.getByRole('textbox'), {
+      target: { value: '不存在' },
+    });
+    expect(await screen.findByText(/没有匹配「不存在」/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '清除搜索' }));
+    expect(await screen.findByText('真实经验项目')).toBeInTheDocument();
+  });
+
+  it('filter empty state offers going to wanted', async () => {
+    api.listProjects.mockResolvedValue({ items: [project], total: 1 });
+    renderPage('/content');
+    await screen.findByText('真实经验项目');
+
+    fireEvent.click(screen.getByTestId('view-done'));
+    expect(await screen.findByText(/这一组暂时没有内容/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '去「想发的」' }));
+    expect(await screen.findByText('真实经验项目')).toBeInTheDocument();
+  });
+
+  it('collapses settled list over 5 items and expands on demand', async () => {
+    const settled = Array.from({ length: 6 }, (_, index) => ({
+      ...project,
+      id: `p${index + 1}`,
+      title: `已沉淀 ${index + 1}`,
+      status: 'settled' as const,
+      next_action: 'manage_observations' as const,
+      updated_at: `2026-10-0${index + 1}T00:00:00Z`,
+    }));
+    api.listProjects.mockResolvedValue({ items: settled, total: settled.length });
+    renderPage('/content');
+
+    expect(await screen.findByTestId('group-settled')).toBeInTheDocument();
+    expect(screen.getAllByTestId('project-row')).toHaveLength(5);
+    fireEvent.click(screen.getByRole('button', { name: '查看全部 6 条' }));
+    expect(screen.getAllByTestId('project-row')).toHaveLength(6);
   });
 });

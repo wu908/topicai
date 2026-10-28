@@ -156,9 +156,45 @@ describe('rowStepLabel / rowActionLabel（列表人话步骤 + 按钮）', () =>
     }
   });
 
+  it('settled wins over a real next_action and shows 已沉淀 / 查看', () => {
+    for (const next_action of ['manage_observations', 'run_blind_review'] as NextAction[]) {
+      const p = project({ status: 'settled', next_action });
+      expect(rowStepLabel(p)).toBe('已沉淀');
+      expect(rowActionLabel(p)).toBe('查看');
+    }
+  });
+
   it('unknown/undefined falls back to 待处理 / 去处理', () => {
     expect(rowStepLabel(project({ next_action: undefined }))).toBe('待处理');
     expect(rowActionLabel(project({ next_action: undefined }))).toBe('去处理');
+  });
+
+  it('orchestrated-only uses stage step and 继续', () => {
+    const p = project({
+      next_action: undefined,
+      orchestrated_action: {
+        id: 'a1',
+        project_id: 'p1',
+        action_type: 'review_candidate',
+        content_intent: 'solve',
+        title: '确认候选内容',
+        reason: '',
+        evidence_refs: [],
+        unknown_refs: [],
+        expected_state_change: {},
+        estimated_effort_minutes: 2,
+        automation_level: 'guided',
+        human_gate_type: null,
+        human_gate: null,
+        fallback_action: { action_type: 'none' },
+        status: 'proposed',
+        version: 1,
+        expires_at: null,
+        last_event: null,
+      },
+    });
+    expect(rowStepLabel(p)).toBe('定方向');
+    expect(rowActionLabel(p)).toBe('继续');
   });
 
   it('orchestrated_action without next_action uses 继续, never title as button', () => {

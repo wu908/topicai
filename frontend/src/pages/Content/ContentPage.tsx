@@ -96,20 +96,26 @@ export default function ContentPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [view, setView] = useState<ProjectView>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [expandedSettled, setExpandedSettled] = useState(false);
   const visibleProjects = searchProjects(viewProjects(projects, view), searchQuery);
   const groupedProjects = groupProjects(visibleProjects);
-  const projectGroups = [
+  const selectedGroupKey =
+    view === 'needs_me' ? 'wanted' : view === 'done' ? 'settled' : view === 'observing' ? 'observing' : null;
+  const allProjectGroups = [
     { key: 'wanted', title: '想发的', items: groupedProjects.wanted },
     { key: 'observing', title: '等复盘的', items: groupedProjects.observing },
     { key: 'settled', title: '已沉淀', items: groupedProjects.settled },
-  ].filter((group) => group.items.length > 0);
+  ];
+  const projectGroups = selectedGroupKey
+    ? allProjectGroups.filter((group) => group.key === selectedGroupKey)
+    : allProjectGroups.filter((group) => group.items.length > 0);
 
   useEffect(() => {
-    if (projectId) return;
+    if (projectId || loading || projects.length === 0) return;
     const group: ContentListGroup =
       view === 'needs_me' ? 'wanted' : view === 'done' ? 'settled' : view;
-    trackContentListView(group, visibleProjects.length);
-  }, [projectId, view, searchQuery, visibleProjects.length]);
+    trackContentListView(group, viewProjects(projects, view).length);
+  }, [projectId, loading, projects, view]);
 
   // 幂等键稳定化（与 Materials/Starter/Opportunities 页面同一模式）：
   // 同一签名在一次尝试内复用同一个键，瞬时失败重试时服务端可去重；
@@ -313,14 +319,18 @@ export default function ContentPage() {
           <div className="lumen-band grow" data-testid="project-list">
             <div className="lumen-band-h">
               <h2>内容列表</h2>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <div className="content-chips" role="group" aria-label="内容分组">
                 {(['all', 'needs_me', 'observing', 'done'] as const).map((v) => (
                   <button
                     key={v}
                     type="button"
                     className={`lumen-chip${view === v ? ' on' : ''}`}
-                    onClick={() => setView(v)}
+                    onClick={() => {
+                      setView(v);
+                      setExpandedSettled(false);
+                    }}
                     data-testid={`view-${v}`}
+                    aria-pressed={view === v}
                   >
                     {{ all: '全部', needs_me: '想发的', observing: '等复盘的', done: '已沉淀' }[v]}{' '}
                     {counts[v]}
@@ -335,36 +345,86 @@ export default function ContentPage() {
                 placeholder="搜标题/形态/下一步"
                 aria-label="搜标题/形态/下一步"
                 value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
+                onChange={(event) => {
+                  setSearchQuery(event.target.value);
+                  setExpandedSettled(false);
+                }}
               />
             </div>
-            {projectGroups.map((group) => (
-              <section
-                className="content-group"
-                key={group.key}
-                data-testid={`group-${group.key}`}
-              >
-                <h3 className="content-group-title">
-                  {group.title} <span>{group.items.length}</span>
-                </h3>
-                {group.items.map((project) => (
-                  <ProjectListRow
-                    key={project.id}
-                    project={project}
-                    selected={selectedId === project.id}
-                    onSelect={(id) => {
-                      setSelectedId(id);
-                      navigate(`/content/${id}`);
-                    }}
-                  />
-                ))}
-              </section>
-            ))}
+            <div aria-live="polite">
+              {projectGroups.map((group) => {
+                const items =
+                  group.key === 'settled' && !expandedSettled
+                    ? group.items.slice(0, 5)
+                    : group.items;
+                return (
+                  <section
+                    className="content-group"
+                    key={group.key}
+                    data-testid={`group-${group.key}`}
+                  >
+                    <h3 className="content-group-title">
+                      {group.title} <span>{group.items.length}</span>
+                    </h3>
+                    {items.map((project) => (
+                      <ProjectListRow
+                        key={project.id}
+                        project={project}
+                        selected={selectedId === project.id}
+                        onSelect={(id) => {
+                          setSelectedId(id);
+                          navigate(`/content/${id}`);
+                        }}
+                      />
+                    ))}
+                    {group.key === 'settled' && group.items.length > 5 ? (
+                      <button
+                        type="button"
+                        className="content-group-toggle"
+                        onClick={() => setExpandedSettled((value) => !value)}
+                      >
+                        {expandedSettled ? '收起' : `查看全部 ${group.items.length} 条`}
+                      </button>
+                    ) : null}
+                  </section>
+                );
+              })}
+            </div>
             {visibleProjects.length === 0 ? (
-              <div className="lumen-fill">没有匹配的内容，试试清除搜索或切换分组。</div>
-            ) : (
-              <div className="lumen-fill">共 {visibleProjects.length} 条</div>
-            )}
+              <div className="lumen-fill">
+                {searchQuery.trim() ? (
+                  <>
+                    没有匹配「{searchQuery.trim()}」的内容。
+                    <button
+                      type="button"
+                      className="content-empty-action"
+                      onClick={() => {
+                        setSearchQuery('');
+                        setExpandedSettled(false);
+                      }}
+                    >
+                      清除搜索
+                    </button>
+                  </>
+                ) : view !== 'all' ? (
+                  <>
+                    这一组暂时没有内容，去「想发的」看看。
+                    <button
+                      type="button"
+                      className="content-empty-action"
+                      onClick={() => {
+                        setView('needs_me');
+                        setExpandedSettled(false);
+                      }}
+                    >
+                      去「想发的」
+                    </button>
+                  </>
+                ) : (
+                  '这里还没有内容。'
+                )}
+              </div>
+            ) : null}
           </div>
         )}
       </div>

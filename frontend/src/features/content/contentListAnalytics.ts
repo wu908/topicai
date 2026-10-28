@@ -42,6 +42,7 @@ export function trackContentListOpen(project: ContentProject, via: 'title' | 'ac
 export function trackContentListAction(project: ContentProject): void {
   emit('content_list_action_click', {
     project_id: project.id,
+    group: rowGroup(project),
     action: rowActionLabel(project),
     next_action: project.next_action ?? null,
   });
