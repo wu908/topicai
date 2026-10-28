@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ContentProject, NextAction } from '@/types/contracts/v2/content';
+import type { ContentProject, IntentActionType, NextAction } from '@/types/contracts/v2/content';
 import {
   groupProjects,
   nextActionLabel,
@@ -60,6 +60,29 @@ const allActions: NextAction[] = [
   'add_comparable_snapshot',
   'review_calibration_issue',
 ];
+
+function orchestrated(action_type: IntentActionType): NonNullable<ContentProject['orchestrated_action']> {
+  return {
+    id: 'a1',
+    project_id: 'p1',
+    action_type,
+    content_intent: 'solve',
+    title: '确认候选内容',
+    reason: '',
+    evidence_refs: [],
+    unknown_refs: [],
+    expected_state_change: {},
+    estimated_effort_minutes: 2,
+    automation_level: 'guided',
+    human_gate_type: null,
+    human_gate: null,
+    fallback_action: { action_type: 'none' },
+    status: 'proposed',
+    version: 1,
+    expires_at: null,
+    last_event: null,
+  };
+}
 
 describe('nextActionLabels（G4 同源）', () => {
   it('covers every NextAction key so list and workspace cannot drift', () => {
@@ -172,29 +195,33 @@ describe('rowStepLabel / rowActionLabel（列表人话步骤 + 按钮）', () =>
   it('orchestrated-only uses stage step and 继续', () => {
     const p = project({
       next_action: undefined,
-      orchestrated_action: {
-        id: 'a1',
-        project_id: 'p1',
-        action_type: 'review_candidate',
-        content_intent: 'solve',
-        title: '确认候选内容',
-        reason: '',
-        evidence_refs: [],
-        unknown_refs: [],
-        expected_state_change: {},
-        estimated_effort_minutes: 2,
-        automation_level: 'guided',
-        human_gate_type: null,
-        human_gate: null,
-        fallback_action: { action_type: 'none' },
-        status: 'proposed',
-        version: 1,
-        expires_at: null,
-        last_event: null,
-      },
+      orchestrated_action: orchestrated('review_candidate'),
     });
     expect(rowStepLabel(p)).toBe('定方向');
     expect(rowActionLabel(p)).toBe('继续');
+  });
+
+  it('orchestrated action_type maps known verbs; unknown falls back to 继续', () => {
+    const cases: Array<[IntentActionType, string]> = [
+      ['record_publication', '去发布'],
+      ['add_performance', '回填数据'],
+      ['review_result', '去复盘'],
+      ['confirm_learning', '去复盘'],
+      ['manage_learning', '去复盘'],
+      ['await_observation_window', '查看'],
+      ['scope_learning', '查看'],
+      ['review_candidate', '继续'],
+      ['answer_key_question', '继续'],
+    ];
+    for (const [action_type, label] of cases) {
+      const p = project({ next_action: undefined, orchestrated_action: orchestrated(action_type) });
+      expect(rowActionLabel(p), action_type).toBe(label);
+    }
+    const unknown = project({
+      next_action: undefined,
+      orchestrated_action: orchestrated('not_a_real_action' as IntentActionType),
+    });
+    expect(rowActionLabel(unknown)).toBe('继续');
   });
 
   it('orchestrated_action without next_action uses 继续, never title as button', () => {

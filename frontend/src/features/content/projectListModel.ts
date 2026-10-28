@@ -3,7 +3,12 @@
  * 「下一步」文案的唯一来源（G4）：列表行与工作台都必须走 nextActionLabel。
  * 列表按钮/人话步骤使用 rowActionLabel / rowStepLabel，不要复用句子文案。
  */
-import type { ContentIntent, ContentProject, NextAction } from '@/types/contracts/v2/content';
+import type {
+  ContentIntent,
+  ContentProject,
+  IntentActionType,
+  NextAction,
+} from '@/types/contracts/v2/content';
 
 export type ProjectView = 'all' | 'needs_me' | 'observing' | 'done';
 export type ProjectGroup = 'wanted' | 'observing' | 'settled';
@@ -60,6 +65,21 @@ export function nextActionLabel(project: ContentProject): string {
   return nextActionLabels.create_version;
 }
 
+/**
+ * 编排动作的按钮文案：只映射语义明确的类型；其余（含 review_candidate /
+ * answer_key_question / confirm_*）保持“继续”，未知类型也是“继续”。
+ * 设计 §11.1：按钮按 action_type 映射，未知 → 继续；不用 title 当按钮。
+ */
+const rowActionTypeLabels: Partial<Record<IntentActionType, string>> = {
+  record_publication: '去发布',
+  add_performance: '回填数据',
+  review_result: '去复盘',
+  confirm_learning: '去复盘',
+  manage_learning: '去复盘',
+  await_observation_window: '查看',
+  scope_learning: '查看',
+};
+
 /** 列表左标签：人话步骤；已沉淀优先，未知/缺失 → 待处理。 */
 export function rowStepLabel(project: ContentProject): string {
   if (rowGroup(project) === 'settled') return '已沉淀';
@@ -78,7 +98,9 @@ export function rowActionLabel(project: ContentProject): string {
   if (project.next_action && rowActionLabels[project.next_action]) {
     return rowActionLabels[project.next_action];
   }
-  if (project.orchestrated_action) return '继续';
+  if (project.orchestrated_action) {
+    return rowActionTypeLabels[project.orchestrated_action.action_type] ?? '继续';
+  }
   return '去处理';
 }
 

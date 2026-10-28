@@ -276,6 +276,17 @@
 | `orchestrated_action` 存在 | 用 `stageOf()` 对应的人话步骤 | 按 `action_type` 映射；未知 → 继续 | 按状态 | **不拿 title 当按钮**；title 只用于副行“下一步” |
 | `next_action` 缺失/未知 | 待处理 | 去处理 | 想发的 | 记录 dev warning；不阻断渲染 |
 
+**`orchestrated_action.action_type` 按钮映射**（`next_action` 缺失时）：
+
+| action_type | 按钮 |
+|---|---|
+| `record_publication` | 去发布 |
+| `add_performance` | 回填数据 |
+| `review_result` / `confirm_learning` / `manage_learning` | 去复盘 |
+| `await_observation_window` / `scope_learning` | 查看 |
+| `review_candidate` / `answer_key_question` / `create_project` / `confirm_intent` / `lock_intent` / `confirm_publish_scope` | 继续（默认） |
+| 其他/未知 | 继续 |
+
 > 实现新增 `rowStepLabel`/`rowActionLabel` 后，`ProjectListRow` 不再使用 `rowTag`/`progressOf`；`nextActionLabel` 保留给副行。
 
 ### 11.2 行结构 / 可访问性（避免嵌套交互）
