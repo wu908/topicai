@@ -5,7 +5,7 @@
 - 基点：`83f074a`
 - 当前 HEAD：`1b7ae01`
 - 状态：**RG3 approved（用户 2026-10-28 签字：可以发布）**；合并/推送后生效
-- 变更性质：前端展示/交互 + 埋点；**无后端、无接口、无 schema、无迁移、无依赖变更**
+- 变更性质：前端展示/交互 + 埋点；**无后端、无接口、无 schema、无迁移**；仅 dev 依赖安全 override（undici/zod），无生产依赖变更
 
 ---
 
@@ -22,7 +22,7 @@
 
 **不包含**
 - 后端 API / DB / migration
-- 新依赖 / 新基础设施
+- 生产新依赖 / 新基础设施（仅 dev 依赖安全 override）
 - 运营流、发布自动化、Context7
 
 ---
@@ -66,7 +66,8 @@ efc565f docs: record action mapping verification
 | Lint | `eslint .` | 通过（无输出） |
 | 构建 | `vite build` | 通过，11,539 modules；`dist/index.html` SHA256 `298A3281…1E60E`（gitignored） |
 | 代码 whitespace | `git diff --check 83f074a..HEAD -- frontend/src` | 通过 |
-| 依赖变更 | `git diff --name-only` package/lock/requirements | **无** |
+| 依赖变更 | `git diff --name-only` package/lock/requirements | **仅 dev 依赖安全 override：undici 7.30.1 / zod 4.6.7**（无生产依赖） |
+| 依赖审计 | `pnpm audit --audit-level high` | **0 high**（7 moderate，dev-only；CI high 门通过） |
 | 后端变更 | `git diff --name-only` backend | **无** |
 | 390px 视觉 | Playwright 390×844 | chips `nowrap`，`scrollWidth 286 > clientWidth 259`；标题 2 行；action **72×44** |
 | 桌面视觉 | Playwright 1440×900 | 标题单行 ellipsis；action 72×44 |
@@ -88,7 +89,7 @@ RG2 报告：[review-rg2-ux-fix-item-01-2026-10-28-r2.md](review-rg2-ux-fix-item
 | 埋点口径变化 | 中 | `content_list_view` 只在非 loading/非空/切组时发；action 带 group；上线后看 1–2 天事件量，异常回滚 |
 | 移动端布局 | 低 | 390px 实测 chips/标题/按钮；未跑真机 |
 | 后端/数据 | **无** | 无 API/schema/migration 变更 |
-| 依赖/供应链 | **无** | 无新增依赖 |
+| 依赖/供应链 | 低 | 仅 dev 依赖 override：undici 7.30.1 / zod 4.6.7（修 high）；无生产依赖变更 |
 | 可访问性 | 低 | 原生 button + aria-label；未跑 axe 全量 |
 | 浏览器兼容 | 低 | 使用现有 CSS/React 栈；未跑多浏览器矩阵 |
 
