@@ -3,6 +3,7 @@
 - 原审查：`review-rg2-ux-fix-item-01-2026-10-28.md`（Lead 自审，未发现 blocking）
 - **独立审查结果**：commit `2fb050e`，**1 blocking + 5 major + 7 minor**；测试/类型/lint/build 全绿，但业务映射/验收有缺口。
 - 本报告：针对独立审查的修复与复验。
+- 修复 commit：`3c84a89`（`fix(content): address RG2 review findings`）。
 - 结论：**Conditional（B1 + 5 major 已修；待独立复审 + 390px 视觉）**
 
 ---
