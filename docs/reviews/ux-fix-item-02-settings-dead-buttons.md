@@ -1,7 +1,7 @@
 # UX-02 · 设置页死按钮禁用（D0）
 
 - 日期：2026-10-28
-- 状态：D0 实现中
+- 状态：**RG2 通过（D0 快速独立 review）；待 RG3**
 - 方向：审计 Q3 · **A：先禁用 + 标「即将上线」**（用户 2026-10-28 确认）
 - 档位：**D0**（1 页面 + 测试；可逆；无接口/数据/权限变化）
 
@@ -25,12 +25,12 @@
 
 ## 3. 验收
 
-- [ ] 4 个按钮 `disabled`（含 `aria-disabled` 语义）；
-- [ ] 按钮文案或可见提示包含「即将上线」；
-- [ ] 点击不导航、不发请求；
-- [ ] 其他设置项不受影响；
-- [ ] 测试断言 4 个按钮禁用且无副作用；
-- [ ] `tsc` / ESLint / 目标测试通过。
+- [x] 4 个按钮 `disabled`（含 `aria-disabled` 语义）；
+- [x] 按钮文案或可见提示包含「即将上线」；
+- [x] 点击不导航、不发请求（源码无 handler + 原生 disabled）；
+- [x] 其他设置项不受影响；
+- [x] 测试断言 4 个按钮禁用且无副作用；
+- [x] `tsc` / ESLint / 目标测试通过。
 
 ## 4. 门禁（D0 路径）
 
@@ -44,12 +44,10 @@
 
 ## 6. 证据
 
-（实现后补）
-## 6. 证据
-
 - 变更文件：`frontend/src/pages/Settings/SettingsPage.tsx`、`frontend/src/pages/Settings/__tests__/SettingsPage.test.tsx`
 - 4 个按钮：`disabled` + `title="即将上线"` + 文案「（即将上线）」
 - 测试：`SettingsPage.test.tsx` **24 tests passed**
 - `tsc -b`：通过
 - `eslint .`：通过
-- 新测试：4 个按钮均 disabled、无 onClick、title/文案含「即将上线」
+- 源码核对：4 个按钮无新增 `onClick`；测试覆盖 disabled/title/可见「即将上线」
+- 独立 review：**approve**，无 must-fix；3 条非阻塞 nit
