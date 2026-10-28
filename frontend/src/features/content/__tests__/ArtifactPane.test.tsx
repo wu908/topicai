@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
   CalibrationWorkspace,
   ContentProject,
+  IntentAction,
   Material,
   PublishCheck,
   PublishCheckFinding,
@@ -157,6 +158,32 @@ describe('ArtifactPane', () => {
     expect(screen.getByText('尚未运行')).toBeInTheDocument();
     expect(screen.getByText('先锁定发布意图')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '运行发前检查' })).toBeDisabled();
+  });
+
+  it('uses the active action title for the next step KV', () => {
+    const action: IntentAction = {
+      id: 'a1',
+      project_id: 'p1',
+      action_type: 'confirm_intent',
+      content_intent: 'solve',
+      title: '确认这条内容的意图',
+      reason: '',
+      evidence_refs: [],
+      unknown_refs: [],
+      expected_state_change: {},
+      estimated_effort_minutes: 2,
+      automation_level: 'guided',
+      human_gate_type: null,
+      human_gate: null,
+      fallback_action: { action_type: 'confirm_intent' },
+      status: 'proposed',
+      version: 1,
+      expires_at: null,
+      last_event: null,
+    };
+    render(<ArtifactPane title="第一版" body="正文" workspace={{ ...workspace, orchestrated_action: action }} />);
+
+    expect(screen.getByText('确认这条内容的意图')).toBeInTheDocument();
   });
 
   it('shows attached material count on the process tab without a second stage bar', () => {

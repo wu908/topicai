@@ -6,7 +6,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import BetLockForm from './BetLockForm';
 import type { CalibrationWorkspace, Material, PublishCheck } from '@/types/contracts/v2/content';
-import { nextActionLabel } from './projectListModel';
+import { activeActionTitle, nextActionLabel } from './projectListModel';
 import {
   getLatestPublishCheck,
   runPublishCheck,
@@ -131,13 +131,9 @@ export default function ArtifactPane(props: {
           .map(([k, n]) => `${k} ×${n}`)
           .join(' · ');
 
-  const activeAction = props.workspace?.orchestrated_action;
   const nextText =
-    activeAction && ['proposed', 'accepted', 'deferred'].includes(activeAction.status)
-      ? activeAction.title
-      : project
-        ? nextActionLabel(project)
-        : next;
+    activeActionTitle(props.workspace?.orchestrated_action) ??
+    (project ? nextActionLabel(project) : next);
 
   return (
     <div className="pane">

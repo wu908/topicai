@@ -16,6 +16,7 @@ import type { CalibrationWorkspace, Material } from '@/types/contracts/v2/conten
 import { extractErrorMessage, extractModelErrorMessage } from '@/utils/error';
 import { askCompanion } from '@/services/api/v2/companion';
 import ProjectFlowBar from './ProjectFlowBar';
+import { activeActionTitle } from './projectListModel';
 
 function makeKey(prefix: string) {
   return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
@@ -270,11 +271,7 @@ export default function ProjectStagePage(props: {
     }
   };
 
-  const activeAction = props.workspace?.orchestrated_action;
-  const actionNowLabel =
-    activeAction && ['proposed', 'accepted', 'deferred'].includes(activeAction.status)
-      ? activeAction.title
-      : undefined;
+  const actionNowLabel = activeActionTitle(props.workspace?.orchestrated_action);
 
   return (
     <div>
