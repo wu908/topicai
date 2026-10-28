@@ -409,8 +409,8 @@ export default function SettingsPage() {
                     label="模型与接口"
                     hint="Base URL / API Key / 模型名 · 只存本机"
                     control={
-                      <Button size="small" variant="outlined">
-                        配置模型…
+                      <Button size="small" variant="outlined" disabled title="即将上线">
+                        配置模型…（即将上线）
                       </Button>
                     }
                   />
@@ -437,8 +437,8 @@ export default function SettingsPage() {
                     label="全局操控范围"
                     hint="允许全局 AI 代办哪些操作（发布等仍确认）"
                     control={
-                      <Button size="small" variant="outlined">
-                        管理权限…
+                      <Button size="small" variant="outlined" disabled title="即将上线">
+                        管理权限…（即将上线）
                       </Button>
                     }
                   />
@@ -599,8 +599,8 @@ export default function SettingsPage() {
                     label="导出全部数据"
                     hint="项目、素材、记忆、设置"
                     control={
-                      <Button variant="outlined" size="small">
-                        导出…
+                      <Button variant="outlined" size="small" disabled title="即将上线">
+                        导出…（即将上线）
                       </Button>
                     }
                   />
@@ -608,8 +608,8 @@ export default function SettingsPage() {
                     label="删除账号"
                     hint="需你确认，不可撤销"
                     control={
-                      <Button variant="outlined" color="error" size="small">
-                        申请删除…
+                      <Button variant="outlined" color="error" size="small" disabled title="即将上线">
+                        申请删除…（即将上线）
                       </Button>
                     }
                   />

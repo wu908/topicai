@@ -10,3 +10,6 @@ UX-01,D1,RG2-r4,922a5b2,2026-10-28 14:06:00,2026-10-28 14:06:00,approved,0,0,0,0
 UX-01,D1,RG2-r5,69acadf,2026-10-28 14:08:00,2026-10-28 14:08:00,conditional,0,1,0,0,0,unknown,unknown,第二轮独立复审发现 action_type 映射 major；已修+测试，待复审；r4 approved 被本轮覆盖
 UX-01,D1,RG2-r6,69acadf,2026-10-28 14:12:00,2026-10-28 14:12:00,approved,0,0,3,0,0,unknown,unknown,第三轮独立复审 approve；action_type 映射通过；补 6 个默认类型测试；390px/键盘/覆盖率沿用 r4；仅 minor
 UX-01,D1,RG3,1b7ae01,2026-10-28 14:22:00,2026-10-28 14:48:00,approved,0,0,0,0,0,unknown,unknown,用户 2026-10-28 签字：可以发布；482 tests/覆盖率/视觉/键盘/构建通过；待合并/推送
+UX-02,D0,D0-start,9446204,2026-10-28 16:03:00,2026-10-28 16:03:00,started,0,0,0,0,0,unknown,unknown,方向 A 确认；D0；1 页面+测试；无后端/依赖
+UX-02,D0,RG2,24ae900,2026-10-28 16:14:00,2026-10-28 16:16:00,approved,0,0,3,0,0,unknown,unknown,D0 快速独立 review approve；3 非阻塞 nit；24 tests/tsc/eslint 通过
+UX-02,D0,RG3,24ae900,2026-10-28 16:20:00,2026-10-28 16:28:00,approved,0,0,0,0,0,unknown,unknown,用户 2026-10-28 签字：可以发布；483 tests/覆盖率/构建通过；待合并/推送
