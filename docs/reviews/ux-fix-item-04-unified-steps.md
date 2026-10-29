@@ -80,6 +80,7 @@
 
 - 回归：completed/cancelled action 回退 `next_action` → 项目屏当前「去发布」有测试；parity 含活跃 action。
 - 目标测试：model 24 + ProjectStagePage 19 + ArtifactPane 16 + ProjectDetailPane 5 = **64 passed**（已复跑）
+- 全量：**64 files / 491 tests passed**；覆盖率 lines 82.4 / functions 73.84 / branches 76.44 / statements 84.23
 - 视觉：1440 8 标签、当前「定方向」；390 横向滚动 `scrollWidth 554 > clientWidth 332`；now 与当前步一致
 - `tsc -b` / `eslint .` / `vite build` 通过
 - 已知残留：5 步 legacy 组件未挂载（见 §5）；`create_version` 标签仍沿用「写初稿」，待产品最终确认；`rowActionLabel` 仍 next_action 优先，未来 action 组合变化需再对齐
