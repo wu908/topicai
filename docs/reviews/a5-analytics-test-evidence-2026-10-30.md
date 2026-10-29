@@ -1,7 +1,7 @@
 # A5 测试证据 · pilot 5（First-party analytics，2026-10-30）
 
 > 工件：A5（测试证据）｜对应 A1 验收 S1–S5、A4 测试计划 T-API-1..14 / T-FE-1..6
-> 环境：backend `G:\codex_project\topicAI\mvp\backend\.venv\Scripts\python.exe`（Python 3.13.5 / pytest 8.3.4）；frontend Node v26.8.1 / pnpm 11.5.0 / vitest 4.1.10；worktree `pilot5-first-party-analytics`，代码基线 `c7fa81e` + 本次实现 commit（见 `git log`）。
+> 环境：backend `G:\codex_project\topicAI\mvp\backend\.venv\Scripts\python.exe`（Python 3.13.5 / pytest 8.3.4）；frontend Node v26.8.1 / pnpm 11.5.0 / vitest 4.1.10；worktree `pilot5-first-party-analytics`，代码基线 `c7fa81e` + **实现 commit `ed6ffb0`**（本证据绑定该 commit 的代码树）。
 > 约束：采集默认关闭；本证据只证明「默认关闭构建」可用，不证明已启用。
 
 ## 一、后端
@@ -21,7 +21,7 @@
 | 命令（在 frontend/） | 结果 |
 |---|---|
 | `pnpm exec vitest run src/features/content/__tests__/analyticsTransport.test.ts src/features/content/__tests__/contentListAnalytics.test.ts` | **2 files / 18 tests passed**（含 T-FE-1..6） |
-| `pnpm exec vitest run src/features/content`（回归） | **21 files / 188 tests passed** |
+| `pnpm exec vitest run src/features/content`（回归） | **21 files / 191 tests passed**（RG2 独立复跑；初稿写的 188 为早一版计数） |
 | `pnpm exec vitest run --coverage`（全量） | **exit 0**，阈值 lines 80 / functions 66 / branches 66 / statements 76 强制通过 |
 | `pnpm exec tsc -b` | exit 0 |
 | `pnpm exec eslint src/features/content` | exit 0 |
