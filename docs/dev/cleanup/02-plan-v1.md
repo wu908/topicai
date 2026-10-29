@@ -15,7 +15,9 @@
 
 | 层 | 用例 | 命令 |
 |---|---|---|
-| 回归 | 既有 65 files / 512 tests 全绿（含 ContentPage/ProjectStagePage/ProjectFlowBar） | `pnpm exec vitest run --coverage` |
+| 回归 | 清理后 **63 files / 486 tests 全绿**（删除 2 测试文件 / 26 用例；原 65/512）；含 ContentPage/ProjectStagePage/ProjectFlowBar | `pnpm exec vitest run --coverage`（从 `frontend/`） |
+| E2E（未跑，如实） | `e2e/starter-flow.spec.ts` 覆盖项目屏；本次未执行 | 后续 RG2/CI 可跑 |
+| 覆盖率失败处置 | 不调阈值（80/66/66/76）；不达标先补测试；调阈值需 A9 | — |
 | 静态 | tsc/eslint/build | 见 A3 §3 |
 | 证据 | grep 0 命中 | A3 §3 第 1 条 |
 

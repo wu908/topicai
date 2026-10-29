@@ -1617,7 +1617,7 @@
   }
 }
 /* ============================================================
-   F11 list row / detail pane (ProjectListRow / ProjectDetailPane)
+   F11 list row / detail pane (ProjectListRow)
    Class names are .project-row* / .project-detail*. Do not reuse
    .content-project-row* — a raw <button> falls back to UA centered text.
    ============================================================ */

@@ -28,6 +28,8 @@
 
 ## 3. 验收命令
 
+> cwd 约定：`git grep`/`git show` 从**仓库根**执行；`pnpm exec …` 从 **`frontend/`** 执行（仓库根无 package.json）。
+
 ```powershell
 # 1) 死代码 0 命中（含测试）；-E + 词边界，排除 isProjectWorkspace
 git grep -E -n "\bStageMeter\b|\bProjectDetailPane\b|\bProjectStage\b|\bProjectWorkspace\b|\bstageLabels\b|\bstageOf\b|\bprogressOf\b" -- frontend/src
@@ -39,10 +41,16 @@ pnpm exec vite build
 pnpm exec vitest run --coverage
 ```
 
+## 3.1 范围副作用（记录，不在本次扩范围）
+
+- 删 `ProjectWorkspace.tsx` 后：`ReviewSummary.tsx` 全仓零引用；`ObservationList`/`ViewpointPanel`/`SeriesPanel`/`WorkspaceAiDock`/`projectDraft` 降为仅测试引用（RG1-r1 m2）。
+- 死样式遗留：`.project-detail*`、`.project-workspace`、`data-testid="stage-meter"` 与部分旧 CSS；本次不改样式，列入后续清理（RG1-r1 m5）。
+- 结论：本次只清「组件/测试/模型导出」，其余死代码另开变更。
+
 ## 4. 风险与回滚
 
 - 低风险：纯删除、无接口/数据/UI 行为变化；`tsc` + grep 双重把关。
-- 回滚：`git revert` 本次 commit；无数据影响。
+- 回滚：`git revert` 本次 commit（范围=6 个删除文件 + 4 个修改文件）；回滚后验证：`git grep -E` 旧符号恢复命中、`tsc`/`vitest` 绿、`vite build` 绿。无数据/接口影响。
 - 若发现任一「被删文件」仍有生产引用：停止，恢复到删除前，记录为「范围外」并改用「只改注释/加 guard 测试」方案。
 
 ## 5. 与规范的关系

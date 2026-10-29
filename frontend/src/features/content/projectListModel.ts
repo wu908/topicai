@@ -123,35 +123,6 @@ export function rowGroup(project: ContentProject): ProjectGroup {
   return 'wanted';
 }
 
-/** 五段生命周期：①意图 ②证据 ③候选 ④检查 ⑤观察。 */
-export function stageOf(project: ContentProject): 1 | 2 | 3 | 4 | 5 {
-  switch (project.next_action) {
-    case 'create_version':
-      return 1;
-    case 'lock_hypothesis':
-      return 2;
-    case 'record_publication':
-      return 3;
-    case 'add_snapshot':
-    case 'add_comparable_snapshot':
-      return 4;
-    case 'run_blind_review':
-    case 'create_observation':
-    case 'manage_observations':
-    case 'await_observation_window':
-    case 'review_calibration_issue':
-      return 5;
-    default:
-      return 1;
-  }
-}
-
-export function progressOf(project: ContentProject): string {
-  return `${stageOf(project)}/5`;
-}
-
-export const stageLabels = ['意图', '证据', '候选', '检查', '观察'] as const;
-
 /** 唯一用户词表：8 段内容流程。列表与项目屏都从这里派生。 */
 export const contentFlowSteps = [
   '定方向',
@@ -167,7 +138,7 @@ export const contentFlowSteps = [
 /**
  * 8 段当前步（1–8）。
  * 优先看仍可执行的编排动作（它比 next_action 更具体）；否则按 next_action。
- * 与 stageOf 的 1–5 是两套轴：stageOf 供旧组件/生命周期，本函数供用户可见词表。
+ * 本函数供用户可见词表；旧 5 段实现已删除（pilot6）。
  */
 const flowStepByActionType: Partial<Record<IntentActionType, 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8>> = {
   create_project: 1,
