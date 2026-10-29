@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { ContentProject, IntentActionType, NextAction } from '@/types/contracts/v2/content';
 import {
   activeActionTitle,
+  contentFlowSteps,
+  flowStepOf,
   groupProjects,
   nextActionLabel,
   nextActionLabels,
@@ -207,12 +209,12 @@ describe('rowStepLabel / rowActionLabel（列表人话步骤 + 按钮）', () =>
     expect(rowActionLabel(project({ next_action: undefined }))).toBe('去处理');
   });
 
-  it('orchestrated-only uses stage step and 继续', () => {
+  it('orchestrated-only falls back to the same 8-step word table', () => {
     const p = project({
       next_action: undefined,
       orchestrated_action: orchestrated('review_candidate'),
     });
-    expect(rowStepLabel(p)).toBe('定方向');
+    expect(rowStepLabel(p)).toBe('写初稿');
     expect(rowActionLabel(p)).toBe('继续');
   });
 
@@ -294,6 +296,40 @@ describe('stageOf / progressOf（G1 可扫读）', () => {
   it('progress is stage/5', () => {
     expect(progressOf(project({ next_action: 'create_version' }))).toBe('1/5');
     expect(progressOf(project({ next_action: 'create_observation' }))).toBe('5/5');
+  });
+});
+
+describe('flowStepOf / contentFlowSteps（8 段唯一词表）', () => {
+  it('has the canonical 8 labels', () => {
+    expect(contentFlowSteps).toEqual([
+      '定方向',
+      '找素材',
+      '写初稿',
+      '发前检查',
+      '去发布',
+      '等数据',
+      '可复盘',
+      '已沉淀',
+    ]);
+  });
+
+  it('maps every next_action to the same user-facing step as the list row', () => {
+    const expected: Record<NextAction, number> = {
+      create_version: 3,
+      lock_hypothesis: 4,
+      record_publication: 5,
+      add_snapshot: 6,
+      add_comparable_snapshot: 6,
+      await_observation_window: 6,
+      run_blind_review: 7,
+      create_observation: 7,
+      manage_observations: 7,
+      review_calibration_issue: 7,
+    };
+    for (const [action, step] of Object.entries(expected) as [NextAction, number][]) {
+      expect(flowStepOf(project({ next_action: action }))).toBe(step);
+    }
+    expect(flowStepOf(project({ status: 'settled', next_action: 'manage_observations' }))).toBe(8);
   });
 });
 
