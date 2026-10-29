@@ -27,6 +27,24 @@
 
 **RG0**：r4 approve + r5 approve-delta（仅默认关闭构建）｜**RG1**：r5 approve｜**RG2**：r1 approve（0B/0M/5m）｜**A5**：571 passed/89.92% + 191 frontend。
 
+## 2.1 主指标延期计划（RG3-r1 M1）
+
+- 指标：「启用后 7 天内 UTC 日计数可查且总量>0」。
+- 当前状态：默认关闭、未部署、未启用 → **不适用（未开始采集）**。
+- 延期条件：启用日期 + 7 天；**批准人：用户（A9-20261030-04 签字时一并确认）**；未签前不执行、不宣称达标。
+- 复审：启用后第 7 天由用户/产品在 A9 记结果。
+
+## 2.2 跨变更回归比对（RG3-r1 M2）
+
+| 已发布变更 | 涉及词表/行为 | 本变更影响 | 结论 |
+|---|---|---|---|
+| UX-01 内容列表分组/行操作 | `rowActionLabel` 按钮文案 | `rowActionLabel` 未改；上报从 `action`（中文文案）改为 `action_key`（稳定键） | **有意变更**，RG2-r1 已审；旧事件历史不可比，已在 A3/PRD 记录 |
+| UX-02 设置页死按钮 | 无列表词表 | 未触及 | 无回归 |
+| UX-03 项目屏阶段条 | 人话阶段条 | 未触及 | 无回归 |
+| UX-04 统一 8 段词表 | `contentFlowSteps` / `flowStepOf` | 未触及；`rowActionKey` 只读 `next_action`/`orchestrated_action` | 无回归（`git diff ed6ffb0^..ed6ffb0 -- frontend/src/features/content/projectListModel.ts` 可见仅新增函数） |
+
+> 证据命令：`git diff ed6ffb0^..ed6ffb0 -- frontend/src/features/content`（仅 `contentListAnalytics.ts`/`projectListModel.ts` 改，词表常量未动）。
+
 ## 3. 回滚方案
 
 1. 当前未部署：无需回滚；`ANALYTICS_INGEST_ENABLED=false`、`VITE_ANALYTICS_ENABLED` 未设。
