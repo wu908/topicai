@@ -166,6 +166,14 @@ describe('ProjectStagePage', () => {
     expect(screen.getByText('现在做：记录已经发布')).toBeInTheDocument();
   });
 
+  it('falls back to next_action when the action is completed', () => {
+    render(<ProjectStagePage workspace={withAction({ status: 'completed' })} />);
+
+    const meter = screen.getByTestId('stage-meter');
+    expect(within(meter).getByText('去发布')).toHaveAttribute('aria-current', 'step');
+    expect(screen.getByText('现在做：记录已经发布')).toBeInTheDocument();
+  });
+
   it('renders a placeholder project when the workspace is still empty', () => {
     render(<ProjectStagePage workspace={null} />);
 

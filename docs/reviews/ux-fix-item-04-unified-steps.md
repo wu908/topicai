@@ -18,7 +18,7 @@
 
 ## 2. 非目标
 
-- 不改 `stageOf()` 的 1–5 生命周期（其他组件仍用）；
+- 不改 `stageOf()` 的 1–5 生命周期（仅遗留未挂载组件/测试使用）；
 - 不改后端/接口/schema/迁移；
 - 不新增埋点/分析后端（另开 D2）；
 - 不重写项目屏布局。
@@ -78,12 +78,8 @@
 
 ## 6. 证据
 
-（实现后补）
-- 目标测试：model 22 + ProjectStagePage 18 + ArtifactPane 16 + ProjectDetailPane 5 = **61 passed**
-- 视觉：1440 显示 8 标签；390 横向滚动（scrollWidth 554 > clientWidth 332）；当前步「写初稿」
-- 文件：`projectListModel.ts`、`ProjectFlowBar.tsx`、`ContentPage.css`、ProjectStagePage 测试
-- 回滚：revert 本变更；无数据/接口影响
-- 目标测试：model 24 + ProjectStagePage 18 + ArtifactPane 16 + ProjectDetailPane 5 = **63 passed**（修复后待重跑确认）
+- 回归：completed/cancelled action 回退 `next_action` → 项目屏当前「去发布」有测试；parity 含活跃 action。
+- 目标测试：model 24 + ProjectStagePage 19 + ArtifactPane 16 + ProjectDetailPane 5 = **64 passed**（已复跑）
 - 视觉：1440 8 标签、当前「定方向」；390 横向滚动 `scrollWidth 554 > clientWidth 332`；now 与当前步一致
 - `tsc -b` / `eslint .` / `vite build` 通过
-- 已知残留：5 步 legacy 组件未挂载（见 §5）；`create_version` 标签仍沿用「写初稿」，待产品最终确认
+- 已知残留：5 步 legacy 组件未挂载（见 §5）；`create_version` 标签仍沿用「写初稿」，待产品最终确认；`rowActionLabel` 仍 next_action 优先，未来 action 组合变化需再对齐

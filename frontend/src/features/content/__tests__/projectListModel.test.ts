@@ -355,6 +355,11 @@ describe('flowStepOf / contentFlowSteps（8 段唯一词表）', () => {
     }
     const settled = project({ status: 'settled', next_action: 'manage_observations' });
     expect(rowStepLabel(settled)).toBe(contentFlowSteps[flowStepOf(settled) - 1]);
+    const active = project({
+      next_action: 'create_version',
+      orchestrated_action: orchestrated('confirm_intent'),
+    });
+    expect(rowStepLabel(active)).toBe(contentFlowSteps[flowStepOf(active) - 1]);
   });
 });
 
