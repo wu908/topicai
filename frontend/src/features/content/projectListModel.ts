@@ -27,20 +27,6 @@ export const nextActionLabels: Record<NextAction, string> = {
   review_calibration_issue: '修正数据问题',
 };
 
-/** 列表左标签：人话步骤（不显示“意图 n/5”）。 */
-const rowStepLabels: Record<NextAction, string> = {
-  create_version: '写初稿',
-  lock_hypothesis: '发前检查',
-  record_publication: '去发布',
-  add_snapshot: '等数据',
-  add_comparable_snapshot: '等数据',
-  run_blind_review: '可复盘',
-  create_observation: '可复盘',
-  manage_observations: '可复盘',
-  await_observation_window: '等数据',
-  review_calibration_issue: '可复盘',
-};
-
 /** 列表行尾按钮：按下一步动作给具体动词。 */
 const rowActionLabels: Record<NextAction, string> = {
   create_version: '继续',
@@ -90,11 +76,12 @@ const rowActionTypeLabels: Partial<Record<IntentActionType, string>> = {
 /** 列表左标签：人话步骤；已沉淀优先，未知/缺失 → 待处理。 */
 export function rowStepLabel(project: ContentProject): string {
   if (rowGroup(project) === 'settled') return '已沉淀';
-  if (project.next_action && rowStepLabels[project.next_action]) {
-    return rowStepLabels[project.next_action];
+  const action = project.orchestrated_action;
+  if (action && ['proposed', 'accepted', 'deferred'].includes(action.status)) {
+    return contentFlowSteps[flowStepOf(project) - 1] ?? '待处理';
   }
-  if (project.orchestrated_action) {
-    return ['定方向', '找素材', '写初稿', '发前检查', '可复盘'][stageOf(project) - 1] ?? '待处理';
+  if (project.next_action) {
+    return contentFlowSteps[flowStepOf(project) - 1] ?? '待处理';
   }
   return '待处理';
 }
@@ -151,6 +138,67 @@ export function progressOf(project: ContentProject): string {
 }
 
 export const stageLabels = ['意图', '证据', '候选', '检查', '观察'] as const;
+
+/** 唯一用户词表：8 段内容流程。列表与项目屏都从这里派生。 */
+export const contentFlowSteps = [
+  '定方向',
+  '找素材',
+  '写初稿',
+  '发前检查',
+  '去发布',
+  '等数据',
+  '可复盘',
+  '已沉淀',
+] as const;
+
+/**
+ * 8 段当前步（1–8）。
+ * 优先看仍可执行的编排动作（它比 next_action 更具体）；否则按 next_action。
+ * 与 stageOf 的 1–5 是两套轴：stageOf 供旧组件/生命周期，本函数供用户可见词表。
+ */
+const flowStepByActionType: Partial<Record<IntentActionType, 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8>> = {
+  create_project: 1,
+  confirm_intent: 1,
+  answer_key_question: 2,
+  review_candidate: 4,
+  lock_intent: 4,
+  confirm_publish_scope: 4,
+  record_publication: 5,
+  add_performance: 6,
+  await_observation_window: 6,
+  review_result: 7,
+  confirm_learning: 7,
+  manage_learning: 7,
+  scope_learning: 8,
+};
+
+export function flowStepOf(project: ContentProject): 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 {
+  if (rowGroup(project) === 'settled') return 8;
+  const action = project.orchestrated_action;
+  if (action && ['proposed', 'accepted', 'deferred'].includes(action.status)) {
+    const actionStep = flowStepByActionType[action.action_type];
+    if (actionStep) return actionStep;
+  }
+  switch (project.next_action) {
+    case 'create_version':
+      return 3;
+    case 'lock_hypothesis':
+      return 4;
+    case 'record_publication':
+      return 5;
+    case 'add_snapshot':
+    case 'add_comparable_snapshot':
+    case 'await_observation_window':
+      return 6;
+    case 'run_blind_review':
+    case 'create_observation':
+    case 'manage_observations':
+    case 'review_calibration_issue':
+      return 7;
+    default:
+      return 3;
+  }
+}
 
 const intentCopy: Record<ContentIntent, string> = {
   solve: '教方法',

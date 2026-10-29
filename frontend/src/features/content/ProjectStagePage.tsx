@@ -298,6 +298,7 @@ export default function ProjectStagePage(props: {
             project ? (
               <ProjectFlowBar
                 project={project}
+                action={props.workspace?.orchestrated_action}
                 nowLabel={actionNowLabel}
               />
             ) : null
