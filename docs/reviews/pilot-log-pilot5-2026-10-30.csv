@@ -1,0 +1,5 @@
+change_id,tier,gate,decision,started_at,decided_at,time_quality,artifact_type,artifact_version,reviewer,independence,round,blocking,major,minor,false_positive,false_negative,bypass,bypass_reason,a9_id,approval_binding_commit,pr,ci_run,merge_commit,post_release_window,evidence,notes
+PILOT-05,D2,D2-start,started,,,unknown,commit,c7fa81e,n/a,n/a,0,0,0,0,unknown,unknown,0,,,,,,,,docs/pm/analytics/00-intent.md,按 2026-10-29 用户授权按序推进；worktree pilot5-first-party-analytics
+PILOT-05,D2,RG0,conditional,,,unknown,doc,unknown,rg0-reviewer,independent,1,1,7,8,unknown,unknown,0,,,,,,,,docs/reviews/review-rg0-analytics-01-2026-10-30.md,r1: B1 隐私口径矛盾、E2 证据不可核验、契约/统计日未定义；报告未绑定 commit
+PILOT-05,D2,RG0-r2,conditional,,,unknown,doc,62b3081,rg0-reviewer,independent,2,2,5,9,unknown,unknown,0,,,,,,,,docs/reviews/review-rg0-analytics-02-2026-10-30.md,r2: B1 残留已补修；A9-01/02 待用户签字；M1 action 白名单、M5 验收、M7 生命周期
+PILOT-05,D2,RG1,conditional,,,unknown,doc,62b3081,rg1-reviewer,independent,1,1,7,6,unknown,unknown,0,,,,,,,,docs/reviews/review-rg1-analytics-01-2026-10-30.md,RG1: B1 action/next_action 三方矛盾；401/413/422 边界；幂等/导出/NFR/CI
