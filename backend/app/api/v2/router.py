@@ -3,6 +3,7 @@
 from fastapi import APIRouter
 
 from app.api.v2.account_data import router as account_data_router
+from app.api.v2.analytics import router as analytics_router
 from app.api.v2.async_loop import router as async_loop_router
 from app.api.v2.auth import router as auth_router
 from app.api.v2.calibration import router as calibration_router
@@ -43,6 +44,7 @@ api_v2_router.include_router(content_opportunities_router)
 api_v2_router.include_router(experiment_metrics_router)
 api_v2_router.include_router(starter_router)
 api_v2_router.include_router(account_data_router)
+api_v2_router.include_router(analytics_router)
 api_v2_router.include_router(onboarding_router)
 api_v2_router.include_router(materials_router)
 api_v2_router.include_router(settings_router)

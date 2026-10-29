@@ -8,6 +8,7 @@ import {
   nextActionLabel,
   nextActionLabels,
   progressOf,
+  rowActionKey,
   rowActionLabel,
   rowStepLabel,
   searchProjects,
@@ -423,5 +424,29 @@ describe('view type', () => {
   it('exposes the four views', () => {
     const views: ProjectView[] = ['all', 'needs_me', 'observing', 'done'];
     expect(views).toHaveLength(4);
+  });
+});
+
+describe('rowActionKey（埋点稳定键，A3 §3 优先级）', () => {
+  it('① 已沉淀 → view（优先于 next_action）', () => {
+    const settled = project({ status: 'settled', next_action: 'manage_observations' });
+    expect(rowActionKey(settled)).toBe('view');
+  });
+
+  it('② 有 next_action → 该枚举值（中文 label 不参与）', () => {
+    for (const action of allActions) {
+      expect(rowActionKey(project({ next_action: action }))).toBe(action);
+    }
+  });
+
+  it('③ 只有 orchestrated_action → orchestrated:<action_type>', () => {
+    const p = project({ next_action: undefined, orchestrated_action: orchestrated('record_publication') });
+    expect(rowActionKey(p)).toBe('orchestrated:record_publication');
+    expect(rowActionLabel(p)).toBe('去发布'); // label 仍独立于 key
+  });
+
+  it('④ 两者都没有 → handle', () => {
+    const p = project({ next_action: undefined, orchestrated_action: undefined });
+    expect(rowActionKey(p)).toBe('handle');
   });
 });
