@@ -317,3 +317,19 @@
 - 发布证据：`release-rg3-ux-fix-item-01/02/03-2026-10-28.md`
 - 代码：`projectListModel.ts:31-42,45-56,69-73,80-88,90-112,127-147`；`ProjectListRow.tsx:40-69`；`ProjectFlowBar.tsx:8,17,26-41`；`ProjectStagePage.tsx:274,297-304`；`ArtifactPane.tsx:134-136`；`contentListAnalytics.ts:18-32`；`ContentPage.tsx:100-118,322,354-386,397-411`；`SettingsPage.tsx:412-414,440-442,602-604,611-613`
 - 规范/方案：`审查流规范-v0.2-2026-10-27.md:52,81-92,110-125,133-142,191-196,228-245,249-260`；`审查流试点-度量与隔离方案-2026-10-28.md:39-43,53-71,89-94`；`五流架构-v0.2-2026-10-27.md:63-73`
+
+## 附录 C 复盘后修复（2026-10-29）
+
+> 本节是复盘后的记录修复，不改变原复盘结论，也不改门数/阈值。
+
+- 新增 `pilot-log-v2-2026-10-29.csv`（25 行，v1 17 行 + 8 条修正/缺失行）；字段说明见 `pilot-log-v2-schema-2026-10-29.md`。
+- 修正行包括：
+  - `UX-01 RG2-post-approval`：批准后 `b8cac5f` 依赖 override 未复审，`bypass=1`；
+  - `UX-03 RG0` / `UX-03 RG1`：D1 必需门跳过，`bypass=1`；
+  - 三次 `OG0 not-run`；
+  - `UX-01` / `UX-03` post-release issues-found。
+- 补落盘：
+  - `review-d0-ux-fix-item-02-2026-10-28.md`（转录 d0-reviewer 输出）；
+  - `review-d1-ux-fix-item-03-2026-10-29.md`（转录 d1-reviewer 输出，含 delta）。
+- 仍保留 `false_positive`/`false_negative = unknown`：没有发布后回查证据，不猜。
+- 未修改原 `pilot-log.csv`；v1 保留作为问题证据。
