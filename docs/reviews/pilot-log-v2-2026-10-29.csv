@@ -24,3 +24,10 @@ UX-03,D1,RG0,skipped,,,unknown,doc,n/a,n/a,n/a,0,0,0,0,unknown,unknown,1,D1 应�
 UX-03,D1,RG1,skipped,,,unknown,doc,n/a,n/a,n/a,0,0,0,0,unknown,unknown,1,D1 应过 RG1（咨询）；未执行，未记录例外,,,153,40833322020,56a53bb,~8m,pilot-retro-2026-10-29.md,咨询门缺失
 UX-03,D1,OG0,not-run,,,unknown,doc,n/a,n/a,n/a,0,0,0,0,unknown,unknown,1,OG0 未执行/未记录,,,153,40833322020,56a53bb,~8m,pilot-retro-2026-10-29.md,运维就绪门缺失
 UX-03,D1,post-release,issues-found,2026-10-29 15:20:00,2026-10-29 15:20:00,recorded,doc,n/a,pilot-retro-reviewer,independent,1,0,0,0,unknown,unknown,0,,,,153,40833322020,56a53bb,~8m,pilot-retro-2026-10-29.md,跨屏步骤词矛盾；F2 未拍板；阶段词表 5 vs 8
+UX-04,D1,D1-start,started,2026-10-29 15:20:00,2026-10-29 15:20:00,backfilled,commit,56a53bb,n/a,n/a,0,0,0,0,unknown,unknown,0,,,,154,40860108872,a096443,<1h,ux-fix-item-04-unified-steps.md,开始时间按聊天记录近似
+UX-04,D1,RG0,pass,,,unknown,doc,n/a,Lead/product,self,1,0,0,0,unknown,unknown,0,,,,154,40860108872,a096443,<1h,ux-fix-item-04-unified-steps.md,D1 must-pass 子集；用户确认 8 段方向
+UX-04,D1,RG1,pass,,,unknown,doc,n/a,Lead/tech,self,1,0,0,0,unknown,unknown,0,,,,154,40860108872,a096443,<1h,ux-fix-item-04-unified-steps.md,RG1 advisory；合并进同一工件
+UX-04,D1,RG2,conditional,,,backfilled,commit,ee89358,pilot4-reviewer,independent,1,0,2,2,unknown,unknown,0,,,,154,40860108872,a096443,<1h,release-rg3-ux-fix-item-04-2026-10-29.md,F1 新建项目当前步/now 矛盾、F2 5 段残留为 P1；F3/F4 为 P2
+UX-04,D1,RG2-r2,approved,,,backfilled,commit,f594094,pilot4-reviewer,independent,2,0,0,0,unknown,unknown,0,,,f594094,154,40860108872,a096443,<1h,release-rg3-ux-fix-item-04-2026-10-29.md,delta approve；F1/F3/F4 修复，F2 按残余记录
+UX-04,D1,RG3,released,2026-10-29 18:45:00,2026-10-29 18:52:00,backfilled,mixed,fe14936,Lead/release,lead,1,0,0,0,unknown,unknown,0,,,fe14936,154,40860108872,a096443,<1h,release-rg3-ux-fix-item-04-2026-10-29.md,用户 2026-10-29 18:45 签字；main CI 40860950920 全绿
+UX-04,D1,OG0,not-run,,,unknown,doc,n/a,n/a,n/a,0,0,0,0,unknown,unknown,1,OG0 未执行/未记录,,,154,40860108872,a096443,<1h,pilot-retro-2026-10-29.md,运维就绪门缺失
