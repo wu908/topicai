@@ -98,6 +98,19 @@ export function rowActionLabel(project: ContentProject): string {
   return '去处理';
 }
 
+/**
+ * 埋点用的稳定 action_key（A3 §3，优先级写死）：
+ * ① 已沉淀 → `view`；② 有 next_action → 该枚举值；
+ * ③ 有 orchestrated_action → `orchestrated:<action_type>`；④ 否则 `handle`。
+ * 中文 label 只用于展示，不得进 payload（文案变化不得切断历史可比性）。
+ */
+export function rowActionKey(project: ContentProject): string {
+  if (rowGroup(project) === 'settled') return 'view';
+  if (project.next_action) return project.next_action;
+  if (project.orchestrated_action) return `orchestrated:${project.orchestrated_action.action_type}`;
+  return 'handle';
+}
+
 /** 「需要我」判定的唯一来源（列表行与视图过滤共用）。 */
 export function needsMe(project: ContentProject): boolean {
   return !isDone(project) && !isObserving(project);

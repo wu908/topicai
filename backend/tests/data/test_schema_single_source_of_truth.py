@@ -93,6 +93,8 @@ _EXPECTED_TABLES: frozenset[str] = frozenset(
         "deliverables",
         "production_events",
         "loop_metrics",
+        # first-party analytics events (060, pilot 5)
+        "analytics_events",
     }
 )
 

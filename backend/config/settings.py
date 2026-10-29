@@ -76,6 +76,13 @@ class Settings(BaseSettings):
     nightly_digest_hour: int = Field(default=3, ge=0, le=23, alias="NIGHTLY_DIGEST_HOUR")
     nightly_digest_minute: int = Field(default=0, ge=0, le=59, alias="NIGHTLY_DIGEST_MINUTE")
 
+    # ==================== First-party analytics ====================
+    # 采集默认关闭：开启前须用户对 A9-20261030-04 签字（RG0-r2 r2-B1）。
+    # 关闭时 POST /analytics/events 返回 503（契约优先级：401 → 503 → 413 → 422）。
+    analytics_ingest_enabled: bool = Field(
+        default=False, alias="ANALYTICS_INGEST_ENABLED"
+    )
+
     # ==================== Authentication ====================
     jwt_secret_key: str = Field(
         default="",

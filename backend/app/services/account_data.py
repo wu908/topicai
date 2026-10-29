@@ -59,6 +59,7 @@ EXPORT_TABLES: tuple[tuple[str, str], ...] = (
     ("publish_check_resolutions_v2", "owner_user_id"),
     ("snapshot_extractions_v2", "owner_user_id"),
     ("project_state_events", "owner_user_id"),
+    ("analytics_events", "owner_user_id"),
 )
 
 
