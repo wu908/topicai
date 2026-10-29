@@ -7,13 +7,11 @@ import {
   groupProjects,
   nextActionLabel,
   nextActionLabels,
-  progressOf,
   rowActionKey,
   rowActionLabel,
   rowStepLabel,
   searchProjects,
   sortProjects,
-  stageOf,
   viewProjects,
   type ProjectView,
 } from '../projectListModel';
@@ -280,23 +278,6 @@ describe('rowStepLabel / rowActionLabel（列表人话步骤 + 按钮）', () =>
     });
     expect(rowActionLabel(p)).toBe('继续');
     expect(rowActionLabel(p)).not.toBe('确认候选内容');
-  });
-});
-
-describe('stageOf / progressOf（G1 可扫读）', () => {
-  it('maps lifecycle stages 1–5 from next_action', () => {
-    expect(stageOf(project({ next_action: 'create_version' }))).toBe(1);
-    expect(stageOf(project({ next_action: 'lock_hypothesis' }))).toBe(2);
-    expect(stageOf(project({ next_action: 'record_publication' }))).toBe(3);
-    expect(stageOf(project({ next_action: 'add_snapshot' }))).toBe(4);
-    expect(stageOf(project({ next_action: 'add_comparable_snapshot' }))).toBe(4);
-    expect(stageOf(project({ next_action: 'create_observation' }))).toBe(5);
-    expect(stageOf(project({ next_action: 'await_observation_window' }))).toBe(5);
-  });
-
-  it('progress is stage/5', () => {
-    expect(progressOf(project({ next_action: 'create_version' }))).toBe('1/5');
-    expect(progressOf(project({ next_action: 'create_observation' }))).toBe('5/5');
   });
 });
 

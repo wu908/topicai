@@ -159,7 +159,7 @@ export default function ContentPage() {
 
   // 审计 e54a2643 batch C：projectId 变化时先重置加载/错误/工作台状态，
   // 否则切换项目期间会短暂展示上一个项目的工作台。用渲染期重置模式，
-  // 不在 effect 里直接 setState（同 ProjectWorkspace 的 baseKey 先例）。
+  // 不在 effect 里直接 setState（同既有 baseKey 先例）。
   const [prevProjectId, setPrevProjectId] = useState(projectId);
   if (prevProjectId !== projectId) {
     setPrevProjectId(projectId);
