@@ -6,6 +6,7 @@
 import type {
   ContentIntent,
   ContentProject,
+  IntentAction,
   IntentActionType,
   NextAction,
 } from '@/types/contracts/v2/content';
@@ -63,6 +64,12 @@ export function nextActionLabel(project: ContentProject): string {
   if (project.orchestrated_action?.title) return project.orchestrated_action.title;
   if (project.next_action) return nextActionLabels[project.next_action] ?? nextActionLabels.create_version;
   return nextActionLabels.create_version;
+}
+
+/** 只有仍可执行的编排动作才配当“现在做”；已完成/取消/过期不显示。 */
+export function activeActionTitle(action: IntentAction | null | undefined): string | undefined {
+  if (!action || !['proposed', 'accepted', 'deferred'].includes(action.status)) return undefined;
+  return action.title?.trim() || undefined;
 }
 
 /**

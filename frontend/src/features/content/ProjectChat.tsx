@@ -79,7 +79,7 @@ export default function ProjectChat(props: {
     <div className="pane chat-pane">
       <div className="top-light" aria-hidden="true" />
 
-      {props.stages ? <div className="stages">{props.stages}</div> : null}
+      {props.stages ?? null}
 
       <div className="chat" ref={scroller}>
         {props.messages.length === 0 ? (

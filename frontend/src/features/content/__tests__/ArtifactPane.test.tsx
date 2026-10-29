@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
   CalibrationWorkspace,
   ContentProject,
+  IntentAction,
   Material,
   PublishCheck,
   PublishCheckFinding,
@@ -159,7 +160,33 @@ describe('ArtifactPane', () => {
     expect(screen.getByRole('button', { name: '运行发前检查' })).toBeDisabled();
   });
 
-  it('shows the project stage bar and attached material count on the process tab', () => {
+  it('uses the active action title for the next step KV', () => {
+    const action: IntentAction = {
+      id: 'a1',
+      project_id: 'p1',
+      action_type: 'confirm_intent',
+      content_intent: 'solve',
+      title: '确认这条内容的意图',
+      reason: '',
+      evidence_refs: [],
+      unknown_refs: [],
+      expected_state_change: {},
+      estimated_effort_minutes: 2,
+      automation_level: 'guided',
+      human_gate_type: null,
+      human_gate: null,
+      fallback_action: { action_type: 'confirm_intent' },
+      status: 'proposed',
+      version: 1,
+      expires_at: null,
+      last_event: null,
+    };
+    render(<ArtifactPane title="第一版" body="正文" workspace={{ ...workspace, orchestrated_action: action }} />);
+
+    expect(screen.getByText('确认这条内容的意图')).toBeInTheDocument();
+  });
+
+  it('shows attached material count on the process tab without a second stage bar', () => {
     const materials: Material[] = [
       {
         id: 'm1',
@@ -177,8 +204,7 @@ describe('ArtifactPane', () => {
     ];
     render(<ArtifactPane title="第一版" body="正文" workspace={workspace} materials={materials} />);
 
-    const meter = screen.getByTestId('stage-meter');
-    expect(meter).toHaveAttribute('data-stage', '3');
+    expect(screen.queryByTestId('stage-meter')).toBeNull();
     expect(screen.getByText('踩坑复盘')).toBeInTheDocument();
     expect(screen.getByText('待发布')).toBeInTheDocument();
     expect(screen.getByText('v1')).toBeInTheDocument();

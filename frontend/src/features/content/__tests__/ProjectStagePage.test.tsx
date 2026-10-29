@@ -142,10 +142,14 @@ describe('ProjectStagePage', () => {
 
     expect(screen.getByRole('heading', { name: '真实经验项目' })).toBeInTheDocument();
     expect(screen.getByText('项目助手只处理这一条内容')).toBeInTheDocument();
-    // 阶段条：对话区 StageMeter + 产物栏 StageBar 各一份，当前阶段都是「候选」（第 3 步）。
-    expect(document.querySelectorAll('[aria-current="step"]')).toHaveLength(2);
-    expect(screen.getAllByText('意图').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('观察').length).toBeGreaterThan(0);
+    // 项目屏只保留一条人话阶段条；当前阶段「写初稿」（第 3 步）。
+    expect(document.querySelectorAll('[aria-current="step"]')).toHaveLength(1);
+    expect(screen.getByText('想清楚')).toBeInTheDocument();
+    expect(screen.getByText('找素材')).toBeInTheDocument();
+    expect(screen.getByText('写初稿')).toHaveAttribute('aria-current', 'step');
+    expect(screen.getByText('发前检查')).toBeInTheDocument();
+    expect(screen.getByText('观察')).toBeInTheDocument();
+    expect(screen.getByText('现在做：确认这条内容的意图')).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: '过程' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByText('踩坑复盘')).toBeInTheDocument();
     // 空对话时给出项目助手的第一句引导。
@@ -153,6 +157,13 @@ describe('ProjectStagePage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '刷新' }));
     expect(onChanged).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not show a cancelled action as the current next step', () => {
+    render(<ProjectStagePage workspace={withAction({ status: 'cancelled' })} />);
+
+    expect(screen.queryByText('现在做：确认这条内容的意图')).not.toBeInTheDocument();
+    expect(screen.getByText('现在做：记录已经发布')).toBeInTheDocument();
   });
 
   it('renders a placeholder project when the workspace is still empty', () => {

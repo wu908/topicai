@@ -27,22 +27,7 @@ function StepLabels({ project }: { project: ContentProject }) {
   );
 }
 
-/** 仅 .st 列表（外层 .stages 由 ProjectChat 提供） */
+/** 旧技术阶段条：仅 ProjectDetailPane / 旧 ProjectStage 壳使用；项目屏已改用 ProjectFlowBar。 */
 export default function StageMeter({ project }: { project: ContentProject }) {
   return <StepLabels project={project} />;
-}
-
-/** 带外层 .stages（供 ArtifactPane 等独立使用） */
-export function StageBar({ project }: { project: ContentProject }) {
-  return (
-    <div
-      className="stages"
-      data-testid="stage-meter"
-      data-stage={stageOf(project)}
-      role="list"
-      aria-label="内容进度"
-    >
-      <StepLabels project={project} />
-    </div>
-  );
 }
