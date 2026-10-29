@@ -11,10 +11,10 @@
 | T2 | 服务层 | 白名单、幂等 raw SQL（`ON CONFLICT DO NOTHING RETURNING`）、配额、summary（过期过滤） | T1 | 服务单测覆盖 3 事件/非法键值/重复/配额/过期 |
 | T3 | API 路由 | `/analytics/events`、`/analytics/summary`、注册、开关（默认 false） | T2 | API 用例 T-API-1..10 全绿 |
 | T4 | 前端 transport | 队列/分片（32/48KB）/pagehide/in-flight/失败静默/开关 | —（契约固定） | 前端单测 T-FE-1..5 全绿 |
-| T5 | 接线 | `contentListAnalytics` → transport；`rowActionKey` 稳定键；保留 window | T4 | 事件仍派发 CustomEvent；不重复入队 |
+| T5 | 接线 | `contentListAnalytics` → transport；`rowActionKey` 稳定键（优先级见 A3 §3）；保留 window | T4 | 事件仍派发 CustomEvent；不重复入队；**既有 `contentListAnalytics.test.ts:33-38` 的 `action:'继续'` 改为 `action_key:'create_version'`，并在 RG2 说明「测试与事实不符」** |
 | T6 | 文档与证据 | API 契约、pilot-log、A5 证据 | T3/T5 | 文档可照做；lint 0 error |
-| T7 | 导出覆盖 | `account_data.EXPORT_TABLES` 加 `analytics_events` + `test_account_data` 断言 | T1 | 导出 JSON 含 `analytics_events`；删除级联 |
-| T8 | 保留期清理（后续，非阻塞） | 定期删除 `retention_expires_at < now` 的行 | T1 | 清理脚本/任务与测试；上线前可手动 SQL |
+| T7 | 导出覆盖 | `account_data.EXPORT_TABLES` 加 `analytics_events` + `tests/api/v2/test_account_data.py` 断言 | T1 | 导出 JSON 含 `analytics_events`；删除级联 |
+| T8 | 保留期清理（后续，非阻塞） | 定期删除 `retention_expires_at < now` 的行 | T1 | 脚本 `scripts/cleanup_analytics_events.py` + 测试；上线前可手动 SQL；owner：用户（solo 兼运维），2026-11-20 |
 
 **DoR**：验收标准、依赖、变更面 ≤5 文件；不满足不进开发。
 
@@ -31,12 +31,17 @@
 | T-API-7 | 跨 UTC 日、窗口边界、跨 owner 隔离 | API |
 | T-API-8 | 过期行（`retention_expires_at` 过去）不返回 | API |
 | T-API-9 | 导出含 `analytics_events` | API |
-| T-API-10 | 开关关闭 → 503；配额超出 → 429 | API |
+| T-API-10 | 开关关闭 → 503（优先于 body 解析）；配额超出 → 429（整批拒绝、无 rejected） | API |
+| T-API-11 | 干净环境默认 `analytics_ingest_enabled is False`（无 env 覆盖） | API |
+| T-API-12 | 同批重复 / 跨批重复 → 只落 1 行，duplicates 计数正确，accepted 与 duplicates 互斥 | API |
+| T-API-13 | 跨 owner POST：u1 的 project_id 用 u2 提交 → rejected `project_not_owned` | API |
+| T-API-14 | `action_key` 四形态（view/handle/orchestrated:<type>/NextAction）合法与非法各 1 例 | API |
 | T-FE-1 | 队列 20 条触发 flush；分片 ≤32 | 前端 |
 | T-FE-2 | 队列 200 + pagehide → 多片顺序 flush | 前端 |
 | T-FE-3 | in-flight 防双发 | 前端 |
 | T-FE-4 | 401/503/429/网络错误丢弃且不抛错 | 前端 |
 | T-FE-5 | 开关关闭不入队 | 前端 |
+| T-FE-6 | 无 env 构建默认关闭（`VITE_ANALYTICS_ENABLED` 缺省 false） | 前端 |
 
 ## 3. 测试计划
 

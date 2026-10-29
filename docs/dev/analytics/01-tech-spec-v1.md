@@ -1,6 +1,6 @@
 # A3 · 技术方案 / ADR：First-party analytics 事件采集（v2）
 
-> 工件：A3｜**v2** · 2026-10-30｜对应 A1 `03-prd-v2.md`｜档位 D2｜状态：待 RG1-r2
+> 工件：A3｜**v2** · 2026-10-30｜对应 A1 `03-prd-v2.md`｜档位 D2（产品 T0 押注）｜状态：待 RG1-r3
 > v2 修订（针对 RG0-r2 / RG1-r1）：默认关闭 + 启用签字门；action 改稳定 key；限额改 32×1KB/48KB；401 例外；幂等 raw SQL；保留期强制 + 导出；NFR/威胁/可观测；前端分片。
 > 关联：A4 `02-plan-v1.md`（需按本版更新）、契约 `03-api-contract.md`。
 
@@ -44,10 +44,11 @@ CREATE INDEX IF NOT EXISTS idx_analytics_events_owner_event_created
 - 限制：**1–32 条/请求**；单条 payload 序列化 **≤1KB**；请求体 **≤48KB**（32×1KB 安全上限）；`idem_key` 8–64；`client_ts` 不晚于服务器 +5 分钟。
 - **状态优先级（写死，唯一状态）**：
   1. 未鉴权 → 401（**body 为既有 `{"detail":…}`**，显式例外，不改全局 handler）；
-  2. `Content-Length` >48KB → **413**；
-  3. 结构/类型错、events 数量 0 或 >32、owner 字段 → **422**；
-  4. 单条级：未知 event / payload 键或值非法 → **200 + rejected**（不整批失败）；
-  5. 超配额（10,000 事件/owner/UTC 日）→ **429 `ANALYTICS_QUOTA_EXCEEDED`**；超限部分进 rejected 不落库。
+  2. 采集开关关闭 → **503 `ANALYTICS_DISABLED`**（先于 body 解析）；
+  3. 请求 >48KB → **413 `PAYLOAD_TOO_LARGE`**（实现点：中间件或裸 `Request` 按 `Content-Length` 先判；无 header 时读 body 后判）；
+  4. 结构/类型错、events 数量 0 或 >32、owner 字段 → **422**；
+  5. 单条级：未知 event / payload 键或值非法 → **200 + rejected**（不整批失败）；
+  6. 超配额（10,000 事件/owner/UTC 日）→ **429 `ANALYTICS_QUOTA_EXCEEDED`，整批拒绝、不返回 rejected、不落库**（客户端按 429 丢弃）。
 - 响应 `data`：`{"accepted":n,"duplicates":n,"rejected":[{"index":i,"reason":"..."}]}`；accepted 与 duplicates **互斥**。
 - 开关关闭 → 503 `ANALYTICS_DISABLED`。
 
@@ -65,12 +66,13 @@ CREATE INDEX IF NOT EXISTS idx_analytics_events_owner_event_created
 
 - 白名单外键/值 → rejected（`payload_key_not_allowed` / `payload_value_invalid`）。
 - `project_id` 归属失败 → rejected（`project_not_owned`，不泄露存在性）。
-- 前端：`projectListModel` 增 `rowActionKey`（`view`/`handle`/`orchestrated:<type>`/NextAction）；`contentListAnalytics` 上报 key。
+- 前端：`projectListModel` 增 `rowActionKey`；`contentListAnalytics` 上报 key。**优先级写死**：① `rowGroup==='settled'` → `view`；② 有 `next_action` → 该枚举值；③ 有 `orchestrated_action` → `orchestrated:<action_type>`；④ 否则 `handle`。中文 label 只用于展示。
 
 ## 4. 前端设计（`analyticsTransport.ts`）
 
-- 队列上限 200；flush 按 **≤32 条且序列化 ≤48KB 分片**，逐片 POST；`pagehide` 按分片顺序 flush（`keepalive`）。
-- in-flight 防双发（同一片未完成不重复发送）。
+- 队列上限 200；**flush 触发：队列 ≥20 条或每 5s**；flush 时按 **≤32 条且序列化 ≤48KB 分片**，逐片 POST。
+- `pagehide`：**同步发起所有分片**（`keepalive`，不逐片 await），避免页面卸载丢片。
+- in-flight 防双发（同一片未完成不重复发送）；队列超 200 丢最旧；任一分片失败即停止后续分片。
 - 失败策略：401 丢弃；503/429/网络错误丢弃并 `console.debug`（不重试，避免放大）。
 - 幂等键 `crypto.randomUUID()`；开关 `VITE_ANALYTICS_ENABLED`（默认 false）。
 - **不复用** `services/api/client.ts`（401 会 `forceLogout`）；原生 fetch + `localStorage.access_token`。
@@ -86,7 +88,7 @@ CREATE INDEX IF NOT EXISTS idx_analytics_events_owner_event_created
 | Service | `backend/app/services/analytics.py`（校验/幂等 raw SQL/配额/聚合） | 新增 |
 | Config | `backend/config/settings.py`（`analytics_ingest_enabled` 默认 false） | 改 |
 | Account | `backend/app/services/account_data.py`（`EXPORT_TABLES` 加 `analytics_events`） | 改 |
-| Tests | `backend/tests/api/test_analytics.py`、`backend/tests/services/test_analytics_service.py`、`backend/tests/api/test_account_data.py` | 新增/改 |
+| Tests | `backend/tests/api/v2/test_analytics.py`、`backend/tests/services/test_analytics_service.py`、`backend/tests/api/v2/test_account_data.py` | 新增/改 |
 | FE | `frontend/src/features/content/analyticsTransport.ts`；`contentListAnalytics.ts`；`projectListModel.ts`（rowActionKey）；`__tests__/analyticsTransport.test.ts` | 新增/改 |
 | Docs | `docs/dev/analytics/03-api-contract.md`、A4 | 改 |
 

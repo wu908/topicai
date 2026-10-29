@@ -18,11 +18,11 @@
 
 **状态优先级（唯一状态，按序判定）**
 1. 未鉴权 → 401 body `{"detail":…}`
-2. 请求 >48KB → 413 `PAYLOAD_TOO_LARGE`
-3. 结构/类型错、events 数 0 或 >32、body 含 `owner*` → 422
-4. 单条未知 event / 键非法 / 值非法 → 200 + `rejected[]`（不整批失败）
-5. 超配额 → 429 `ANALYTICS_QUOTA_EXCEEDED`（超出部分进 rejected，不落库）
-6. 开关关闭 → 503 `ANALYTICS_DISABLED`
+2. 采集开关关闭 → 503 `ANALYTICS_DISABLED`（先于 body 解析）
+3. 请求 >48KB → 413 `PAYLOAD_TOO_LARGE`（中间件/裸 Request 按 Content-Length 先判）
+4. 结构/类型错、events 数 0 或 >32、body 含 `owner*` → 422
+5. 单条未知 event / 键非法 / 值非法 → 200 + `rejected[]`（不整批失败）
+6. 超配额 → 429 `ANALYTICS_QUOTA_EXCEEDED`，**整批拒绝、不返回 rejected、不落库**
 
 **Request**
 ```json

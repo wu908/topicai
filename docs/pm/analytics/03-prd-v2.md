@@ -1,14 +1,13 @@
 # A1 · PRD-lite：First-party analytics 事件采集（pilot 5，v2）
 
-> 工件：A1（PRD）｜**v2** · 2026-10-30｜档位 T1 / D2｜状态：待 RG0-r3
+> 工件：A1（PRD）｜**v2** · 2026-10-30｜档位 **T0（证据仅 E1，按押注/探针处理）/ D2**｜状态：待 RG0-r4
 > v2 修订：默认关闭 + 启用签字门；action 稳定 key；限额 32×1KB/48KB；401 例外；保留期强制；测试 ID 落 A4；证据降级。
 
 ## 1. 问题与证据
 
 - 现状：`frontend/src/features/content/contentListAnalytics.ts` 只写内存数组并 `dispatchEvent('content-list:analytics')`；全仓无消费端（RG0-r1 独立复核：唯一派发点，测试只读 window 数组）。
-- 证据等级：
-  - **E1（已核验）**：代码证据——事件已发射、消费端缺失。
-  - **E4（已有使用）**：事件代码已随 UX-01 合入 main；但「实际使用中产生数据」无留存记录，**不计为证据**（RG0-r2 r2-M1）。因此本变更按 **E1 支撑的 T1 内部基础设施**推进，并把「上线后 7 天事件量>0」作为验证计划（见 §6）。
+- 证据等级：**仅 E1（已核验，代码证据：事件已发射、消费端缺失）**。E2（内部访谈）与 E4（实际使用）均无可核验记录，**不计为证据**（RG0-r3 r1-M4/r2-M1）。
+- 因此产品档位按 **T0（押注/探针）**：保留一页 brief + kill criteria，不套完整市场/GTM；工程侧仍按 **D2** 全门（新增 API/schema/隐私）。上线后 7 天事件量>0 作为验证计划（见 §6）。
 - 不做的后果：RG3「埋点端到端」槽位无法满足；产品指标无数据；漏放无法反查。
 
 ## 2. 目标与非目标
@@ -29,12 +28,12 @@
 | S2 | 前端自动分片上报，失败不影响页面 | 队列 200、按 ≤32 条且 ≤48KB 分片、pagehide 多片 flush、401/503/429 丢弃；T-FE-1..5 |
 | S3 | 隐私负责人确认无直接标识符、导出/删除/保留覆盖新表 | 白名单键/值测试（拒绝 email/phone/ip/ua/token）；`EXPORT_TABLES` 含新表（T-API-9）；`retention_expires_at` 过期不返回（T-API-8） |
 | S4 | 审查员能拿到端到端消费端证据 | A7 含「插入→查询→计数」命令/截图（RG3 槽位 3） |
-| S5 | 运维能关采集而不发版 | 后端开关默认 false；关闭 → 503；前端开关默认 false；T-API-10/T-FE-5 |
+| S5 | 运维能关采集而不发版 | 后端开关默认 false（T-API-11）；关闭 → 503（T-API-10）；前端默认 false（T-FE-6）；关闭不入队（T-FE-5） |
 
 ## 4. API 契约（摘要）
 
 - 统一 `ApiResponse` 信封（`code/data/message/meta`）；**显式例外：401 返回既有 `{"detail":…}`**（`get_current_user` 抛 HTTPException，全局 handler 未覆盖），契约与测试按此断言。
-- `POST /analytics/events`：1–32 条；单条 payload ≤1KB；请求 ≤48KB；结构/数量/owner 字段错 → 422；未知 event/键/值 → 200 + rejected；超配额（10k/owner/UTC 日）→ 429；开关关闭 → 503。
+- `POST /analytics/events`：1–32 条；单条 payload ≤1KB；请求 ≤48KB；结构/数量/owner 字段错 → 422；未知 event/键/值 → 200 + rejected；超配额（10k/owner/UTC 日）→ **429 整批拒绝、不返回 rejected、不落库**；开关关闭 → 503（优先于 body 解析）。
 - `GET /analytics/summary`：`from/to` 含两端、≤90 天、UTC 日；只返回当前 owner；过滤过期行。
 - body 含 `owner*` 字段 → 422 `owner_not_allowed`。
 
@@ -48,7 +47,7 @@
   - action_click：`project_id`、`group`、`action_key`（稳定键：`view`/`handle`/`orchestrated:<IntentActionType>`/NextAction 枚举）、`next_action`（NextAction|null）——**不存中文文案**
 - **隐私口径**：`owner_user_id` 是伪匿名个人数据；不声称「无 PII」；对外发布前须隐私复核。
 - **采集默认关闭**：`ANALYTICS_INGEST_ENABLED=false`；启用前须用户对 A9-20261030-04 签字（`05-a9-decisions.md`）。
-- 保留期：90 天；`retention_expires_at` 查询过滤；清理任务为后续 ticket（T8）。
+- 保留期：90 天；`retention_expires_at` 查询过滤（软删除）；物理清理 T8（后续，非阻塞）。
 - 导出/删除：`account_data.EXPORT_TABLES` 加入新表；删除走 owner 级联。
 
 ## 6. 指标与证据
@@ -73,6 +72,6 @@
 
 ## 8. T 档裁剪与门
 
-- T1：must-pass 1–7 + 决策/未知项；市场/GTM advisory 不适用。
+- T0：一页 brief + kill criteria + 决策/未知项；市场/GTM/证据阶梯不适用（本变更仍保留 PRD 作为工程输入，档位理由见 §1）。
 - D2：RG0 全量、RG1 阻断、RG2 独立 + schema/API 人读、RG3、OG0 全过。
 - G2–G4：无 UI/交互变化 → 不适用（记录理由，不伪造证据）。
