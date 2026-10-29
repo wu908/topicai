@@ -95,4 +95,11 @@ describe('FieldSuggestions', () => {
 
     expect(await screen.findByText(/第三天上午我让它整理会议纪要/)).toBeInTheDocument();
   });
+
+  it('turns raw network errors into friendly copy', async () => {
+    vi.mocked(api.suggestFieldCandidates).mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    renderSuggestions();
+    expect(await screen.findByText('模型暂时连不上，你的输入还在，可以稍后重试。')).toBeInTheDocument();
+    expect(screen.queryByText(/Failed to fetch/)).toBeNull();
+  });
 });
