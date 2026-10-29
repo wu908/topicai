@@ -3,16 +3,20 @@
  * 唯一词表来自 projectListModel.contentFlowSteps；不再维护第二套 5 段。
  */
 import { contentFlowSteps, flowStepOf, nextActionLabel } from './projectListModel';
-import type { ContentProject } from '@/types/contracts/v2/content';
+import type { ContentProject, IntentAction } from '@/types/contracts/v2/content';
 
 export default function ProjectFlowBar({
   project,
+  action,
   nowLabel,
 }: {
   project: ContentProject;
+  action?: IntentAction | null;
   nowLabel?: string;
 }) {
-  const current = flowStepOf(project);
+  const current = flowStepOf(
+    action ? { ...project, orchestrated_action: action } : project,
+  );
   return (
     <div className="project-flow-bar" data-testid="stage-meter" data-stage={current}>
       <div className="stages project-flow-steps" role="group" aria-label="内容进度">

@@ -142,13 +142,13 @@ describe('ProjectStagePage', () => {
 
     expect(screen.getByRole('heading', { name: '真实经验项目' })).toBeInTheDocument();
     expect(screen.getByText('项目助手只处理这一条内容')).toBeInTheDocument();
-    // 项目屏只保留一条 8 段人话阶段条；record_publication 当前步是「去发布」。
+    // 项目屏只保留一条 8 段人话阶段条；活跃动作 confirm_intent 当前步是「定方向」。
     expect(document.querySelectorAll('[aria-current="step"]')).toHaveLength(1);
     const meter = screen.getByTestId('stage-meter');
     for (const label of ['定方向', '找素材', '写初稿', '发前检查', '去发布', '等数据', '可复盘', '已沉淀']) {
       expect(within(meter).getByText(label)).toBeInTheDocument();
     }
-    expect(within(meter).getByText('去发布')).toHaveAttribute('aria-current', 'step');
+    expect(within(meter).getByText('定方向')).toHaveAttribute('aria-current', 'step');
     expect(screen.getByText('现在做：确认这条内容的意图')).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: '过程' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByText('踩坑复盘')).toBeInTheDocument();

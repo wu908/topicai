@@ -214,7 +214,7 @@ describe('rowStepLabel / rowActionLabel（列表人话步骤 + 按钮）', () =>
       next_action: undefined,
       orchestrated_action: orchestrated('review_candidate'),
     });
-    expect(rowStepLabel(p)).toBe('写初稿');
+    expect(rowStepLabel(p)).toBe('发前检查');
     expect(rowActionLabel(p)).toBe('继续');
   });
 
@@ -330,6 +330,31 @@ describe('flowStepOf / contentFlowSteps（8 段唯一词表）', () => {
       expect(flowStepOf(project({ next_action: action }))).toBe(step);
     }
     expect(flowStepOf(project({ status: 'settled', next_action: 'manage_observations' }))).toBe(8);
+  });
+
+  it('uses the active orchestrated action before next_action', () => {
+    const p = project({
+      next_action: 'create_version',
+      orchestrated_action: orchestrated('confirm_intent'),
+    });
+    expect(flowStepOf(p)).toBe(1);
+    expect(rowStepLabel(p)).toBe('定方向');
+
+    const publish = project({
+      next_action: undefined,
+      orchestrated_action: orchestrated('record_publication'),
+    });
+    expect(flowStepOf(publish)).toBe(5);
+    expect(rowStepLabel(publish)).toBe('去发布');
+  });
+
+  it('rowStepLabel is exactly contentFlowSteps[flowStepOf - 1]', () => {
+    for (const action of allActions) {
+      const p = project({ next_action: action });
+      expect(rowStepLabel(p)).toBe(contentFlowSteps[flowStepOf(p) - 1]);
+    }
+    const settled = project({ status: 'settled', next_action: 'manage_observations' });
+    expect(rowStepLabel(settled)).toBe(contentFlowSteps[flowStepOf(settled) - 1]);
   });
 });
 
