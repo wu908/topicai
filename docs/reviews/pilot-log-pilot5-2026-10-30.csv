@@ -3,3 +3,7 @@ PILOT-05,D2,D2-start,started,,,unknown,commit,c7fa81e,n/a,n/a,0,0,0,0,unknown,un
 PILOT-05,D2,RG0,conditional,,,unknown,doc,unknown,rg0-reviewer,independent,1,1,7,8,unknown,unknown,0,,,,,,,,docs/reviews/review-rg0-analytics-01-2026-10-30.md,r1: B1 隐私口径矛盾、E2 证据不可核验、契约/统计日未定义；报告未绑定 commit
 PILOT-05,D2,RG0-r2,conditional,,,unknown,doc,62b3081,rg0-reviewer,independent,2,2,5,9,unknown,unknown,0,,,,,,,,docs/reviews/review-rg0-analytics-02-2026-10-30.md,r2: B1 残留已补修；A9-01/02 待用户签字；M1 action 白名单、M5 验收、M7 生命周期
 PILOT-05,D2,RG1,conditional,,,unknown,doc,62b3081,rg1-reviewer,independent,1,1,7,6,unknown,unknown,0,,,,,,,,docs/reviews/review-rg1-analytics-01-2026-10-30.md,RG1: B1 action/next_action 三方矛盾；401/413/422 边界；幂等/导出/NFR/CI
+PILOT-05,D2,RG0-r3,conditional,,,unknown,doc,d0945be,rg0-reviewer,independent,3,0,4,9,unknown,unknown,0,,,,,,,,docs/reviews/review-rg0-analytics-03-2026-10-30.md,r3: blocking 清零；剩 E2/E4 矛盾、证据档位、验收用例、默认值断言
+PILOT-05,D2,RG1,conditional,,,unknown,doc,d0945be,rg1-reviewer,independent,2,0,5,7,unknown,unknown,0,,,,,,,,docs/reviews/review-rg1-analytics-02-2026-10-30.md,r2: B1 核心已解；action_key 优先级/迁移、429/413 顺序、flush、默认值
+PILOT-05,D2,RG0-r4,approved,,,unknown,doc,70aa9cf,rg0-reviewer,independent,4,0,0,15,unknown,unknown,0,,,70aa9cf,,,,,docs/reviews/review-rg0-analytics-04-2026-10-30.md,approve 仅限默认关闭构建；启用需 A9-04 签字 + OG0/RG3
+PILOT-05,D2,RG1,conditional,,,unknown,doc,70aa9cf,rg1-reviewer,independent,3,0,1,9,unknown,unknown,0,,,,,,,,docs/reviews/review-rg1-analytics-03-2026-10-30.md,r3: 仅剩 429/顺序实现点；已按报告修正，待 r4 delta

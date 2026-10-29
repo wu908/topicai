@@ -50,6 +50,7 @@ CREATE INDEX IF NOT EXISTS idx_analytics_events_owner_event_created
   5. 单条级：未知 event / payload 键或值非法 → **200 + rejected**（不整批失败）；
   6. 超配额（10,000 事件/owner/UTC 日）→ **429 `ANALYTICS_QUOTA_EXCEEDED`，整批拒绝、不返回 rejected、不落库**（客户端按 429 丢弃）。
 - 响应 `data`：`{"accepted":n,"duplicates":n,"rejected":[{"index":i,"reason":"..."}]}`；accepted 与 duplicates **互斥**。
+- **实现约束（RG1-r3-M1）**：`/events` 路径函数**不声明 Pydantic body**，用 `request: Request` 手动读 body + `json.loads` + Pydantic 校验；`get_current_user` 依赖先执行 → 保证 401 先于 body 解析；开关检查在依赖后、body 解析前 → 503 先于 413/422；`Content-Length` 读取前判 → 413。不得用 body-parsing middleware 实现这些状态。
 - 开关关闭 → 503 `ANALYTICS_DISABLED`。
 
 ### GET `/api/v2/analytics/summary`
@@ -95,7 +96,7 @@ CREATE INDEX IF NOT EXISTS idx_analytics_events_owner_event_created
 ## 6. NFR / 威胁模型 / 可观测（RG1 M6）
 
 - **信任边界**：浏览器（token 存 localStorage，XSS 为既有风险）→ Bearer → 服务端 owner 隔离；服务端不信任 `client_ts`（仅延迟分析，不参与统计）；payload 白名单。
-- **滥用控制**：per-owner **10,000 事件/UTC 日**，超出 429 + rejected；批量/大小上限；不做全局限流（内测规模小）。
+- **滥用控制**：per-owner **10,000 事件/UTC 日**，超出 **429（整批拒绝、无 rejected）**；批量/大小上限；不做全局限流（内测规模小）。
 - **性能**：本地 SQLite 单批 32 条 p95 <300ms；容量假设 <1k 事件/天、90 天 <90k 行（OG0 复核）。
 - **可观测**：每请求结构化日志 `analytics_ingest accepted=… duplicates=… rejected=… duration_ms=…`；不新增 /metrics。
 - **隐私**：无直接标识符；owner_id 伪匿名；90 天保留 + 查询过滤；导出覆盖。
@@ -121,6 +122,6 @@ CREATE INDEX IF NOT EXISTS idx_analytics_events_owner_event_created
 
 ## 9. 测试策略（摘要，详见 A4 v2）
 
-- 后端：鉴权/越权、限额 0/32/33、48KB、未知 event、payload 键/值、owner 字段 422、幂等同批/跨批、配额 429、开关 503、summary UTC 日/区间/隔离/过期过滤。
+- 后端：鉴权/越权、限额 0/32/33、48KB、未知 event、payload 键/值、owner 字段 422、幂等同批/跨批、配额 429、开关 503、summary UTC 日/区间/隔离/过期过滤；**状态优先级组合**：无 token+非法 JSON→401、503+非法 JSON→503、49KB 非法 JSON→413、429 body 无 rejected。
 - 前端：分片（32/48KB）、pagehide 多片、in-flight 防双发、401/503/429 丢弃、开关关闭。
 - 回归：后端 `pytest --cov-fail-under=80`（pyproject 已配）；前端 `vitest run --coverage`（阈值 lines 80/functions 66/branches 66/statements 76）。

@@ -3,6 +3,7 @@
 > 工件：A3 附属（契约）｜对应 PRD `03-prd-v2.md`、A3 `01-tech-spec-v1.md`（v2）
 > 基础路径：`/api/v2`｜鉴权：`Authorization: Bearer <access_token>`（既有 JWT）；owner 一律取 token。
 > 响应：统一 `ApiResponse` 信封；**显式例外：401 由 `get_current_user` 抛 HTTPException，body 为 `{"detail":"…"}`**（全局 handler 未覆盖，测试按此断言）。
+> 实现约束：`/events` 不声明 Pydantic body，用 `Request` 手读 + `json.loads`，使 401→503→413→422 的顺序在依赖阶段确定；不得依赖 body-parsing middleware。
 
 ## 1. POST `/analytics/events`
 
