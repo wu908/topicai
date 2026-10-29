@@ -17,7 +17,7 @@ import { Box } from '@mui/material';
 import { gsap } from 'gsap';
 
 import { askCompanion } from '@/services/api/v2/companion';
-import { extractErrorMessage } from '@/utils/error';
+import { extractModelErrorMessage } from '@/utils/error';
 
 const BOOT_KEY = 'topicai-companion-booted';
 const ZEN_DELAY = 12_000;
@@ -153,7 +153,7 @@ export default function CompanionDialog() {
       })
       .catch((err: unknown) => {
         // 诚实失败：AI 不可用时明说，而不是给一段假装思考的罐头文案。
-        push(extractErrorMessage(err, 'AI 暂时无法回答，请稍后再试。'), false);
+        push(extractModelErrorMessage(err, 'AI 暂时无法回答，请稍后再试。'), false);
       })
       .finally(() => setAsking(false));
   };

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AutoAwesomeOutlined, RefreshOutlined } from '@mui/icons-material';
 import { suggestFieldCandidates } from '@/services/api/v2/projects';
-import { extractErrorMessage } from '@/utils/error';
+import { extractModelErrorMessage } from '@/utils/error';
 import type { FieldSuggestionCandidate, SuggestionField } from '@/types/contracts/v2/content';
 
 interface FieldSuggestionsProps {
@@ -64,7 +64,7 @@ export default function FieldSuggestions({
       setCandidates([]);
       setSource(null);
       setNote(null);
-      setError(extractErrorMessage(err, '这次没取到方向，稍后再试'));
+      setError(extractModelErrorMessage(err, '这次没取到方向，稍后再试'));
     } finally {
       if (tokenRef.current === token) setLoading(false);
     }

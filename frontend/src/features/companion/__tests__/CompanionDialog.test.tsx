@@ -97,4 +97,15 @@ describe('CompanionDialog', () => {
     fireEvent.click(screen.getByRole('button', { name: '对话悬浮球' }));
     expect(await screen.findByPlaceholderText('问它，或说你的想法…')).toBeTruthy();
   });
+
+  it('turns raw network errors into friendly copy', async () => {
+    askCompanionMock.mockRejectedValue(new TypeError('Failed to fetch'));
+    render(<CompanionDialog />);
+    fireEvent.click(screen.getByRole('button', { name: '对话悬浮球' }));
+    const input = await screen.findByPlaceholderText('问它，或说你的想法…');
+    fireEvent.change(input, { target: { value: '在吗' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(await screen.findByText('模型暂时连不上，你的输入还在，可以稍后重试。')).toBeTruthy();
+    expect(screen.queryByText(/Failed to fetch/)).toBeNull();
+  });
 });
