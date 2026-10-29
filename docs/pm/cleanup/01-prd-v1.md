@@ -1,6 +1,6 @@
 # A1 · PRD-lite：清理 5 段旧阶段词（pilot 6）
 
-> 工件：A1｜版本 v1 · 2026-10-30｜档位 **T0 / D1**｜状态：待 RG0
+> 工件：A1｜版本 v1 · 2026-10-30｜档位 **T0 / D1**｜状态：RG0-r2 已 approve（`41fdbd3`）
 > 目标：删除死代码，让「唯一 8 段词表」成为代码事实；**界面零变化**。
 
 ## 1. 问题与证据
@@ -26,7 +26,7 @@
 
 | # | 标准 | 证据 |
 |---|---|---|
-| A1 | 删除 `StageMeter.tsx`、`ProjectDetailPane.tsx`、`ProjectStage.tsx`、`ProjectWorkspace.tsx` 及对应测试 | 提交后 `git show --stat --name-status <commit>` 删除清单 |
+| A1 | 删除 `StageMeter.tsx`、`ProjectDetailPane.tsx`、`ProjectStage.tsx`、`ProjectWorkspace.tsx` 及对应测试 | 提交后 `git show --stat --name-status 5f99412 -- frontend/src` 删除清单 |
 | A2 | `projectListModel` 不再导出 `stageOf`/`progressOf`/`stageLabels`；相关测试块删除 | 文件 diff |
 | A3 | 全仓 `frontend/src` 用 `git grep -E` 搜 `\bStageMeter\b|\bProjectDetailPane\b|\bProjectStage\b|\bProjectWorkspace\b|\bstageLabels\b|\bstageOf\b|\bprogressOf\b` **0 命中**（用词边界排除 `isProjectWorkspace`；注释/CSS 也清） | `git grep -E` 输出 |
 | A4 | 前端全量 `vitest run --coverage`（阈值 80/66/66/76）通过；`tsc -b`、`eslint`、`vite build` 通过 | A5 证据 |
