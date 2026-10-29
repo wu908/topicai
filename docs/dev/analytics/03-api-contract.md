@@ -3,7 +3,7 @@
 > 工件：A3 附属（契约）｜对应 PRD `03-prd-v2.md`、A3 `01-tech-spec-v1.md`（v2）
 > 基础路径：`/api/v2`｜鉴权：`Authorization: Bearer <access_token>`（既有 JWT）；owner 一律取 token。
 > 响应：统一 `ApiResponse` 信封；**显式例外：401 由 `get_current_user` 抛 HTTPException，body 为 `{"detail":"…"}`**（全局 handler 未覆盖，测试按此断言）。
-> 实现约束：`/events` 不声明 Pydantic body，用 `Request` 手读 + `json.loads`，使 401→503→413→422 的顺序在依赖阶段确定；不得依赖 body-parsing middleware。
+> 实现约束：`/events` 不声明 Pydantic body，用 `Request` 手读 + `json.loads`；**401 在依赖阶段（`get_current_user`）**，**503/413/422 在 handler 内按序**（503 在 body 读取前，413 按 Content-Length/有界读取）；**不得用任何 middleware（含仅查 size 的）**。
 
 ## 1. POST `/analytics/events`
 
@@ -20,7 +20,7 @@
 **状态优先级（唯一状态，按序判定）**
 1. 未鉴权 → 401 body `{"detail":…}`
 2. 采集开关关闭 → 503 `ANALYTICS_DISABLED`（先于 body 解析）
-3. 请求 >48KB → 413 `PAYLOAD_TOO_LARGE`（中间件/裸 Request 按 Content-Length 先判）
+3. 请求 >48KB → 413 `PAYLOAD_TOO_LARGE`（handler 内、503 之后；Content-Length 或 48KB 上限的有界读取）
 4. 结构/类型错、events 数 0 或 >32、body 含 `owner*` → 422
 5. 单条未知 event / 键非法 / 值非法 → 200 + `rejected[]`（不整批失败）
 6. 超配额 → 429 `ANALYTICS_QUOTA_EXCEEDED`，**整批拒绝、不返回 rejected、不落库**

@@ -23,7 +23,7 @@
 | ID | 场景 | 层 |
 |---|---|---|
 | T-API-1 | 未鉴权 401（`detail` 形状）；**无 token + 非法 JSON → 401（不是 422）** | API |
-| T-API-2 | 请求 49KB → 413；**49KB 非法 JSON → 413（不是 422）** | API |
+| T-API-2 | 请求 49KB **合法 JSON** → 413；**49KB 非法 JSON → 413**；**49KB + 无 token → 401**（不是 413）；**49KB + 开关关闭 → 503** | API |
 | T-API-3 | events=0 / 33 条 / owner 字段 → 422 | API |
 | T-API-4 | 未知 event / payload 键非法 / 值非法 → 200 rejected | API |
 | T-API-5 | 合法批量 → accepted 数正确 | API |
@@ -31,7 +31,7 @@
 | T-API-7 | 跨 UTC 日、窗口边界、跨 owner 隔离 | API |
 | T-API-8 | 过期行（`retention_expires_at` 过去）不返回 | API |
 | T-API-9 | 导出含 `analytics_events` | API |
-| T-API-10 | 开关关闭 → 503（**含 503+非法 JSON → 503**）；配额超出 → 429（整批拒绝、body 无 rejected） | API |
+| T-API-10 | 开关关闭 → 503（含 **503+非法 JSON → 503**、**503+49KB → 503**）；配额超出 → 429（整批拒绝、body 无 rejected） | API |
 | T-API-11 | 干净环境默认 `analytics_ingest_enabled is False`（无 env 覆盖） | API |
 | T-API-12 | 同批重复 / 跨批重复 → 只落 1 行，duplicates 计数正确，accepted 与 duplicates 互斥 | API |
 | T-API-13 | 跨 owner POST：u1 的 project_id 用 u2 提交 → rejected `project_not_owned` | API |
