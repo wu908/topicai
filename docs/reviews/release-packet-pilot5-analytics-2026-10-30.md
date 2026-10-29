@@ -37,6 +37,13 @@
    - 表保留不删；数据按 `retention_expires_at` 90 天过期，查询侧已过滤；不涉及业务数据回滚。
 3. 回滚验证：调用 `POST /analytics/events` 应返回 503；应用主流程无影响。
 
+## 3.1 首次部署前检查（OG0-r1 M2）
+
+- [ ] 备份生产 SQLite 卷（VACUUM INTO / 文件快照），记录备份路径与时间；
+- [ ] 在副本上演练迁移：启动 backend 会自动 apply `060_analytics_events.sql`（`main.py` lifespan → `Database.apply_migrations`），确认 apply 成功、回滚步骤可用；
+- [ ] 明确回滚步骤：停服 → 恢复备份 → 回退镜像（或仅回退 env）；新表可保留为空；
+- [ ] 记录操作人/时间；默认关闭，不采集。
+
 ## 4. 监控与告警
 
 - 后端日志：`analytics_ingest accepted=%d duplicates=%d rejected=%d duration_ms=%.1f`（`app/api/v2/analytics.py`）。
