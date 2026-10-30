@@ -12,7 +12,7 @@
 | 组件 | `.../SeriesPanel.tsx` | 删除（仅自身测试引用） |
 | 组件 | `.../WorkspaceAiDock.tsx` | 删除（仅自身测试引用） |
 | 测试 | `__tests__/{ObservationList,ViewpointPanel,SeriesPanel,WorkspaceAiDock}.test.tsx` | 删除 |
-| 样式 | `pages/Content/ContentPage.css` | 删 `.project-workspace`、`.project-detail*`（含媒体查询）、`.stage-meter*`（保留 `.stages*`）；更新注释 |
+| 样式 | `pages/Content/ContentPage.css` | 删 `.project-workspace`、`.project-detail*`（仅 max-width:839 的 `.project-detail.is-empty` 媒体规则；**保留 min-width:840 布局块**）、`.stage-meter*`（保留 `.stages*`）；更新注释 |
 
 ## 实施顺序
 
@@ -38,7 +38,7 @@ git grep -c '^\.stages' -- frontend/src/pages/Content/ContentPage.css   # 应 >=
 ```
 
 - 预期：组件名 grep 0；CSS 旧类 0；`.stages` 正向 >=3；全量测试 **59 files / 467 tests**（删 4 测试文件 / 22 用例；基线 63/489）。
-- 停止条件：任一被删组件仍有生产引用 → 停止并缩小范围；`.stages` 误删导致样式测试失败 → 回退 CSS 改动。
+- 停止条件：任一被删组件仍有生产引用 → 停止并缩小范围；`.stages` 误删 → 正向 grep（`className=.stages`/`^\.stages` 计数）+ `vite build` + diff 复核发现后回退 CSS 改动（vitest `css:false`，不要靠样式测试）。
 - E2E 未跑（无 UI 变化；如 RG2 要求可补）。
 
 ## 未知项
@@ -49,3 +49,4 @@ git grep -c '^\.stages' -- frontend/src/pages/Content/ContentPage.css   # 应 >=
 | U2 | `.stages` 分组选择器是否被误删 | 正向命令（`className="stages"` + `^\.stages` 计数） |
 | U3 | docs/specs 历史引用 | 本次不清理文档历史引用（只保证 `frontend/src` 0 命中） |
 | U4 | 相邻孤儿 `projectDraft` 等 | 不在本次范围，后续单独清理 |
+| U5 | 被删组件的私有死 CSS（`.viewpoint-*`/`.series-*`/`.genome-context*`/`.workspace-eyebrow`） | 记录后置，后续单独清理（本次只清 pilot6 已知 3 组） |

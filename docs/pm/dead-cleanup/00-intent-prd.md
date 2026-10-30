@@ -31,4 +31,4 @@ pilot6 删除 4 个旧组件后，留下：
 ## 3. 风险与回滚
 
 - 风险：CSS 分组选择器误删 `.stages` → 逐条拆分、保留 `.stages`；组件误删 → `tsc`/grep 双重验证。
-- 回滚：`git revert` 本次 commit；无数据/接口影响。
+- 回滚：代码 `git revert 4454274`（前端删除/CSS）；文档历史保留（`c838984`/`65edda6` 为记录，不回滚）；回滚后验证组件/CSS grep 恢复命中、`tsc`/`vitest`/build 绿。无数据/接口影响。
