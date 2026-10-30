@@ -43,5 +43,5 @@
 
 ## 4. 使用限制
 
-- UX-01..04 的部分独立报告原件在 `pilot-docs` worktree（`pilot-measurement-docs` 分支），未全部合并到 main；本索引只列 main 上存在的路径，缺失项在 backlog 记录。
+- UX-01..04 的部分独立报告原件在 `pilot-docs` worktree（`pilot-measurement-docs` 分支），未全部合并到 main；本索引只列 main 上存在的路径，缺失项由 backlog B-19 记录。
 - 本索引只做索引，不改日志/报告；数字以 `Import-Csv` 复算为准。
