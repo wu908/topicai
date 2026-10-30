@@ -1,2 +1,3 @@
 change_id,tier,gate,decision,started_at,decided_at,time_quality,artifact_type,artifact_version,reviewer,independence,round,blocking,major,minor,false_positive,false_negative,bypass,bypass_reason,a9_id,approval_binding_commit,pr,ci_run,merge_commit,post_release_window,evidence,notes
 PILOT-12,D1,D1-start,started,,,unknown,doc,BCDFBA1D50E64A3A,lead,lead,0,0,0,0,unknown,unknown,0,,,,,,,,docs/pm/analytics-closure/00-intent-prd.md,开始时间 2026-10-31 02:04:20；start 行无决定时间（time_quality=unknown）
+PILOT-12,D1,RG0-r1,conditional,2026-10-31 02:04:30,2026-10-31 02:09:54,recorded,mixed,BCDFBA1D50E64A3A,review-writer,unknown,1,0,1,7,unknown,unknown,0,,,,,,,,docs/reviews/review-rg0-analytics-closure-01-2026-10-31.md,M1 首次真实库 --apply 门槛缺失；m5 退出标准缺失；minor 7/nit 4；独立性 partial 记 unknown
