@@ -1,2 +1,3 @@
 change_id,tier,gate,decision,started_at,decided_at,time_quality,artifact_type,artifact_version,reviewer,independence,round,blocking,major,minor,false_positive,false_negative,bypass,bypass_reason,a9_id,approval_binding_commit,pr,ci_run,merge_commit,post_release_window,evidence,notes
 PILOT-11,D1,D1-start,started,,,unknown,doc,8B4A68382D74C1E6,lead,lead,0,0,0,0,unknown,unknown,0,,,,,,,,docs/pm/review-window/00-intent-prd.md,开始时间 2026-10-31 00:37:14；start 行无决定时间（time_quality=unknown）
+PILOT-11,D1,RG0-r1,conditional,2026-10-31 00:37:33,2026-10-31 00:41:57,recorded,mixed,8B4A68382D74C1E6,review-writer,independent,1,1,2,7,unknown,unknown,0,,,,,,,,docs/reviews/review-rg0-review-window-01-2026-10-31.md,B1 设计门证据缺失；M1 8–60 天已对照行归属；M2 验收可判定性；minor 7/nit 2；agent-only 独立性
