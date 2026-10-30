@@ -11,7 +11,7 @@ import {
   getLatestPublishCheck,
   runPublishCheck,
 } from '@/services/api/v2/projects';
-import { extractErrorMessage } from '@/utils/error';
+import { extractModelErrorMessage } from '@/utils/error';
 
 const INTENT_LABELS: Record<string, string> = {
   solve: '教方法',
@@ -90,7 +90,7 @@ export default function ArtifactPane(props: {
         setCheckErr(null);
       })
       .catch((e: unknown) => {
-        if (!cancelled) setCheckErr(extractErrorMessage(e, '发前检查加载失败'));
+        if (!cancelled) setCheckErr(extractModelErrorMessage(e, '发前检查加载失败'));
       });
     return () => {
       cancelled = true;
@@ -108,7 +108,7 @@ export default function ArtifactPane(props: {
       });
       setCheck(result ?? null);
     } catch (e) {
-      setCheckErr(extractErrorMessage(e, '发前检查运行失败'));
+      setCheckErr(extractModelErrorMessage(e, '发前检查运行失败'));
     } finally {
       setCheckBusy(false);
     }

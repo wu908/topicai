@@ -322,6 +322,16 @@ describe('ArtifactPane', () => {
     expect(screen.getByText('尚未运行')).toBeInTheDocument();
   });
 
+  it('turns raw network errors into friendly copy', async () => {
+    getLatestPublishCheckMock.mockRejectedValue(new TypeError('Failed to fetch'));
+    render(<ArtifactPane title="第一篇" body="正文" workspace={workspace} />);
+
+    openTab('发布包');
+
+    expect(await screen.findByText('模型暂时连不上，你的输入还在，可以稍后重试。')).toBeInTheDocument();
+    expect(screen.queryByText(/Failed to fetch/)).toBeNull();
+  });
+
   it('labels a stale check as needing a rerun', async () => {
     getLatestPublishCheckMock.mockResolvedValue(check({ status: 'stale', stale: true }));
     render(<ArtifactPane title="第一版" body="正文" workspace={workspace} />);
