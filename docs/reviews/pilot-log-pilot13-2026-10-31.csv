@@ -1,2 +1,3 @@
 change_id,tier,gate,decision,started_at,decided_at,time_quality,artifact_type,artifact_version,reviewer,independence,round,blocking,major,minor,false_positive,false_negative,bypass,bypass_reason,a9_id,approval_binding_commit,pr,ci_run,merge_commit,post_release_window,evidence,notes
 PILOT-13,D0,D0-start,started,,,unknown,doc,3D34BB4336B8A733,lead,lead,0,0,0,0,unknown,unknown,0,,,,,,,,docs/pm/pilot-index/00-intent-prd.md,开始时间 2026-10-31 02:57:41；start 行无决定时间（time_quality=unknown）
+PILOT-13,D0,A5,pass,,,unknown,commit,6c90fa6,lead,lead,1,0,0,0,unknown,unknown,0,,,,,,,,docs/reviews/a5-pilot-index-verification-2026-10-31.md,索引 12 行/78 行日志/D0=4 D1=7 D2=1/bypass 12 缺 A9 7/OG0 5 not-run 4；backlog 18；路径 0 缺失；纯文档
