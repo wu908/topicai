@@ -189,10 +189,6 @@
   margin: 0 auto;
 }
 
-.project-workspace {
-  color: var(--v3-text);
-}
-
 .workspace-header {
   display: flex;
   align-items: flex-start;
@@ -1543,19 +1539,14 @@
 }
 
 /* 阶段条 · 对齐 content-line-prototype.html .stages / .st */
-.stage-meter,
 .stages {
   display: flex;
   gap: 6px;
   padding: 12px 18px 10px;
 }
-.stage-meter {
-  padding: 4px 0;
-}
 .stages {
   border-bottom: 1px solid rgba(23, 28, 38, 0.055);
 }
-.stage-meter .st,
 .stages .st {
   flex: 1;
   text-align: center;
@@ -1572,13 +1563,11 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.stage-meter .st.done,
 .stages .st.done {
   color: #4a6b8a;
   background: rgba(143, 190, 232, 0.18);
   border-color: rgba(143, 190, 232, 0.25);
 }
-.stage-meter .st.now,
 .stages .st.now {
   color: var(--lumen-ink, #191e26);
   background: rgba(255, 255, 255, 0.85);
@@ -1618,7 +1607,7 @@
 }
 /* ============================================================
    F11 list row / detail pane (ProjectListRow)
-   Class names are .project-row* / .project-detail*. Do not reuse
+   Class names are .project-row*. Do not reuse
    .content-project-row* — a raw <button> falls back to UA centered text.
    ============================================================ */
 .project-row {
@@ -1722,42 +1711,7 @@
   gap: 10px;
 }
 
-/* Right preview pane */
-.project-detail {
-  display: grid;
-  gap: 12px;
-  padding: 16px 14px;
-  text-align: left;
-}
-
-.project-detail.is-empty {
-  color: var(--v3-text-sec, #6b7280);
-}
-
-.project-detail.is-empty h3,
-.project-detail-title {
-  margin: 0;
-  font-size: var(--fs-title, 18px);
-  font-weight: 650;
-  line-height: 1.35;
-  text-align: left;
-}
-
-.project-detail-progress {
-  margin: 0;
-  font-size: var(--fs-meta, 12px);
-  color: var(--v3-text-sec, #6b7280);
-}
-
-.project-detail-goal {
-  margin: 0;
-  font-size: var(--fs-body, 14px);
-  line-height: 1.55;
-  color: var(--v3-text, #1a1f2b);
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: var(--v3-bg, rgba(0, 0, 0, 0.03));
-}
+/* (dead preview-pane styles removed, pilot9) */
 
 /* Dual-column list + preview (>=840). Single column below. */
 .content-project-split{display:grid;gap:16px;grid-template-columns:1fr}
@@ -1768,11 +1722,6 @@
   .content-project-split{grid-template-columns:minmax(280px,360px) 1fr}
   .content-project-aside{position:sticky;top:16px;align-self:start;border:1px solid var(--color-border-light,rgba(0,0,0,.08));border-radius:16px;padding:8px}
 }
-/* Narrow screens: empty preview is dead white, do not reserve space. */
-@media (max-width:839px){
-  .project-detail.is-empty{display:none}
-}
-
 /* ── 内容列表分组（2026-10） ── */
 .content-group {
   margin: 8px 0 0;
