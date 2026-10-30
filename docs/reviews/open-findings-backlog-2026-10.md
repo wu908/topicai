@@ -23,9 +23,10 @@
 | B-13 | 运维 | 首次真实库 `--apply` 的 **A9+OG0 执行门槛**尚未登记（仅文档约束） | `docs/pm/analytics-closure/00-intent-prd.md` §5；`01-decision-process.md` | 执行前按当日序号登记 A9 + OG0；未签只 dry-run | 中 | lead / 待执行 |
 | B-14 | 仓库 | 本地 `mvp` 分支停在 `83f074a`（10-21），落后 origin/main | `git -C mvp log --oneline -1`（本地） | 开工前 `git fetch`；新变更一律从 origin/main 建 worktree | 低 | lead / 已知 |
 | B-15 | 依赖 | Dependabot **18 个 open PR**（含 major bump，如 MUI 5→9、openai 1→3） | `gh pr list --state open`（#38–#151） | P3 统一评估；不在 P2 动 | 中 | lead / open |
-| B-16 | 过程 | **P1 门有效性未证明**：合成变异只证明字段级，语义探针 8/8 漏 | workspace `_sync/p1/p1-status.md`；`final-decision-2026-10-30.md` | P3 决策：接受“未证明”或另排执行器工作 | 高 | lead / P3 |
-| B-17 | 治理 | v0.4 审查流/五流 delta **未写权威源**（AGENTS/REFERENCE 未改） | workspace `_sync/v04-draft-summary-2026-10-30.md`；`final-decision-2026-10-30.md` | P3 用数据决定是否写；不写则保持草案引用 | 高 | 用户/lead / P3 |
+| B-16 | 过程 | **P1 门有效性未证明**：合成变异只证明字段级，语义探针 8/8 漏 | workspace `_sync/p1/p1-status.md`；workspace `_sync/final-decision-2026-10-30.md` | P3 决策：接受“未证明”或另排执行器工作 | 高 | lead / P3 |
+| B-17 | 治理 | v0.4 审查流/五流 delta **未写权威源**（AGENTS/REFERENCE 未改） | workspace `_sync/v04-draft-summary-2026-10-30.md`；workspace `_sync/final-decision-2026-10-30.md` | P3 用数据决定是否写；不写则保持草案引用 | 高 | 用户/lead / P3 |
 | B-18 | 过程 | P2 的两个变更均**同一 agent 做 RG0+RG2**（独立性 partial） | `review-rg0-*`/`review-rg2-*` 头部独立性字段 | P3 评估是否换 reviewer / 引入跨模型 | 中 | lead / P3 |
+| B-19 | 证据 | UX-01..04 部分独立报告原件在 `pilot-docs` worktree（`pilot-measurement-docs` 分支），未全部合并到 main | `pilot-docs` worktree（本地）；`pilot-index-2026-10.md` §4 | 需要时合并/归档；索引暂只引 main 路径 | 低 | lead / open |
 
 ## 2. 使用说明
 

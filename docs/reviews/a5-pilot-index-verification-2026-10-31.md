@@ -36,15 +36,16 @@ OG0=5  NOT_RUN=4
 ### 2.3 backlog 条目
 
 ```
-BACKLOG_ITEMS=18        （B-01..B-18，每条含证据指针）
+BACKLOG_ITEMS=19        （B-01..B-19，每条含证据指针；B-19 为 RG2 r1 后补）
 ```
 
 ### 2.4 路径与链接
 
 ```
 README_INDEX_LINK=True  README_BACKLOG_LINK=True
-DOC_PATHS=5  MISSING=0            （完整 docs/ 路径）
-BARE_NAMES=18  MISSING=0          （索引/backlog 中裸文件名在 docs/reviews 或 docs/pm 下均可解析）
+路径存在性检查：对索引/backlog 中所有反引号引用做存在性检查 → 0 缺失
+（提取口径：完整 `docs/...` 路径直接检查；裸文件名在 docs/reviews、docs/pm、workspace `_sync/` 下解析；
+ 范围简写如 `review-rg0-analytics-01..05` 不单独当路径；命令见 §5）
 EXISTS docs/reviews/pilot-index-2026-10.md=True
 EXISTS docs/reviews/open-findings-backlog-2026-10.md=True
 ```
@@ -70,6 +71,25 @@ git show --stat 6c90fa6 → README.md + 2 个新 docs 文件；无代码/测试/
 
 - **纯文档**：无单元测试可跑；验证为计数/路径/链接的确定性检查。
 - 索引中「关键报告」列对部分变更使用**简写范围**（如 `review-rg0-analytics-01..05`）；A5 的路径检查只验证实际存在的完整文件名，范围简写不代表每个文件都单独列出行。
-- UX-01..04 的部分报告原件只在 `pilot-docs` worktree（未全合 main）；索引只引 main 路径，缺失在 backlog/限制中记录。
+- UX-01..04 的部分报告原件只在 `pilot-docs` worktree（未全合 main）；索引只引 main 路径，该限制由 backlog **B-19** 记录。
 - 未改历史日志/报告；未补造缺 A9 的 7 行；未改门/阈值/权威源。
 - pilot-log 本变更 A5 行 `time_quality=unknown`（未精确记录秒级时间）。
+
+## 5. 路径存在性检查命令（可复现）
+
+```powershell
+$wt='G:\codex_project\topicAI\pilot13-pilot-index'
+$txt=(Get-Content (Join-Path $wt 'docs/reviews/pilot-index-2026-10.md') -Raw) +
+     (Get-Content (Join-Path $wt 'docs/reviews/open-findings-backlog-2026-10.md') -Raw)
+$names=[regex]::Matches($txt,'`([A-Za-z0-9_][A-Za-z0-9_.\-]+\.(md|csv))`') |
+  ForEach-Object { $_.Groups[1].Value } | Where-Object { $_ -notmatch '\.\.' } | Sort-Object -Unique
+$missing=@(); foreach($n in $names){
+  $cands=@((Join-Path $wt ('docs/reviews/'+$n)),(Join-Path $wt ('docs/pm/'+$n)),
+           (Join-Path $wt $n),('C:\Users\24100\Doubao\chats\2026-09-29\new-chat\_sync\'+$n))
+  if(-not ($cands | Where-Object { Test-Path $_ })){ $missing += $n }
+}
+"MISSING=$($missing.Count)"; $missing
+```
+
+预期：`MISSING=0`（范围简写 `01..05` 被 `..` 过滤，不单独当路径）。
+

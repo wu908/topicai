@@ -9,7 +9,7 @@
 
 | # | change_id | 档位 | 代码 commit | PR → merge | 日志 | 关键报告（`docs/reviews/`） | 门结论（简） | 例外/A9 |
 |---|---|---|---|---|---|---|---|---|
-| 1 | **UX-01** 内容列表分组/行操作 | D1 | —（PR 内） | #150 → `9446204` | `pilot-log-v2-2026-10-29.csv` | `review-rg0-ux-fix-item-01-2026-10-27.md`、`review-rg2-ux-fix-item-01-2026-10-28.md`、`release-rg3-ux-fix-item-01-2026-10-28.md` | RG0 cond→pass；RG1 adv-cond→closed；RG2 6 轮→approved；RG3 released；OG0 **not-run** | bypass 1（批准后加依赖）；**缺 A9**（历史） |
+| 1 | **UX-01** 内容列表分组/行操作 | D1 | —（PR 内） | #150 → `9446204` | `pilot-log-v2-2026-10-29.csv` | `review-rg0-ux-fix-item-01-2026-10-27.md`、`review-rg2-ux-fix-item-01-2026-10-28.md`、`release-rg3-ux-fix-item-01-2026-10-28.md` | RG0 cond→pass；RG1 adv-cond→closed；RG2 6 轮→approved；RG3 released；OG0 **not-run** | bypass 2（批准后依赖 override + OG0）；**缺 A9**（历史） |
 | 2 | **UX-02** 设置页死按钮 | D0 | — | #152 → `586270c` | 同上 | `review-d0-ux-fix-item-02-2026-10-28.md`、`release-rg3-ux-fix-item-02-2026-10-28.md` | RG2 approved；RG3 released；OG0 **not-run** | bypass 1（OG0）；**缺 A9** |
 | 3 | **UX-03** 项目屏阶段条 | D1 | — | #153 → `56a53bb` | 同上 | `review-d1-ux-fix-item-03-2026-10-29.md`、`release-rg3-ux-fix-item-03-2026-10-28.md` | RG0/RG1 **skipped**；RG2 approved；RG3 released；OG0 **not-run** | bypass 3（RG0+RG1+OG0）；**缺 A9** |
 | 4 | **UX-04** 统一 8 段词表 | D1 | — | #154 → `a096443`；docs #155 → `c7fa81e` | 同上 | `release-rg3-ux-fix-item-04-2026-10-29.md`、`pilot-measurement-protocol-2026-10-29.md` | RG0 pass(self)；RG1 pass(self)；RG2 cond→approved；RG3 released；OG0 **not-run** | bypass 1（OG0）；**缺 A9** |
