@@ -1636,10 +1636,13 @@ Steps and expectations:
   one of the five stage strings is visible.
 - **Confirmed by code:** the page is read-only — there is no confirmation control on it, and
   the footer explicitly says 确认后，有效经验才会进入它的成长 (`ReviewPage.tsx:97`).
-- **Ambiguity (important):** the page requests `listWeekly(60)` (`ReviewPage.tsx:32`) while the
-  API default and all product docs say 7 days (`backend/app/api/v2/async_loop.py:148`,
-  `docs/ai-native-async-creation-plan-2026-08-29.md:24`). A tester must decide which window the
-  product intends before asserting row counts.
+- **Resolved (PILOT-11, 2026-10-31):** the page now fetches two windows —
+  `listWeekly(7)` for 本周对照 and `listWeekly(60)` for 欠对账
+  (`frontend/src/pages/Review/ReviewPage.tsx:42-46`), matching the API default of 7 days
+  (`backend/app/api/v2/async_loop.py:150`) and the product plan's 「本周全部已发内容」
+  (`docs/ai-native-async-creation-plan-2026-08-29.md:24`). 8–60 day already-compared rows are
+  intentionally not shown on this page (accepted in `A9-20261031-02`); see
+  `docs/pm/review-window/02-a9.md`.
 
 ### J10 — 成长 (growth page)
 
@@ -2128,7 +2131,7 @@ If time is limited, these give the broadest coverage per minute:
 | A6 | Three growth-page trust switches are display-only | T116 | `GrowthPage.tsx:99-119` |
 | A7 | Starter step selection is server-driven | T149–T155 | as A2 |
 | A8 | `ProjectCreateForm` is dead code (7 controls, unreachable) | not testable via UI | `StageForms.tsx:163`; no importer |
-| A9 | Weekly-review window is 60 days in the UI vs 7 days in the docs/API default | T109, T111 | `ReviewPage.tsx:32` vs `async_loop.py:148` |
+| A9 | ~~Weekly-review window is 60 days in the UI vs 7 days in the docs/API default~~ **resolved in PILOT-11 (2026-10-31): 7-day 本周对照 + 60-day 欠对账** | T109, T111 | `ReviewPage.tsx:42-46`; A9-20261031-02 |
 | A10 | The 写作提醒 column can never contain a suggestion (dead push sites) | T108 | `ProjectWorkspace.tsx:317`, `:331-354`, `:699` |
 | A11 | Weekly publish goal accepted as 1–7 in the UI vs 1–4 in the docs | T140 | `MePage.tsx:220` vs `CONTEXT.md:50-53` |
 | A12 | Companion zen fade is 12s in code vs 8s in a handoff doc | T175 | `CompanionDialog.tsx:23` vs `docs/handoffs/topicai-handoff-2026-09-02-lumen-visual-acceptance.md:68` |

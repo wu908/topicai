@@ -35,13 +35,18 @@ function actualLine(row: WeeklyRow): string {
 
 export default function ReviewPage() {
   const navigate = useNavigate();
-  const [weekly, setWeekly] = useState<WeeklyRow[]>([]);
+  const [weekRows, setWeekRows] = useState<WeeklyRow[]>([]);
+  const [historyRows, setHistoryRows] = useState<WeeklyRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
 
+  /** 「本周」= 最近 7 天滚动窗口（与后端 days=7 一致，非自然周）：
+   *  7 天响应只用于「本周对照」；60 天响应只用于「欠对账」。
+   *  8–60 天已对照行不在本页展示（A9-20261031-02 接受）。 */
   const reload = useCallback(async () => {
-    const rows = await listWeekly(60);
-    setWeekly(rows.items);
+    const [week, history] = await Promise.all([listWeekly(7), listWeekly(60)]);
+    setWeekRows(week.items);
+    setHistoryRows(history.items);
   }, []);
 
   useEffect(() => {
@@ -51,8 +56,8 @@ export default function ReviewPage() {
     return () => window.clearTimeout(timer);
   }, [reload]);
 
-  const pending = weekly.filter((r) => r.stage === 'needs_snapshot');
-  const compared = weekly.filter((r) => r.stage !== 'needs_snapshot');
+  const pending = historyRows.filter((r) => r.stage === 'needs_snapshot');
+  const compared = weekRows.filter((r) => r.stage !== 'needs_snapshot');
 
   return (
     <div>
@@ -66,7 +71,7 @@ export default function ReviewPage() {
         <div>
           <h1>周复盘</h1>
           <p className="sub" style={{ margin: 0 }}>
-            判断写在发布前 · 可核对 · 本周对照 {compared.length} · 欠对账 {pending.length}
+            判断写在发布前 · 可核对 · 本周对照 {compared.length}（近 7 天） · 欠对账 {pending.length}（≤60 天）
           </p>
         </div>
         <button
@@ -93,7 +98,7 @@ export default function ReviewPage() {
               <span className="lumen-chip">{compared.length}</span>
             </div>
             {compared.length === 0 ? (
-              <div className="lumen-fill">本周期还没有可对照的判断。发布并回填数据后，这里会出现对照行。</div>
+              <div className="lumen-fill">本周还没有可对照的判断。发布并回填数据后，这里会出现对照行。</div>
             ) : (
               compared.map((row) => {
                 const chip = compareChip(row);
