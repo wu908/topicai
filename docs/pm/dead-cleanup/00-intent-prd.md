@@ -14,6 +14,8 @@ pilot6 删除 4 个旧组件后，留下：
 - `ContentPage.css`：删 `.project-workspace` 块、`.project-detail*` 块与媒体查询、拆分组选择器只删 `.stage-meter*`，保留 `.stages*`；
 - 更新 CSS 注释（F11 不再提 `.project-detail*`）。
 
+**档位依据（T0 而非 T1）**：纯死代码/死样式删除，无产品行为变化、无新证据需求、可逆；按产品 v1.1 §4/§5，T0 押注/探针仅需 brief+kill criteria 即可。
+
 **非目标**：不改任何在用组件/样式；不动 `stage-meter` 的 `data-testid`（ProjectFlowBar 在用，e2e 依赖）；不重构 `.stages`。
 
 ## 2. 验收

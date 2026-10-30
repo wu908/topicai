@@ -33,7 +33,7 @@ pnpm exec vite build
 git grep -n "ReviewSummary\|ObservationList\|ViewpointPanel\|SeriesPanel\|WorkspaceAiDock" -- frontend/src
 git grep -n "\.project-detail\|\.project-workspace\|\.stage-meter" -- frontend/src/pages/Content/ContentPage.css
 # 正向：.stages 必须保留（ProjectFlowBar 在用；分组选择器拆分时最易误删）
-git grep -n 'className="stages' -- frontend/src          # 应命中 ProjectFlowBar.tsx
+git grep -n 'className=.stages' -- frontend/src         # 应命中 ProjectFlowBar.tsx（PowerShell 下勿用双引号包 pattern）
 git grep -c '^\.stages' -- frontend/src/pages/Content/ContentPage.css   # 应 >= 3
 ```
 

@@ -18,7 +18,7 @@
 |---|---|---|
 | 旧组件 0 命中 | `git grep -n "ReviewSummary\|ObservationList\|ViewpointPanel\|SeriesPanel\|WorkspaceAiDock" -- frontend/src`（仓库根） | **exit 1（0 命中）** |
 | 死 CSS 0 命中 | `git grep -n "\.project-detail\|\.project-workspace\|\.stage-meter" -- frontend/src/pages/Content/ContentPage.css`（仓库根） | **exit 1（0 命中）** |
-| `.stages` 正向保留 | `git grep -n 'className="stages' -- frontend/src`；`git grep -c '^\.stages' -- frontend/src/pages/Content/ContentPage.css` | 命中 `ProjectFlowBar.tsx:22`；计数 **3+**（分组规则未误删） |
+| `.stages` 正向保留 | `git grep -n 'className=.stages' -- frontend/src`；`git grep -c '^\.stages' -- frontend/src/pages/Content/ContentPage.css` | 命中 `ProjectFlowBar.tsx:22`；计数 **3+**（分组规则未误删） |
 | 全量测试 | `pnpm exec vitest run`（frontend/） | **59 files / 467 tests passed**（基线 63/489；删 4 文件/22 用例） |
 | 类型/lint/build | `pnpm exec tsc -b`；`pnpm exec eslint src/features/content src/pages/Content`；`pnpm exec vite build` | 全 **exit 0** |
 
