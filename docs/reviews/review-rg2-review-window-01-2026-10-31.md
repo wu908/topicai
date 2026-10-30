@@ -2,7 +2,7 @@
 
 > 依据：`C:\Users\24100\.agents\templates\five-streams\rg2-change-review.md`（①–⑫）；`_sync\五流架构-v0.3-2026-10-29.md`（§4.1/§4.2）；`_sync\审查流规范-v0.3-2026-10-29.md`（§5.1/§5.2/§5.3 R5/§6/§8/§9/§10）。
 > 性质：**RG2 变更就绪独立审查（只读）**。未改任何文件、未 commit/push（本报告为唯一新增写入）；审查中独立重跑目标/全量测试、build、lint，不照抄 A5。
-> 审查对象：代码 commit **`bc2f28c`**（diff base `ce7be40`）；文档/证据 HEAD **`23a5c7e`**；A0/A1 v3（SHA16 `7A03687EC6332FFA`）、决策简报/契约 v3、A9 `02-a9.md`、A5 `docs/reviews/a5-review-window-test-evidence-2026-10-31.md`、RG0 r3 approve（绑 `0caffb6`）。
+> 审查对象：代码 commit **`bc2f28c`**（diff base `ce7be40`）；文档/证据 HEAD **`f1502f0`**（= `23a5c7e` A5/报告 + `f1502f0` 本报告初版与 pilot-log RG2 行，均为 docs 归档）；A0/A1 v3（SHA16 `7A03687EC6332FFA`）、决策简报/契约 v3、A9 `02-a9.md`、A5 `docs/reviews/a5-review-window-test-evidence-2026-10-31.md`、RG0 r3 approve（绑 `0caffb6`）。
 > 时间：审查开始 2026-10-31 01:19:34 +08:00；决定时间 2026-10-31 01:25:28 +08:00（Asia/Shanghai，真实本地时间 = 本报告落盘时刻）。
 
 ## ① 独立性声明（必填）
@@ -26,7 +26,7 @@
 
 | 字段 | 填写 |
 |---|---|
-| 变更 diff | base `ce7be40`（origin/main）→ 代码 head **`bc2f28c`**；文档/证据 HEAD `23a5c7e`（纯归档，见 §⑥）。**`approval_binding_commit = bc2f28c`** |
+| 变更 diff | base `ce7be40`（origin/main）→ 代码 head **`bc2f28c`**；文档/证据 HEAD `f1502f0`（docs 归档，见 §⑥）。**`approval_binding_commit = bc2f28c`** |
 | 变更规模 | **3 files / +82 −17**（`git show --stat bc2f28c`）：`ReviewPage.tsx` 19 行（+12/−7）、`ReviewPage.test.tsx` 67 行（+62/−5）、`feature-inventory.md` 13 行（+8/−5）。风险类命中：**无**（无 auth/钱/schema/迁移/隐私/API/AI）；blast radius：仅 `/review` 页面（前端）+ 1 份审查库存文档 |
 | A5 证据 | `docs/reviews/a5-review-window-test-evidence-2026-10-31.md`（目标 7 passed；全量 59/471；build/lint 0；覆盖率 82.8/74.4/77.27/84.58，ReviewPage 80/63.88/89.47/81.57）——**已独立重跑可核项，见 §⑪** |
 | 相关工件 | A0/A1 v3 `docs/pm/review-window/00-intent-prd.md`（SHA16 `7A03687EC6332FFA`）；决策简报/契约 v3 `01-decision-process.md`；A9 `02-a9.md`（A9-20261031-01/02）；RG0 r3 approve `review-rg0-review-window-03-2026-10-31.md`（绑 `0caffb6`）；pilot log `docs/reviews/pilot-log-pilot11-2026-10-31.csv` |
@@ -67,13 +67,14 @@
 | ID | 严重度 | owner_gate | 文件:行 | 证据 | 建议 | 处置 |
 |---|---|---|---|---|---|---|
 | **PILOT-11-RG2-r1-m1** | **minor** | RG2/本变更 | `ReviewPage.test.tsx:75-85`；`00-intent-prd.md:53`（A4）；A5:62 | A4 要求副标题逐字精确断言（`getByText` 精确匹配，含前缀「判断写在发布前 · 可核对」），但用例④只用 `content.includes('本周对照 1（近 7 天）')` + `toContain('欠对账 1（≤60 天）')`；若实现丢掉前缀/改计数器文案，测试仍绿。实现当前正确（`ReviewPage.tsx:74` 与 D-03 原文一致） | 用例④改为断言完整串（`判断写在发布前 · 可核对 · 本周对照 1（近 7 天） · 欠对账 1（≤60 天）`）；或 A5 映射中注明「窗口片段断言」而非 A4 全覆盖 | lead；合并前或 A5 修订时 |
+| **PILOT-11-RG2-r1-m2** | **minor** | 过程/证据 | `02-a9.md:11-12`；A5:68；本报告时间 | A9-01/02 的「复审日期 2026-11-05（RG2 前）」与事件时点/补救描述不自洽：RG2 在 2026-10-31，11-05 晚于 RG2；A9-01 补救写「RG2 前由用户复核实现页面截图」，但 A5 §4 明记截图未跑（A0 A5 已定截图非阻塞）；A9-02 补救为「发布后 2–4 周回查」，同样晚于 11-05 复审日 | 在 A9 补「复审结论」行或调整日期/补救口径（A9-01：用户复核截图后记复审行；A9-02：发布后回查时记复审行）；不影响本次代码结论 | lead/产品负责人；A9 复审日前（不阻塞合并） |
 | **PILOT-11-RG2-r1-n1** | nit | 文档 | `feature-inventory.md:1641` | 指针写 `ReviewPage.tsx:42-46`，实际双请求 `Promise.all` 在 `:47`（`reload` 46-50；state 38-49）——指针未覆盖关键行 | 改为 `:46-47`（或 `:38-50`） | lead；随手 |
 | **PILOT-11-RG2-r1-n2** | nit | 跨屏/E2E | `frontend/e2e/async-loop.spec.ts:61` | 正则仍含旧文案备选 `本周期还没有可对照的判断`（新文案为「本周还没有…」）；当前靠 `本周对照`/`欠对账` 分支仍匹配，未失败；E2E 本轮未跑（A5 §4） | E2E 恢复执行时把备选更新为 `本周还没有可对照的判断` | lead；E2E 维护时 |
-| **PILOT-11-RG2-r1-m2** | **minor** | 过程/证据 | `02-a9.md:11-12`；A5:68；本报告时间 | A9-01/02 的「复审日期 2026-11-05（RG2 前）」与事件时点/补救描述不自洽：RG2 在 2026-10-31，11-05 晚于 RG2；A9-01 补救写「RG2 前由用户复核实现页面截图」，但 A5 §4 明记截图未跑（A0 A5 已定截图非阻塞）；A9-02 补救为「发布后 2–4 周回查」，同样晚于 11-05 复审日 | 在 A9 补「复审结论」行或调整日期/补救口径（A9-01：用户复核截图后记复审行；A9-02：发布后回查时记复审行）；不影响本次代码结论 | lead/产品负责人；A9 复审日前（不阻塞合并） |
+| **PILOT-11-RG2-r1-n3** | nit（**既有**，非本变更引入） | 既有/backlog | `ReviewPage.tsx:54,184`；基线 `ce7be40` 同结构 | ① 成功 reload 后不清 `error`（只在 catch 里 set，无 `setError(null)`）→ 失败一次后重试成功仍显示旧错误；② `RetroFillForm onDone={() => void reload()}` 的 reload 失败会产生未处理 rejection。两者在 baseline 已存在，本次未改；新双请求扩大了失败面但未新增语义 | 记入 P2 backlog（reload 前 `setError(null)`；onDone 用 `reload().catch(...)`） | lead/backlog；不阻塞 |
 
 **Carried（RG0 r2/r3 遗留，跨门同根因，不重复计数）**：`RG0-r2-m1` 决策简报 `01:8`「不丢 ≤60 天 pending」未同步 A0 v3「数据源覆盖」；`RG0-r3-m1` 用户确认原文在仓库外 `_sync` 且为 Lead 转录（建议入库副本/原始会话标识）；`RG0-r3-n1` A0 v3 节标题仍标 v2（`00:24,38,46,59,72,77`）；`RG0-r3-n2` A9-01 缺口接受未在 D-03 单独问答（属 Lead 归因）。均非阻塞，建议 RG3 前清。
 
-- **计数（去重后）**：blocking **0** ｜ major **0** ｜ minor **1** ｜ nit **3**
+- **计数（去重后）**：blocking **0** ｜ major **0** ｜ minor **2** ｜ nit **3**
 - **门槛核对**：无 blocking/major/安全/验证缺口；仅 minor/nit → 按 v0.3 §8.5 **只能 approve**。
 - 误杀回查（`false_positive`/`false_negative`）：本轮无 blocking/major 需回查，记 `unknown`（发布后 2–4 周按 RG3 回查）。
 
@@ -85,8 +86,8 @@
 | `merge_commit` | **待合并**（PR 未创建，§⑧；审查时未合并） |
 | 是否一致 | 待合并后核对；若合并 head 含 `bc2f28c` 之后的代码提交 → 批准失效 |
 | 不一致处理 | 按模板 squash 判定：`git merge-base --is-ancestor bc2f28c <merge>` + `git log --oneline bc2f28c..<merge>` 无代码提交（仅 docs/merge/squash）→ `squash_confirmed=是` 免重审；任一不满足 → 批准失效（r2 重审）或 A9 记 `bypass=1 + reason + a9_id` |
-| 批准后新增 commit | **`23a5c7e`（纯 docs 归档：A5 证据 + RG0 r3 报告 + pilot log，`git diff bc2f28c..23a5c7e -- frontend backend` = 空）**；后续 RG2 报告/pilot-log 归档 commit 同类。若夹带 frontend/backend 变更 → 批准失效 |
-| `archival_commit` / `artifact_diff` | `archival_commit=23a5c7e`；`artifact_diff=0`（不含被审代码工件变更）→ 不使批准失效 |
+| 批准后新增 commit | **`23a5c7e`（A5 证据 + RG0 r3 报告 + pilot-log，docs）**、**`f1502f0`（本报告初版 + pilot-log RG2 行，docs）**；两次 `git diff bc2f28c..<commit> -- frontend backend` 均为空。后续 RG2 报告终版/pilot-log 归档 commit 同类。若夹带 frontend/backend 变更 → 批准失效 |
+| `archival_commit` / `artifact_diff` | `archival_commit=23a5c7e`、`f1502f0`；`artifact_diff=0`（不含被审代码工件变更）→ 不使批准失效；本报告终版为 worktree 未提交修订（仅 docs 内容），提交后 `artifact_diff` 仍为 0 |
 
 ## ⑦ bypass 三件套
 
@@ -107,13 +108,13 @@
 | PR review / comments | **`reviews=0`、`comments=0`**（无 PR）——R5 槽位**未满足** |
 | 补链要求 | 合并前二选一：① push → 建 PR（代码树 = `bc2f28c`，head 可含 `23a5c7e` 等 docs commit）→ **reviewer 本人在 PR 留 COMMENTED review**（引本报告结论 + 绑定 `bc2f28c`；不伪造 APPROVED；先例 A9-20261030-06/07/09）；② A9 例外（新增 A9 记录：谁接受/为什么/复审日期）+ pilot-log RG2 行 `bypass=1` |
 | 合并前 | 上述槽位补齐前**不得把本报告当作 R5 完整完成**；本轮结论只覆盖代码/变更就绪 |
-| 留档 | A6 本报告 ｜ PR review（待补）｜ A9（如例外）；pilot-log RG2 行待补（建议 `approved`、`approval_binding_commit=bc2f28c`、`independence=unknown`、`0/0/1`、notes 记 3 nit + carried + 独立性 partial） |
+| 留档 | A6 本报告 ｜ PR review（待补）｜ A9（如例外）。pilot-log RG2 行已由 `f1502f0` 落库（approved、binding=`bc2f28c`、independence=unknown、evidence=本报告）；**待按本报告终版修正：minor 1→2、notes「0B/0M/1m/3n」→「0B/0M/2m/3n」**；merge_commit/CI 合并后补 |
 
 ## ⑨ 反例护栏（自查）
 
 - **未把 A5 当结论**：独立重跑目标 7/7、全量 59/471、`pnpm build`（index `BCY23Xv4` 245.46 kB 与 A5 一致）、eslint（Review 范围）0；coverage 未重跑已注明（§⑪）。
 - **未伪造 PR/CI/review**：明记 PR 未创建、CI 未跑、review 0/0（§⑧）。
-- **未把 nit 判 conditional**：仅 1 minor + 3 nit → approve（§⑤/§⑩）。
+- **未把 nit 判 conditional**：仅 2 minor + 3 nit → approve（§⑤/§⑩）。
 - **未只审本 diff**：核对 HomePage `listWeekly(7)`、后端 `days=7`/滚动窗口、feature-inventory、E2E 正则、旧文案存活（§③/§④-6）。
 - **未替产品改验收**：A4 断言不足记为 RG2-m1（要求补测试/证据），不改 A4 规格。
 - **独立性未夸大**：同一 reviewer 做过 RG0 r1–r3 已披露，`partial（agent-only）`（§①）。
@@ -123,10 +124,10 @@
 | 字段 | 填写 |
 |---|---|
 | 决策 | **approve**（代码/变更就绪，可进入合并流程） |
-| 理由（≤3 条） | ① A1–A6 + A9-01/02 在实现与测试中逐条落地（§③.5）：7/60 双窗口、`Promise.all`、失败不渲染半套、pending/compared 切分、两处文案与 D-03 逐字一致、无新增 UI；② 旧测试无放宽/删除（3 旧用例全保留且空态断言更严），新 4 用例覆盖窗口/失败/文案；独立重跑目标 7/7、全量 59/471、build/lint 0，与 A5 一致；③ 仅 1 minor（A4 副标题断言未精确）+ 3 nit（文档指针/E2E 旧文案/既有错误态），无 blocking/major → 按 §8.5 只能 approve |
-| 计数（去重后） | blocking **0** ｜ major **0** ｜ minor **1** ｜ nit **3** |
-| 必改项 | **无 blocking/major**。RG2-m1 建议合并前补（测试一行断言）；RG2-n1～n3 随手/backlog。Carried RG0 r2/r3 4 项建议 RG3 前清（非阻塞） |
-| 是否可合并 | **代码结论：可合并**。合并前置：① 补 §⑧ 的 PR review 槽位（或 A9 例外 + RG2 行 bypass=1）；② pilot-log 补 RG2 行（绑 `bc2f28c`）与 merge_commit/CI；③ 合并 head 与 `bc2f28c` 代码树不一致时按 §⑥ squash 判定，否则批准失效重审/A9；④ CI 绿（建 PR 后） |
+| 理由（≤3 条） | ① A1–A6 + A9-01/02 在实现与测试中逐条落地（§③.5）：7/60 双窗口、`Promise.all`、失败不渲染半套、pending/compared 切分、两处文案与 D-03 逐字一致、无新增 UI；② 旧测试无放宽/删除（3 旧用例全保留且空态断言更严），新 4 用例覆盖窗口/失败/文案；独立重跑目标 7/7、全量 59/471、build/lint 0，与 A5 一致；③ 仅 2 minor（A4 副标题断言未精确、A9-01/02 复审时点不自洽）+ 3 nit（文档指针/E2E 旧文案/既有错误态），无 blocking/major → 按 §8.5 只能 approve |
+| 计数（去重后） | blocking **0** ｜ major **0** ｜ minor **2** ｜ nit **3** |
+| 必改项 | **无 blocking/major**。RG2-m1（补 A4 精确断言）与 RG2-m2（A9 复审行/日期口径）建议合并前或 RG3 前处理；RG2-n1～n3 随手/backlog。Carried RG0 r2/r3 4 项建议 RG3 前清（非阻塞） |
+| 是否可合并 | **代码结论：可合并**。合并前置：① 补 §⑧ 的 PR review 槽位（或 A9 例外 + RG2 行 bypass=1）；② pilot-log RG2 行已落（`f1502f0`），需按本报告终版把 minor 改 2、notes 同步，并补 merge_commit/CI；③ 合并 head 与 `bc2f28c` 代码树不一致时按 §⑥ squash 判定，否则批准失效重审/A9；④ CI 绿（建 PR 后） |
 | 回滚 | `git revert bc2f28c`（仅前端页面取数/文案 + 测试 + 1 份文档；无数据/接口/依赖；回滚后重跑目标+全量测试） |
 
 ## ⑪ 证据与留档
@@ -157,7 +158,7 @@
 
 1. **独立性**：agent-only；同一 reviewer 做过本变更 RG0 r1–r3；同模型/同会话族/同 workspace；无人类或跨模型复核；PR review 未留（`independence=partial`）。
 2. **本地-only**：PR 未创建、CI 未跑、R5 槽位未满足（§⑧）——本报告不声明 R5 完成。
-3. **视觉未验证**：无 E2E/页面截图；「不新增 UI、不计入 8–60 天行」靠代码 diff + 组件测试 + A9-01/02 记录；A9-01 复审项（RG2 前用户复核实现页面截图）尚未执行，属 RG3 前置。
+3. **视觉未验证**：无 E2E/页面截图；「不新增 UI、不计入 8–60 天行」靠代码 diff + 组件测试 + A9-01/02 记录；A9-01 的「RG2 前用户复核实现页面截图」尚未执行（A0 A5 已定截图非阻塞，见 RG2-m2 的 A9 复审时点问题），需在 A9 复审日前补/调整。
 4. **环境版本差异**：重跑用 bundled Node 24.21.0 / pnpm 11.28.5；A5 用系统 Node 26.8.1 / pnpm 11.5.0（已核系统版本存在且与 A5 相符）；两者在 T-1～T-3 结果一致，但非同一进程环境。
 5. **coverage 未重跑**：引用 A5 数字（ReviewPage 80/63.88/89.47/81.57），未独立复核。
 6. **时间**：A5 执行时间未精确记录（A5 §4；pilot-log A5 行 `time_quality=unknown`，未补造）。
