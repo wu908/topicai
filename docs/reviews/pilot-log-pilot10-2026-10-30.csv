@@ -1,0 +1,4 @@
+change_id,tier,gate,decision,started_at,decided_at,time_quality,artifact_type,artifact_version,reviewer,independence,round,blocking,major,minor,false_positive,false_negative,bypass,bypass_reason,a9_id,approval_binding_commit,pr,ci_run,merge_commit,post_release_window,evidence,notes
+PILOT-10,D0,D0-start,started,,,unknown,commit,8e4d481,n/a,n/a,0,0,0,0,unknown,unknown,0,,,,,,,,docs/pm/dead-css/00-intent-prd.md,用户 2026-10-30 选 A 补第 10 个变更（D0）
+PILOT-10,D0,A5,pass,,,unknown,commit,4c18470,lead,lead,1,0,0,0,unknown,unknown,0,,,,,,,,docs/reviews/a5-dead-css-test-evidence-2026-10-30.md,死前缀 CSS 0；59 files/467 tests；tsc/eslint/build 0；1 file/314 deletions 仅删除
+PILOT-10,D0,RG2,approved,,,unknown,commit,4c18470,rg2-reviewer,independent,1,0,0,1,unknown,unknown,1,GitHub 禁止 self-approve；reviewer 以 COMMENTED review 记录（PR #165）,A9-20261030-10,4c18470,165,,,,docs/reviews/review-rg2-dead-css-01-2026-10-30.md,D0 fast review approve 0B/0M/1m/2n；1 file/314 deletions；59/467；仅删除
