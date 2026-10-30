@@ -22,7 +22,19 @@
 2. 采集开关关闭 → 503 `ANALYTICS_DISABLED`（先于 body 解析）
 3. 请求 >48KB → 413 `PAYLOAD_TOO_LARGE`（handler 内、503 之后；Content-Length 或 48KB 上限的有界读取）
 4. 结构/类型错、events 数 0 或 >32、body 含 `owner*` → 422
-5. 单条未知 event / 键非法 / 值非法 → 200 + `rejected[]`（不整批失败）
+5. 单条校验失败 → **200 + `rejected[]`**（不整批失败），reason 枚举与触发条件：
+
+   | reason | 触发条件 |
+   |---|---|
+   | `unknown_event` | `event` 不在三类白名单 |
+   | `idem_key_invalid` | `idem_key` 长度不在 8–64 |
+   | `client_ts_invalid` | 时间不可解析 / 为空，或晚于服务器 +5 分钟 |
+   | `payload_too_large` | 单条 `payload` 序列化 >1KB |
+   | `payload_key_not_allowed` | `payload` 含白名单外键 |
+   | `payload_value_invalid` | 已列键的类型/枚举/计数/`action_key`/`next_action`/`project_id` 值非法 |
+   | `project_not_owned` | `project_id` 不存在或不属于当前 owner（不泄露存在性） |
+
+   注：第 3/4 步（>48KB、结构/条数）仍是**整批** 413/422；本表只覆盖逐条 `rejected[]`。
 6. 超配额 → 429 `ANALYTICS_QUOTA_EXCEEDED`，**整批拒绝、不返回 rejected、不落库**
 
 **Request**

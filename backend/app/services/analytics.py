@@ -308,3 +308,33 @@ class AnalyticsService:
             {"event": row["event"], "date": row["day"], "count": int(row["total"])}
             for row in rows
         ]
+
+    # ==================== Retention ====================
+
+    async def purge_expired(
+        self, *, dry_run: bool = True, now: datetime | None = None
+    ) -> int:
+        """Count (dry-run) or delete rows whose retention window has ended.
+
+        Only rows with ``retention_expires_at <= now`` are affected. A naive
+        ``now`` is treated as UTC (same rule as ``_parse_client_ts``). The
+        default is dry-run; callers must opt in to deletion explicitly, and
+        this method is not scheduled or exposed through the API.
+        """
+        moment = now or datetime.now(UTC)
+        if moment.tzinfo is None:
+            moment = moment.replace(tzinfo=UTC)
+        cutoff = _iso(moment)
+        if dry_run:
+            row = await self.db.fetch_one(
+                "SELECT COUNT(*) AS count FROM analytics_events "
+                "WHERE retention_expires_at<=:now",
+                {"now": cutoff},
+            )
+            return int(row["count"]) if row else 0
+        result = await self.db.execute(
+            "DELETE FROM analytics_events WHERE retention_expires_at<=:now",
+            {"now": cutoff},
+        )
+        purged = getattr(result, "rowcount", None)
+        return int(purged) if purged is not None and purged > 0 else 0
