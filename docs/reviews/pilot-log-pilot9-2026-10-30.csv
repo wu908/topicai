@@ -1,0 +1,4 @@
+change_id,tier,gate,decision,started_at,decided_at,time_quality,artifact_type,artifact_version,reviewer,independence,round,blocking,major,minor,false_positive,false_negative,bypass,bypass_reason,a9_id,approval_binding_commit,pr,ci_run,merge_commit,post_release_window,evidence,notes
+PILOT-09,D1,D1-start,started,,,unknown,commit,301c038,n/a,n/a,0,0,0,0,unknown,unknown,0,,,,,,,,docs/pm/dead-cleanup/00-intent-prd.md,用户 2026-10-30 选 A 继续第 9 个变更（D1）
+PILOT-09,D1,RG0,conditional,,,unknown,doc,301c038,rg0-reviewer,independent,1,1,2,5,unknown,unknown,0,,,,,,,,docs/reviews/review-rg0-dead-cleanup-01-2026-10-30.md,B1 缺简报/契约；M1 缺 .stages 正向验收；M2 缺未知项
+PILOT-09,D1,A5,pass,,,unknown,commit,4454274,lead,lead,1,0,0,0,unknown,unknown,0,,,,,,,,docs/reviews/a5-dead-cleanup-test-evidence-2026-10-30.md,组件/CSS grep 0；.stages 正向保留；59 files/467 tests；tsc/eslint/build 0
