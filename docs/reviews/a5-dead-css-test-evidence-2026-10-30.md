@@ -5,7 +5,7 @@
 
 ## 一、改动
 
-- `frontend/src/pages/Content/ContentPage.css`：删除 **40 组 / 314 行**只服务已删组件的规则（前缀 `.viewpoint-*`、`.series-*`、`.genome-context*`、`.workspace-eyebrow`，含媒体查询内规则）；**diff 全部为删除，无重排/无新增**。
+- `frontend/src/pages/Content/ContentPage.css`：删除 **40 组 / 314 行**只服务已删组件的规则（前缀 `.viewpoint-*`、`.series-*`、`.genome-context*`、`.workspace-eyebrow`；**均为顶层规则，无媒体查询内规则**——基线/HEAD `@media` 均 7 个）；**diff 全部为删除，无重排/无新增**。
 
 ## 二、验证
 
