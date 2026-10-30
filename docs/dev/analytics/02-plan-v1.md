@@ -14,7 +14,7 @@
 | T5 | 接线 | `contentListAnalytics` → transport；`rowActionKey` 稳定键（优先级见 A3 §3）；保留 window | T4 | 事件仍派发 CustomEvent；不重复入队；**既有 `contentListAnalytics.test.ts:33-38` 的 `action:'继续'` 改为 `action_key:'create_version'`，并在 RG2 说明「测试与事实不符」** |
 | T6 | 文档与证据 | API 契约、pilot-log、A5 证据 | T3/T5 | 文档可照做；lint 0 error |
 | T7 | 导出覆盖 | `account_data.EXPORT_TABLES` 加 `analytics_events` + `tests/api/v2/test_account_data.py` 断言 | T1 | 导出 JSON 含 `analytics_events`；删除级联 |
-| T8 | 保留期清理（后续，非阻塞） | 定期删除 `retention_expires_at < now` 的行 | T1 | 脚本 `scripts/cleanup_analytics_events.py` + 测试；上线前可手动 SQL；owner：用户（solo 兼运维），2026-11-20 |
+| T8 | 保留期清理（PILOT-12 已交付，默认 dry-run） | 手动 CLI：统计/删除 `retention_expires_at <= now` 的行；不调度、不暴露 API | T1 | `backend/app/cli/analytics_retention.py`（默认 dry-run，`--apply` 才删）+ `backend/tests/services/test_analytics_service.py`、`backend/tests/test_analytics_retention_cli.py`；首次真实库 `--apply` 前须 A9 + OG0（见 `docs/pm/analytics-closure/01-decision-process.md`） |
 
 **DoR**：验收标准、依赖、变更面 ≤5 文件；不满足不进开发。
 

@@ -47,7 +47,7 @@ CREATE INDEX IF NOT EXISTS idx_analytics_events_owner_event_created
   2. 采集开关关闭 → **503 `ANALYTICS_DISABLED`**（先于 body 解析）；
   3. 请求 >48KB → **413 `PAYLOAD_TOO_LARGE`**（实现点：**handler 内、503 检查之后**；按 `Content-Length` 判；无 header 时以 48KB 为上限分块读取、超限即 413，**不得无界读 body**）；
   4. 结构/类型错、events 数量 0 或 >32、owner 字段 → **422**；
-  5. 单条级：未知 event / payload 键或值非法 → **200 + rejected**（不整批失败）；
+  5. 单条级：未知 event / 键或值非法 → **200 + rejected**（不整批失败；reason 枚举与触发条件见契约 §1 表，PILOT-12 2026-10-31 补）；
   6. 超配额（10,000 事件/owner/UTC 日）→ **429 `ANALYTICS_QUOTA_EXCEEDED`，整批拒绝、不返回 rejected、不落库**（客户端按 429 丢弃）。
 - 响应 `data`：`{"accepted":n,"duplicates":n,"rejected":[{"index":i,"reason":"..."}]}`；accepted 与 duplicates **互斥**。
 - **实现约束（RG1-r3-M1）**：`/events` 路径函数**不声明 Pydantic body**，用 `request: Request` 手动读 body + `json.loads` + Pydantic 校验；`get_current_user` 依赖先执行 → 保证 401 先于 body 解析；开关检查在依赖后、body 解析前 → 503 先于 413/422；`Content-Length` 读取前判 → 413；无 header 时有界读取。**不得用任何 middleware（含仅查 size 的）实现 401/503/413**——middleware 在路由/依赖外层，会把 401 先决条件破坏。
