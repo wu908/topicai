@@ -207,6 +207,7 @@ pnpm exec playwright test e2e/async-loop.spec.ts e2e/starter-flow.spec.ts e2e/in
 - [全景复盘](./docs/topicai-project-development-retrospective-2026-08-18.md)：项目演进、决策与教训
 - [Spec 008–013](./specs/)：内容项目 MVP / AI 原生行动闭环 / 意图模型 / 异步创作循环
 - [ADR](./docs/adr/)：内容意图为根 / 约束 AI 编排与学习 / 历史迁移风险
+- [Pilot 证据索引](./docs/reviews/pilot-index-2026-10.md) / [未闭环 backlog](./docs/reviews/open-findings-backlog-2026-10.md)（12 个真实变更，2026-10-31）
 
 ## 开发状态
 
