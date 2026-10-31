@@ -169,7 +169,7 @@ export default function ReviewPage() {
             {pending.length === 0 ? (
               <div className="lumen-fill">暂无待对账内容</div>
             ) : (
-              pending.slice(0, 3).map((row) => (
+              pending.map((row) => (
                 <div key={row.project_id} className="lumen-row lumen-reconcile" style={{ flexWrap: 'wrap' }}>
                   <div className="body" style={{ width: '100%' }}>
                     <div className="title">{row.title}</div>
