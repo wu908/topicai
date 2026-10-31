@@ -124,7 +124,6 @@ class AnalyticsService:
         if not candidates:
             return {"accepted": 0, "duplicates": 0, "rejected": rejected}
 
-        await self._assert_quota(owner, len(candidates))
         accepted, duplicates = await self._insert_candidates(owner, candidates)
         return {
             "accepted": accepted,
@@ -216,21 +215,6 @@ class AnalyticsService:
             # foreign project_id must not leak through the reason code.
             raise AnalyticsEventRejected("project_not_owned")
 
-    async def _assert_quota(self, owner: str, incoming: int) -> None:
-        today = datetime.now(UTC).date().isoformat()
-        row = await self.db.fetch_one(
-            "SELECT COUNT(*) AS count FROM analytics_events "
-            "WHERE owner_user_id=:owner AND substr(created_at,1,10)=:day",
-            {"owner": owner, "day": today},
-        )
-        stored = int(row["count"]) if row else 0
-        if stored + incoming > DAILY_EVENT_QUOTA:
-            raise AppException(
-                "Analytics daily quota exceeded",
-                429,
-                "ANALYTICS_QUOTA_EXCEEDED",
-            )
-
     async def _insert_candidates(
         self, owner: str, candidates: list[dict[str, Any]]
     ) -> tuple[int, int]:
@@ -238,6 +222,26 @@ class AnalyticsService:
         duplicates = 0
         session = await self.db.get_session()
         async with session, session.begin():
+            # aiosqlite/SQLAlchemy legacy mode does not start a DBAPI
+            # transaction for SELECT; BEGIN IMMEDIATE makes the quota
+            # COUNT and the INSERTs one atomic write transaction.
+            await session.execute(text("BEGIN IMMEDIATE"))
+            today = datetime.now(UTC).date().isoformat()
+            count_result = await session.execute(
+                text(
+                    "SELECT COUNT(*) FROM analytics_events "
+                    "WHERE owner_user_id=:owner "
+                    "AND substr(created_at,1,10)=:day"
+                ),
+                {"owner": owner, "day": today},
+            )
+            stored = int(count_result.scalar_one())
+            if stored + len(candidates) > DAILY_EVENT_QUOTA:
+                raise AppException(
+                    "Analytics daily quota exceeded",
+                    429,
+                    "ANALYTICS_QUOTA_EXCEEDED",
+                )
             for candidate in candidates:
                 now = datetime.now(UTC)
                 result = await session.execute(
