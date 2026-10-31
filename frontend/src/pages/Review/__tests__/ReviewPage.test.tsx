@@ -109,4 +109,19 @@ describe('ReviewPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '打开项目确认' }));
     expect(navigateMock).toHaveBeenCalledWith('/content/p1');
   });
+
+  it('renders all pending rows (no 3-item cap)', async () => {
+    const rows = Array.from({ length: 5 }, (_, i) =>
+      makeRow({
+        project_id: `p${i}`,
+        title: `待对账项目 ${i + 1}`,
+        stage: 'needs_snapshot',
+      }),
+    );
+    listWeekly.mockImplementation(byDays({ 7: [], 60: rows }));
+    render(<MemoryRouter><ReviewPage /></MemoryRouter>);
+    for (let i = 1; i <= 5; i += 1) {
+      expect(await screen.findByText(`待对账项目 ${i}`)).toBeTruthy();
+    }
+  });
 });

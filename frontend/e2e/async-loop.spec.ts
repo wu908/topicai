@@ -58,7 +58,7 @@ test.describe('materials capture to content list', () => {
     await expect(page.getByRole('heading', { name: '周复盘', exact: true })).toBeVisible();
     await expect(
       page
-        .getByText(/本周期还没有可对照的判断|本周对照|欠对账/)
+        .getByText(/本周还没有可对照的判断|本周对照|欠对账/)
         .first(),
     ).toBeVisible();
   });
