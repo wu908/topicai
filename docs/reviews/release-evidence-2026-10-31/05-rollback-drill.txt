@@ -1,0 +1,40 @@
+﻿#27 naming to docker.io/library/topicai-frontend:latest done
+#27 unpacking to docker.io/library/topicai-frontend:latest
+#27 unpacking to docker.io/library/topicai-frontend:latest 0.0s done
+#27 DONE 0.1s
+
+#28 [backend] exporting to image
+#28 exporting layers done
+#28 exporting manifest sha256:3d26b69a4fd63243c6d4da4f7af5ec48ad7cfc2e3636df052313a1194e86df2d done
+#28 exporting config sha256:7ffe5c391199583c8c032252b34bd8c19e841c3ce85a09d9a550e4020cd7e927 done
+#28 exporting attestation manifest sha256:2e68459d8d7279d663fd166f1c2d0ea948d020f0435c03b978c8bb16d21c8559 done
+#28 exporting manifest list sha256:77c5f5835d12151d6b8dba6da241233de8e2eecb563c4224b315dea777c7e419 done
+#28 naming to docker.io/library/topicai-backend:latest done
+#28 unpacking to docker.io/library/topicai-backend:latest done
+#28 DONE 0.1s
+
+#29 [frontend] resolving provenance for metadata file
+#29 DONE 0.0s
+
+#30 [backend] resolving provenance for metadata file
+#30 DONE 0.0s
+ Image topicai-backend Built 
+ Image topicai-frontend Built 
+BUILD_RC=0
+ Container topicai-backend Recreate 
+ Container topicai-backend Recreated 
+ Container topicai-frontend Recreate 
+ Container topicai-frontend Recreated 
+ Container topicai-backend Starting 
+ Container topicai-backend Started 
+ Container topicai-backend Waiting 
+ Container topicai-backend Healthy 
+ Container topicai-frontend Starting 
+ Container topicai-frontend Started 
+UP_RC=0
+NAME               IMAGE              COMMAND                  SERVICE    CREATED         STATUS                   PORTS
+topicai-backend    topicai-backend    "uvicorn main:create…"   backend    7 seconds ago   Up 5 seconds (healthy)   127.0.0.1:8000->8000/tcp
+topicai-frontend   topicai-frontend   "/docker-entrypoint.…"   frontend   6 seconds ago   Up Less than a second    127.0.0.1:8081->80/tcp
+ local_health=200
+ public_health=200
+ROLLBACK_DONE=2026-10-31T14:24:46+08:00

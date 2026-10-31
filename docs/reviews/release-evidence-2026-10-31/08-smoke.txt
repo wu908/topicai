@@ -1,0 +1,15 @@
+﻿--- analytics env (should be empty) ---
+none
+--- index assets ---
+assets/index-DzCuK-TS.js
+assets/jsx-runtime-7JLBpO6b.js
+assets/Button-sZKEkHV3.js
+assets/error-L7Gg65-C.js
+assets/client-BXvqJwwq.js
+ASSET=assets/index-DzCuK-TS.js
+asset_http=200
+--- 5xx in last 10m ---
+--- uptime/status ---
+NAME               IMAGE              COMMAND                  SERVICE    CREATED          STATUS                    PORTS
+topicai-backend    topicai-backend    "uvicorn main:create…"   backend    24 seconds ago   Up 23 seconds (healthy)   127.0.0.1:8000->8000/tcp
+topicai-frontend   topicai-frontend   "/docker-entrypoint.…"   frontend   24 seconds ago   Up 17 seconds             127.0.0.1:8081->80/tcp

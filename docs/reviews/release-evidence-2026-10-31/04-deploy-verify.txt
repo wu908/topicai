@@ -1,0 +1,17 @@
+﻿TIME=2026-10-31T14:24:33+08:00
+HEAD=57510790e0b9a602a26b1fc4e9945e6fe89f44fe
+NAME               IMAGE              COMMAND                  SERVICE    CREATED          STATUS                    PORTS
+topicai-backend    topicai-backend    "uvicorn main:create…"   backend    17 seconds ago   Up 15 seconds (healthy)   127.0.0.1:8000->8000/tcp
+topicai-frontend   topicai-frontend   "/docker-entrypoint.…"   frontend   16 seconds ago   Up 10 seconds             127.0.0.1:8081->80/tcp
+--- HEALTH ---
+ frontend_local=200
+{"code":200,"data":{"status":"ok","api_version":"v2","product":"content_project"},"message":"success","meta":{}}
+ public=200
+ root=200
+--- MIGRATION ---
+analytics_events = ('analytics_events',)
+tables = (53,)
+schema_rows = (54,)
+max_schema_version = ('060_analytics_events',)
+--- BACKEND ERRORS (5m) ---
+VERIFY_DONE
