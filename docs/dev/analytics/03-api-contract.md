@@ -15,7 +15,7 @@
 | 请求体 | ≤48KB（由 Content-Length / body 读取判定） |
 | idem_key | 8–64 字符，owner 内唯一 |
 | client_ts | ISO8601，不得晚于服务器 +5 分钟 |
-| 配额 | 10,000 事件/owner/UTC 日，超出 429 |
+| 配额 | 10,000 事件/owner/UTC 日，超出 429；按通过逐条校验的候选数（含同批幂等重复）计入；COUNT 与 INSERT 同一 `BEGIN IMMEDIATE` 事务；锁超时→500（已知限制，A9-20261031-04/05） |
 
 **状态优先级（唯一状态，按序判定）**
 1. 未鉴权 → 401 body `{"detail":…}`
