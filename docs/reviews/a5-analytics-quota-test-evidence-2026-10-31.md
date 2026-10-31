@@ -27,8 +27,20 @@ python -m pytest tests/services/test_analytics_quota_atomicity.py -q
 ```
 
 - 1 个边界用例：quota=2，2 条通过、第 3 条 429、库仍 2 行；
-- **10 个参数化并发用例（A8）**：会话 A `BEGIN IMMEDIATE` + 插入 1 行未提交 → 启动 B → `sleep(0.2)` 等 B 进入 `BEGIN IMMEDIATE` → **提交 A** → 断言 B=429、final=1；**10/10 一致**（naive 旧实现在此编排下应为 B=inserted/final=2）；
+- **10 个参数化并发用例（A8）**：会话 A `BEGIN IMMEDIATE` + 插入 1 行未提交 → 启动 B → `sleep(0.2)` 等 B 进入 `BEGIN IMMEDIATE` → **提交 A** → 断言 B=429、final=1；**10/10 一致**（naive 旧实现在此编排下为 B=inserted/final=2，见 §2.1.1）；
 - 1 个 slow 锁超时用例（A9）：A 持写锁 → B 约 5s 后 `OperationalError('database is locked')`（服务层；API 层为 500），耗时约 5s。
+
+#### 2.1.1 旧红/新绿（A8 红→绿执行证据，RG2 r1-M1）
+
+在同一测试文件、同一编排下，对**旧实现**（worktree `G:\codex_project\topicAI\pilot15-oldred`，detached `ac9bfda`，即 `BEGIN IMMEDIATE` 合入前）运行：
+
+```
+python -m pytest tests/services/test_analytics_quota_atomicity.py -q -k quota_check_is_atomic
+→ FAILED ... [0]…[9]  （10 failed, 2 deselected in 22.43s）
+  E  Failed: DID NOT RAISE <class 'app.core.exceptions.AppException'>
+```
+
+10/10 红：旧实现 B 未被 429 拦下（B=inserted、final=2）。当前实现同命令 `10 passed`（§2.1）。旧实现副本仅用于本证据，**未提交、未合并**。
 
 ### 2.2 质量与安全门
 
@@ -65,7 +77,8 @@ python -m pytest -q -k "not test_scenario_g_coverage_gate" \
 
 ## 4. 限制与遗留（如实）
 
-- **实现顺序**：RG0 r4 已 approve（v5）；RG1 r5 为 conditional（advisory，非阻断），其唯一 open 项 r1-M2 要求“启动 B 后等待 ≥100ms 再提交 A”——A8 用 `sleep(0.2)` 实现并 10/10，但 **A0 v5 文本未写该同步点**（v6 未出）；A5 以此为准，交 RG2 判定。
+- **A8 旧红/新绿已补**（§2.1.1）：旧实现 10/10 红、当前 10/10 绿；RG2 r1-M1 以本证据关闭。
+- **A8 同步点**：用固定 `sleep(0.2)` + `assert not task.done()`（RG2 n1 记录的 flake 风险）；10/10 在 CI 负载下未复现失败；改为 event 需改测试，留作 nit/backlog。
 - A0 仍残留轮次编号（r4/r5）与小措辞旧标签（RG1 r5 的 r3-n1），属文档 nit；未改 A0 以免再次触发工件失效。
 - 锁超时用例耗时 ~5s（`busy_timeout=5000`）；未做真实并发压测（超范围）。
 - `:memory:` 单连接不作为并发证据；A8 使用 file DB + 独立连接持锁。
