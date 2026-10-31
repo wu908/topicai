@@ -1,9 +1,9 @@
 # A0/A1 + A3/A4 一页 · analytics 配额原子性（pilot15，D1）
 
-> 工件：A0/A1 + A3/A4 一页（`_sync/p3/lite-matrix-v0.1.md` D1）｜版本 **v3** · 2026-10-31（按 RG1 r2 修订）｜档位 **T0 / D1**
+> 工件：A0/A1 + A3/A4 一页（`_sync/p3/lite-matrix-v0.1.md` D1）｜版本 **v4** · 2026-10-31（按 RG0 r2 / RG1 r3 修订）｜档位 **T0 / D1**
 > 证据等级：E1（代码 + pilot5 RG2 报告）
 > 决策人：用户（2026-10-31 授权 N1+N2；`_sync/p3/user-authorization-2026-10-31.md`）
-> 基线：`origin/main = 2d08a1d`
+> 基线：`origin/main = 1246a072`（N1 合并后；实现前需 rebase 到当时 origin/main）
 > B-16 语义检查：RG0/RG2 必须附 `_sync/p3/b16-semantic-checklist.md` 逐条判定。
 
 ## 1. 问题与证据
@@ -37,7 +37,7 @@
 - **NFR**：写事务持有 COUNT+至多 32 INSERT，竞争在 busy_timeout 内等待；单用户 p95 不受影响；无 schema 变化。
 - **威胁**：信任边界不变；owner 仍取 token；429 不泄露他人配额。
 - **回滚**：单文件服务层改动，`git revert`；无数据迁移。
-- **RG1 触发判定**：触及数据/持久化 → **`RG1 triggered`**（已出 r1 咨询；B1/M1/M2 关闭后需 r2 delta）。
+- **RG1 触发判定**：触及数据/持久化 → **`RG1 triggered`**（r1/r2/r3 已出；M1/M2 关闭后需 **RG1 r4 delta**）。
 - **release_trigger**：`none`（merge-only；不部署）。
 
 ## 5. 验收标准（D1）
@@ -48,14 +48,14 @@
 | A2 | 边界：`stored+incoming <= quota` 通过；`>` 抛 429 且不写库 | 服务层单测（monkeypatch quota=2，候选 2/3 条） |
 | A3 | 同批幂等重复按候选数计入（口径与契约一致） | 单测：重复 idem_key 计数 |
 | A4 | 契约/tech spec 写明口径 + 原子性 | 文档 diff |
-| A5 | 全量后端 pytest/ruff/mypy 绿；含 A8 并发回归 + 锁超时 slow 用例；无接口/schema/默认变化 | 命令输出 |
+| A5 | 全量后端 pytest/ruff/mypy 绿；含 A8 确定性并发回归 + 锁超时 slow 用例；CI 的 bandit + `--cov-fail-under=80` 对齐 | 命令输出 |
 | A6 | diff 仅 `analytics.py` + 测试 + 2 文档 | `git diff --stat` |
-| A7 | RG1 咨询记录落盘（非作者，r1/r2） | `review-rg1-analytics-quota-01/02-*.md` |
-| A8 | **file DB + asyncio.Barrier(2) + quota=1 并发回归**：恰好 1 插入 + 1×429 + final=1，重复 10 次一致；旧方案红、修正后绿 | 新增 pytest（tmp_path file DB） |
-| A9 | 锁超时 slow 用例：另一连接持写锁，ingest ~5s 后 500/`database is locked`（A9-20261031-04） | pytest（mark slow） |
+| A7 | RG1 咨询记录落盘（非作者，r1–r4） | `review-rg1-analytics-quota-0{1,2,3,4}-*.md` |
+| A8 | **确定性并发回归（锁编排，非 Barrier）**：测试侧会话 A `BEGIN IMMEDIATE` + 插入 1 行**未提交**；启动被测 ingest B；释放/回滚 A → 修正后 B=429、final=1；naive 旧实现 B=inserted、final=2。重复 10 次一致 | 新增 pytest（tmp_path file DB） |
+| A9 | 锁超时 slow 用例：会话 A 持写锁超过 `busy_timeout`，ingest B 约 5s 后 `OperationalError('database is locked')`（服务层）/500（API）；A9-20261031-04/05 | pytest（mark slow） |
 
 **成功指标**：边界/回滚/重复用例全过；A8 10/10 一致；全量测试绿。
-**退出标准**：A1–A9 全绿 + RG0 r2 **delta** + RG1 r3 delta + RG2 approve；release_trigger=none；未启用 analytics。
+**退出标准**：A1–A9 全绿 + **RG0 r3 delta** + **RG1 r4 delta** + RG2 approve；release_trigger=none；未启用 analytics。
 
 ## 6. 设计门
 
@@ -70,8 +70,8 @@
 | 风险/未知 | 缓解/验证 |
 |---|---|
 | 非 SQLite 数据库隔离级别不足 | 当前部署 SQLite；契约注明“当前部署”；未来换库需重审 |
-| **锁超时 → 500** | BEGIN IMMEDIATE 等待超过 busy_timeout 时 500；一次短重试；记 A9-20261031-04（默认关闭、启用前复审）；不新增错误码 |
+| **锁超时 → 500** | BEGIN IMMEDIATE 等待超过 busy_timeout 时 500；**不重试（v4）**；记 A9-20261031-04（并由 A9-20261031-05 更正“短重试”表述）；不新增错误码 |
 | **事务不真正开启（B1）** | 必须显式 BEGIN IMMEDIATE；RG1 r1 已用探针复现旧方案超限；r2 复核 |
-| 并发测试不足（M2） | A8 强制 file DB 双会话回归；`:memory:` 单连接不作为并发证据 |
+| 并发测试不足（M2） | A8 用“会话 A 持写锁+未提交 + B 启动后释放”的确定性编排；`:memory:`/Barrier 起步不作为并发证据 |
 | 429 状态在事务内抛出 | Service 抛 AppException；事务回滚；API 层既有 handler 输出 429 |
 | 口径变更影响历史 | 维持“按候选数计入”，不改行为；只改原子性与文档 |
