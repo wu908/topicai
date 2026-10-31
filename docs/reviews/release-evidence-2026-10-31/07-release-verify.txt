@@ -1,0 +1,30 @@
+﻿RELEASE_START=2026-10-31T14:24:57+08:00
+Previous HEAD position was 35e9a08 Merge pull request #147 from wu908/docs/ux-audit-2026-10-21
+Switched to branch 'main'
+Your branch is up to date with 'origin/main'.
+CHECKOUT_RC=0
+HEAD=57510790e0b9a602a26b1fc4e9945e6fe89f44fe
+ Container topicai-backend Recreate 
+ Container topicai-backend Recreated 
+ Container topicai-frontend Recreate 
+ Container topicai-frontend Recreated 
+ Container topicai-backend Starting 
+ Container topicai-backend Started 
+ Container topicai-backend Waiting 
+ Container topicai-backend Healthy 
+ Container topicai-frontend Starting 
+ Container topicai-frontend Started 
+UP_RC=0
+NAME               IMAGE              COMMAND                  SERVICE    CREATED         STATUS                   PORTS
+topicai-backend    topicai-backend    "uvicorn main:create…"   backend    6 seconds ago   Up 5 seconds (healthy)   127.0.0.1:8000->8000/tcp
+topicai-frontend   topicai-frontend   "/docker-entrypoint.…"   frontend   6 seconds ago   Up Less than a second    127.0.0.1:8081->80/tcp
+--- HEALTH ---
+ frontend_local=200
+ public=200
+ root=200
+--- IMAGES ---
+CONTAINER           REPOSITORY          TAG                 PLATFORM            IMAGE ID            SIZE                CREATED
+topicai-backend     topicai-backend     latest              linux/amd64         0ca63eaacda6        81.9MB              About a minute ago
+topicai-frontend    topicai-frontend    latest              linux/amd64         02f03f240ebb        29MB                49 seconds ago
+--- ERRORS ---
+RELEASE_DONE=2026-10-31T14:25:05+08:00

@@ -1,0 +1,10 @@
+﻿ topicai-backend Copying topicai-backend:/app/data/topicai-backup-20261031-141525.db to /opt/topicai-backups/topicai-20261031-141525.db
+ topicai-backend Copied topicai-backend:/app/data/topicai-backup-20261031-141525.db to /opt/topicai-backups/topicai-20261031-141525.db
+b03173dcde7a37df6f0fb74720f75197a63edb2c2ffc89849c7a0bf75220f964  /opt/topicai-backups/topicai-20261031-141525.db
+total 1.4M
+-rw-r--r-- 1 root root 1.4M Oct 31 14:15 topicai-20261031-141525.db
+topicai-backend:latest               a3d6e6273665        346MB         81.9MB   U    
+topicai-backend:rollback-35e9a089    a3d6e6273665        346MB         81.9MB   U    
+topicai-frontend:latest              1c3e81027cd3        102MB           29MB   U    
+topicai-frontend:rollback-35e9a089   1c3e81027cd3        102MB           29MB   U    
+BACKUP_AND_TAG_DONE

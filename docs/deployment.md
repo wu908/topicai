@@ -56,6 +56,29 @@ curl -fsS https://topicai.online/api/v2/health
 - 环境变量在服务器 `/opt/topicai/.env`（不入库）；升级/回滚都不要覆盖它。
 - 回滚：`git checkout <上一个可用 commit> && docker compose build && docker compose up -d --force-recreate`。
 
+### 2.1 备用部署路径：服务器无法访问 GitHub（bundle）
+
+生产在 2026-10-31 曾遇到 `git fetch` 失败（`Failure when receiving data from the peer` / 超时）。
+若确认是服务器到 GitHub 的网络问题，可在能访问 GitHub 的机器上打包**增量 bundle** 再传输：
+
+```bash
+# 本机（仓库目录；<current-prod-commit> = 生产当前 HEAD，<target> = 目标 commit）
+git bundle create /tmp/update-<target>.bundle origin/main ^<current-prod-commit>
+scp /tmp/update-<target>.bundle topicai-server:/tmp/
+
+# 服务器
+cd /opt/topicai
+git bundle verify /tmp/update-<target>.bundle   # 必须列出 requires <current-prod-commit>
+git fetch /tmp/update-<target>.bundle refs/remotes/origin/main:refs/remotes/origin/main
+git merge --ff-only <target>
+git rev-parse HEAD                               # 必须等于 <target>
+# 之后按 §2 继续 docker compose build / up
+```
+
+- 前提：生产当前 commit 必须是 bundle 的 prerequisite（`^<current-prod-commit>`），否则校验失败。
+- 传输前后用 `sha256sum` 比对 bundle；commit 一致才能继续部署。
+- 网络恢复后建议 `git fetch origin` 校准 `origin/main` 远端引用。
+
 ## 3. 域名与 TLS
 
 ### 3.1 宿主机 nginx 站点配置

@@ -1,0 +1,20 @@
+﻿== release baseline 2026-10-31 14:14:35 +08:00 ==
+--- local origin/main ---
+57510790e0b9a602a26b1fc4e9945e6fe89f44fe
+131
+--- prod ---
+2026-10-31T14:14:36+08:00
+35e9a08919ba2579331b170542d4630e51516deb
+?? .env.bak-before-omni-20260922-205410
+NAME               IMAGE              COMMAND                  SERVICE    CREATED      STATUS                PORTS
+topicai-backend    topicai-backend    "uvicorn main:create…"   backend    9 days ago   Up 9 days (healthy)   127.0.0.1:8000->8000/tcp
+topicai-frontend   topicai-frontend   "/docker-entrypoint.…"   frontend   9 days ago   Up 9 days             127.0.0.1:8081->80/tcp
+CONTAINER           REPOSITORY          TAG                 PLATFORM            IMAGE ID            SIZE                CREATED
+topicai-backend     topicai-backend     latest              linux/amd64         a3d6e6273665        81.9MB              9 days ago
+topicai-frontend    topicai-frontend    latest              linux/amd64         1c3e81027cd3        29MB                9 days ago
+ local_health=200
+ public_health=200
+-rw-r--r-- 1 root root 1.4M Oct 21 20:28 /app/data/topicai.db
+/dev/vda1        40G   11G   30G  26% /
+               total        used        free      shared  buff/cache   available
+Mem:           3.6Gi       1.7Gi       382Mi       4.2Mi       1.8Gi       1.9Gi
