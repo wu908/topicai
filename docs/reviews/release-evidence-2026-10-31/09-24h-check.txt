@@ -1,0 +1,31 @@
+﻿TIME=2026-11-01T10:00:08+08:00
+HEAD=57510790e0b9a602a26b1fc4e9945e6fe89f44fe
+?? .env.bak-before-omni-20260922-205410
+--- compose ps ---
+NAME               IMAGE              COMMAND                  SERVICE    CREATED        STATUS                  PORTS
+topicai-backend    topicai-backend    "uvicorn main:create…"   backend    20 hours ago   Up 20 hours (healthy)   127.0.0.1:8000->8000/tcp
+topicai-frontend   topicai-frontend   "/docker-entrypoint.…"   frontend   20 hours ago   Up 20 hours             127.0.0.1:8081->80/tcp
+--- restarts ---
+/topicai-backend restarts=0
+/topicai-frontend restarts=0
+--- health ---
+ frontend_local=200
+ backend_local=200
+ public=200
+ root=200
+--- backend errors 24h (count) ---
+0
+0
+--- backend error sample ---
+--- frontend 5xx 24h ---
+0
+0
+--- analytics env ---
+none
+--- analytics log lines ---
+--- resources ---
+/dev/vda1        40G   11G   30G  26% /
+               total        used        free      shared  buff/cache   available
+Mem:           3.6Gi       1.7Gi       667Mi       4.2Mi       1.5Gi       1.9Gi
+-rw-r--r-- 1 root root 1.4M Oct 31 14:24 /app/data/topicai.db
+CHECK_DONE

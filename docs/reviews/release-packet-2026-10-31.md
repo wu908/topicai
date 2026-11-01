@@ -54,6 +54,14 @@
 ## 4. 发布后检查（不占本窗口）
 
 - **24h**（2026-11-01）：health 抽查、backend/frontend 错误日志、确认 analytics 仍关闭（无 ingest 日志）、无用户可见 5xx。
+- **24h 结果（2026-11-01 10:00 +08，实测）**：
+  - 容器：backend / frontend `Up 20 hours`，RestartCount = 0，backend healthy
+  - 健康：本地 frontend/backend + 公网 API + 首页 = **4 × 200**
+  - 日志：backend 近 24h `error|traceback|exception` **0 条**；frontend 5xx **0 条**
+  - analytics：容器 env 无 analytics 变量；近 24h 日志无 analytics 记录（采集保持关闭）
+  - 资源：磁盘 30G 可用（26%）；内存可用 1.9G；DB 1.4MB（未变）
+  - 结论：**24h 无异常**；2–4 周回查未到期
+  - 原始输出：`docs/reviews/release-evidence-2026-10-31/09-24h-check.txt`
 - **2–4 周**（2026-11-14 ~ 2026-11-28）：D5 回查——每条 finding 落 `disposition`（accepted/rejected/deferred）；`false_*` 保持 unknown，不补造。
 - **保留**：DB 备份 `/opt/topicai-backups/topicai-20261031-141525.db` 至少至 2026-11-14；回滚 tag 保留。
 
