@@ -24,7 +24,7 @@ async def _seed(url: str) -> None:
             "(:id,:email,:uname,'hash',0,'','2026-08-30T00:00:00Z')",
             {"id": USER_ID, "email": "cli@example.com", "uname": "CLI"},
         )
-        now = datetime(2026, 10, 31, 12, 0, tzinfo=UTC)
+        now = datetime.now(UTC).replace(microsecond=0)
         created = _iso(now - timedelta(days=30))
         for idem, retention in (
             ("expired", now - timedelta(days=1)),
