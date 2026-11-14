@@ -10,7 +10,7 @@
 |---|---|---|---|---|---|---|
 | B-01 | 度量 | UX-01 主指标/可用性测试**延期未执行** | `pilot-measurement-protocol-2026-10-29.md` §7；`pilot-retro-2026-10-29.md` §2.1/§4.2 | 补一次可用性测试或明确不补；P3 决策前定 | 中 | lead / open |
 | B-02 | 门 | UX-01..04 的 **OG0 4/4 not-run**（历史） | `pilot-log-v2-2026-10-29.csv` OG0 行 | 历史缺口保留；后续 D1 变更 OG0 不得默认 not-run | 中 | lead / open（历史，不补造） |
-| B-03 | 度量 | **误杀/漏放 101/101 unknown**（15 变更），回查机制已定但未执行 | 12 份 pilot-log 的 `false_positive`/`false_negative` 列；`pilot-log-v3-schema-2026-10-31.md` | 2026-11-14~28 按 D5 做发布后回查、逐条落 `disposition`；不填 0 | 高 | lead / 待回查 |
+| B-03 | 度量 | **误杀/漏放 101/101 unknown**（15 变更）；D5 回查已执行，但 `false_*` 按决策保持 unknown | 12 份 pilot-log 的 `false_positive`/`false_negative` 列；`release-disposition-2026-11-14.md` | 率指标不补造；后续以 `disposition` 逐条回查替代 | 高 | lead / closed 2026-11-14（D5） |
 | B-04 | 度量 | 历史 `pilot-log-v2` lint **11 error/9 warning** | `docs/reviews/pilot-log-v2-2026-10-29.csv`；v0.4 证据摘要（workspace `_sync/v04-draft-summary-2026-10-30.md`） | 保持缺陷可见；不补造时间/批准 | 低 | lead / open（历史） |
 | B-05 | 启用门 | analytics **A9-20261030-04（启用）未签**；容量/监控/值班豁免由 **A9-20261031-06 承接（用户 2026-10-31 接受，发布时生效）**；采集默认关闭 | `docs/pm/analytics/05-a9-decisions.md` | 启用前只差 A9-04；未签保持关闭 | 高 | 用户（待签）/ open（-04） |
 | B-06 | 产品 | `GET /analytics/summary` 存在但**前端无消费 UI** | `backend/app/api/v2/analytics.py` summary；前端仅 `analyticsTransport.ts` 上报（无 `/analytics/summary` 调用） | 启用前决定是否做最小只读视图；否则记录不做 | 中 | lead / open |
@@ -27,8 +27,8 @@
 | B-17 | 治理 | v0.4 审查流/五流 delta **未写权威源**（AGENTS/REFERENCE 未改；D6 本季不写） | workspace `_sync/v04-draft-summary-2026-10-30.md`；`_sync/p3/joint-decision-2026-10-31.md` D6 | 2027-01-31 用数据决定是否写；不写则保持草案引用 | 高 | 用户/lead / P3 |
 | B-18 | 过程 | **独立性 partial**：N1/N2 的 RG0+RG2 同一 reviewer；RG3/OG0 为自审（Lead 既执行又评审） | `review-rg0-*`/`review-rg2-*` 头部；`review-rg3-release-2026-10-31.md`、`review-og0-release-2026-10-31.md` | 下一变更起至少换 reviewer/模型（B-18），仍不伪造 APPROVED | 中 | lead / P3 |
 | B-19 | 证据 | UX-01..04 部分独立报告原件在 `pilot-docs` worktree（`pilot-measurement-docs` 分支），未全部合并到 main | `pilot-docs` worktree（本地）；`pilot-index-2026-10.md` §4 | 需要时合并/归档；索引暂只引 main 路径 | 低 | lead / open |
-| B-20 | 账本 | pilot-log **v3 已加** `release_trigger`/`disposition` 并回填 101 行；历史 `disposition=unknown` 48 行待回查补 | `pilot-log-v3-schema-2026-10-31.md`；12 份 CSV | 2026-11-14~28 回查时补 N1/N2 的 disposition | 中 | lead / 待回查 |
-| B-21 | 验证 | 发布后**登录态功能冒烟未做**（无测试凭据）；仅 health/首页/静态资源/无 5xx | `release-packet-2026-10-31.md` §6 | 24h 回查时若有凭据补一次登录冒烟；否则记录“不补+理由” | 中 | 用户/lead / open |
+| B-20 | 账本 | pilot-log **v3 已加** `release_trigger`/`disposition` 并回填 101 行；2026-11-14 已补 N1/N2（12 行），余 40 行历史 unknown | `pilot-log-v3-schema-2026-10-31.md`；12 份 CSV；`release-disposition-2026-11-14.md` | 余下历史行按 D5 保持 unknown，不推断 | 中 | lead / closed 2026-11-14（N1/N2） |
+| B-21 | 验证 | 发布后**登录态功能冒烟未做**（无测试凭据）；仅 health/首页/静态资源/无 5xx | `release-packet-2026-10-31.md` §6 | 24h/2 周回查均无凭据；记录“不补+理由”（2026-11-14 仍无） | 中 | 用户/lead / open |
 
 ## 2. 使用说明
 
