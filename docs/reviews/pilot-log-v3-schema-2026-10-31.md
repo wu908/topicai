@@ -16,7 +16,7 @@
 
 - 范围：12 份 CSV（`pilot-log-v2` + `pilot-log-pilot5..15`），共 **101 行**；v1 `pilot-log.csv` 不升级（按 v2 约定保留）。
 - `release_trigger`：**101 行全部 `deploy`** —— 15 个变更均随 2026-10-31 整批发布进入生产（`5751079`，见 `release-packet-2026-10-31.md`）。注意：analytics 的「启用」仍为 `none`（A9-20261030-04 未签、采集关闭），该维度由 A9 台账记录，不由本字段表达。
-- `disposition`：`n/a` = **53 行**（该轮 0 findings）；`unknown` = **48 行**（有 findings 但历史无逐条证据）。**不推断、不补造**；N1/N2（PILOT-14/15）待 2026-11-14 ~ 11-28 发布后回查时逐条落 disposition（D5）。
+- `disposition`：**2026-11-14 D5 回查后**，101 行分布 = `n/a` **49** / `unknown` **40** / `accepted` **10** / `rejected` **2**。N1/N2（PILOT-14/15）已逐条回填（详见 `release-disposition-2026-11-14.md`）：N1 5 accepted + 6 rejected；N2 4 accepted + 7 rejected + 1 deferred(B-05)；发布级 3 accepted + 1 rejected + 1 deferred(B-18)。其余 40 行保持 `unknown`，**不推断、不补造**；`false_*` 仍 101/101 `unknown`。
 - 校验：12 份 CSV `Import-Csv` 均为 29 列、合计 101 行；`change_id` 15 个。
 
 ## 3. 判定规则（叠加 v2）

@@ -60,9 +60,16 @@
   - 日志：backend 近 24h `error|traceback|exception` **0 条**；frontend 5xx **0 条**
   - analytics：容器 env 无 analytics 变量；近 24h 日志无 analytics 记录（采集保持关闭）
   - 资源：磁盘 30G 可用（26%）；内存可用 1.9G；DB 1.4MB（未变）
-  - 结论：**24h 无异常**；2–4 周回查未到期
+  - 结论：**24h 无异常**；2–4 周回查见下（2026-11-14 已执行）
   - 原始输出：`docs/reviews/release-evidence-2026-10-31/09-24h-check.txt`
 - **2–4 周**（2026-11-14 ~ 2026-11-28）：D5 回查——每条 finding 落 `disposition`（accepted/rejected/deferred）；`false_*` 保持 unknown，不补造。
+- **2 周结果（2026-11-14 10:00 +08，实测）**：
+  - 生产：HEAD `5751079` 未漂移；backend healthy / frontend running，`Up 13 days`，RestartCount=0；local/public API/首页 = **3 × 200**
+  - 日志：backend 14 天 error/traceback/exception **0**；frontend 真实 5xx **0**（404/405 为扫描器噪声）
+  - analytics：env 无变量、14 天日志 **0** 行（采集保持关闭）；DB 1.4MB 未增长；磁盘 30G 可用
+  - 处置：28 条 finding = **accepted 12 / rejected 14 / deferred 2**（B-05、B-18）；0 blocking/major 仍开放
+  - 记录：`docs/reviews/release-disposition-2026-11-14.md`；pilot-log 回填 12 行（101 行分布 n/a 49 / unknown 40 / accepted 10 / rejected 2）
+  - 限制：无监控看板、未做登录态冒烟（B-21）、RG3/OG0 自审 partial
 - **保留**：DB 备份 `/opt/topicai-backups/topicai-20261031-141525.db` 至少至 2026-11-14；回滚 tag 保留。
 
 ## 5. 回滚
